@@ -123,6 +123,9 @@ export const de: Dict = {
     feesUnverified: "Die eBay-Gebühren für dieses Land sind noch zu bestätigen: Prüfe den Satz deiner Kategorie vor dem Einstellen.",
     sourceNote:
       "Lieferantenkosten aus USD umgerechnet (EZB-Kurs + 2 % Sicherheitsaufschlag). Quelle: offizielle eBay-API. Der Preis ist nach den geschätzten Verkäufen jedes Angebots gewichtet; ohne Verkäufe ist es der Median der aktiven Neuware-Angebote im Land.",
+    aeLabel: "Link zu einem AliExpress-Produkt (optional)",
+    aePlaceholder: "https://de.aliexpress.com/item/…",
+    aeHint: "Verglichen werden nur Varianten, die aus einem Lager im gewählten Land versendet werden (schnelle Lieferung).",
   },
   settings: {
     title: "Einstellungen",
@@ -142,7 +145,7 @@ export const de: Dict = {
     cjButton: "CJ verbinden",
     cjSuccess: "CJ verbunden.",
     aeTitle: "Lieferant AliExpress",
-    aeHelp: "Bald verfügbar: Wir warten auf die Freigabe des Dropshipping-Zugangs auf der AliExpress Open Platform.",
+    aeHelp: "Verbinde dein AliExpress-Konto, um dessen Produkte aus lokalen Lagern zu vergleichen und automatisch zu bestellen.",
     marginTitle: "Mindestmarge",
     marginHelp: "Es werden nur Produkte mit mindestens {pct} % Marge vorgeschlagen.",
     gpsrTitle: "Verantwortliche Person in der EU (nur Europa)",
@@ -161,6 +164,12 @@ export const de: Dict = {
     autoOrderOff: "Aus",
     autoOrderEnable: "Aktivieren",
     autoOrderDisable: "Deaktivieren",
+    aeConnect: "AliExpress verbinden",
+    aeReconnect: "Neu verbinden",
+    aeConnectedMsg: "AliExpress-Konto verbunden.",
+    aeUnavailable: "AliExpress ist auf dieser Website noch nicht eingerichtet.",
+    aeError: "Die Verbindung mit AliExpress ist fehlgeschlagen, bitte versuche es erneut.",
+    aePayNote: "Bestellungen werden automatisch bezahlt, wenn in deinem AliExpress-Konto die automatische Zahlung eingerichtet ist; andernfalls bezahle sie in AliExpress.",
   },
   billing: {
     title: "Abonnement",
@@ -335,6 +344,11 @@ export const de: Dict = {
       EBAY_TRACKING: "Sendungsnummer erhalten, aber eBay hat sie abgelehnt: {detail}. Trage sie selbst auf eBay ein.",
       HANDLED_MANUALLY: "Von dir erledigt.",
       UNKNOWN: "Prüfe diese Bestellung.",
+      MIXED_SUPPLIERS: "Diese Bestellung enthält Artikel verschiedener Lieferanten: Bitte selbst bestellen.",
+      AE_ERROR: "AliExpress hat die Bestellung abgelehnt: {detail}",
+      AE_CANCELLED: "AliExpress hat diese Bestellung storniert. Prüfe dein AliExpress-Konto.",
+      AE_UNPAID: "Bei AliExpress bestellt, aber noch nicht bezahlt: Bezahle sie in deinem AliExpress-Konto (oder richte die automatische Zahlung ein).",
+      SUPPLIER_RECONNECT: "Die Verbindung zu deinem Lieferanten ist abgelaufen. Verbinde sie in den Einstellungen neu.",
     },
   },
   emails: {
@@ -418,6 +432,9 @@ export const de: Dict = {
     TOO_MANY_ATTEMPTS: "Zu viele Versuche. Warte 15 Minuten oder setze dein Passwort zurück.",
     RESET_INVALID: "Dieser Link ist ungültig oder abgelaufen. Fordere einen neuen an.",
     TERMS_REQUIRED: "Bitte akzeptiere die Nutzungsbedingungen und die Datenschutzerklärung.",
+    AE_LINK_INVALID: "Das sieht nicht nach einem Link zu einem AliExpress-Produkt aus.",
+    AE_NOT_CONNECTED: "Verbinde zuerst dein AliExpress-Konto in den Einstellungen.",
+    SUPPLIER_RECONNECT: "Die Verbindung zu deinem Lieferanten ist abgelaufen. Verbinde sie in den Einstellungen neu.",
     GENERIC: "Etwas ist schiefgelaufen.",
   },
 };

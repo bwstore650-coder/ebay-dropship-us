@@ -123,6 +123,9 @@ export const fr: Dict = {
     feesUnverified: "Frais eBay de ce pays à confirmer : vérifie le taux de ta catégorie avant de lister.",
     sourceNote:
       "Coûts fournisseurs convertis depuis l'USD (taux BCE + 2 % de marge de sécurité). Source : API officielle eBay. Le prix est pondéré par les ventes estimées de chaque annonce ; sans ventes, c'est la médiane des annonces actives neuves du pays.",
+    aeLabel: "Lien d'un produit AliExpress (facultatif)",
+    aePlaceholder: "https://fr.aliexpress.com/item/…",
+    aeHint: "Seules les variantes expédiées depuis un entrepôt du pays choisi sont comparées (livraison rapide).",
   },
   settings: {
     title: "Réglages",
@@ -142,7 +145,7 @@ export const fr: Dict = {
     cjButton: "Connecter CJ",
     cjSuccess: "CJ connecté.",
     aeTitle: "Fournisseur AliExpress",
-    aeHelp: "Bientôt disponible : en attente de la validation de l'accès Dropshipping sur AliExpress Open Platform.",
+    aeHelp: "Connectez votre compte AliExpress pour comparer ses produits expédiés depuis des entrepôts locaux et les commander automatiquement.",
     marginTitle: "Marge minimum",
     marginHelp: "Seuls les produits à {pct} % de marge ou plus sont proposés.",
     gpsrTitle: "Personne responsable UE (Europe uniquement)",
@@ -161,6 +164,12 @@ export const fr: Dict = {
     autoOrderOff: "Désactivée",
     autoOrderEnable: "Activer",
     autoOrderDisable: "Désactiver",
+    aeConnect: "Connecter AliExpress",
+    aeReconnect: "Reconnecter",
+    aeConnectedMsg: "Compte AliExpress connecté.",
+    aeUnavailable: "AliExpress n'est pas encore configuré sur ce site.",
+    aeError: "La connexion à AliExpress a échoué, réessayez.",
+    aePayNote: "Les commandes sont payées automatiquement si le paiement automatique est activé sur votre compte AliExpress ; sinon, payez-les dans AliExpress.",
   },
   billing: {
     title: "Abonnement",
@@ -335,6 +344,11 @@ export const fr: Dict = {
       EBAY_TRACKING: "Numéro de suivi reçu, mais eBay l'a refusé : {detail}. Ajoutez-le vous-même sur eBay.",
       HANDLED_MANUALLY: "Traitée par vous.",
       UNKNOWN: "Vérifiez cette commande.",
+      MIXED_SUPPLIERS: "Cette commande contient des articles de fournisseurs différents : commandez-la vous-même.",
+      AE_ERROR: "AliExpress a refusé la commande : {detail}",
+      AE_CANCELLED: "AliExpress a annulé cette commande. Vérifiez votre compte AliExpress.",
+      AE_UNPAID: "Commandée sur AliExpress mais en attente de paiement : payez-la dans votre compte AliExpress (ou activez le paiement automatique).",
+      SUPPLIER_RECONNECT: "La connexion à votre fournisseur a expiré. Reconnectez-la dans les Réglages.",
     },
   },
   emails: {
@@ -418,6 +432,9 @@ export const fr: Dict = {
     TOO_MANY_ATTEMPTS: "Trop d'essais. Patientez 15 minutes ou réinitialisez votre mot de passe.",
     RESET_INVALID: "Ce lien est invalide ou a expiré. Demandez-en un nouveau.",
     TERMS_REQUIRED: "Veuillez accepter les conditions d'utilisation et la politique de confidentialité.",
+    AE_LINK_INVALID: "Ce lien ne ressemble pas à un lien de produit AliExpress.",
+    AE_NOT_CONNECTED: "Connectez d'abord votre compte AliExpress dans les Réglages.",
+    SUPPLIER_RECONNECT: "La connexion à votre fournisseur a expiré. Reconnectez-la dans les Réglages.",
     GENERIC: "Une erreur est survenue.",
   },
 };

@@ -18,6 +18,7 @@ export default async function FinderPage() {
       defaultMarket={marketplace(user.defaultMarketplace).id}
       accounts={user.ebayAccounts.map((a, i) => ({ id: a.id, label: a.label ?? a.ebayUserId ?? fmt(t.settings.ebayAccountN, { n: i + 1 }) }))}
       hasGpsr={hasGpsr}
+      aeConnected={user.supplierAccounts.some((a) => a.supplier === "ALIEXPRESS")}
     />
   );
 }

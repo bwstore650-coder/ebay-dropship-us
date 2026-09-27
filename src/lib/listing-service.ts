@@ -5,7 +5,6 @@
  */
 import type { User } from "@prisma/client";
 import { db } from "@/lib/db";
-import { decrypt } from "@/lib/crypto";
 import { dailyListingLimit } from "@/lib/compliance";
 import * as ebay from "@/lib/ebay";
 import { EbayApiError } from "@/lib/ebay";
@@ -14,7 +13,7 @@ import { getUsdRates, offersToCurrency } from "@/lib/fx";
 import { computeMargin, landedCost, MAX_DELIVERY_DAYS, median, priceForTargetMargin, type SupplierOffer } from "@/lib/margin";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import { planInfo } from "@/lib/plans";
-import * as cj from "@/lib/suppliers/cj";
+import { openSession, productInfo, quote, SupplierError, type ProductInfo, type SupplierId } from "@/lib/suppliers";
 import { htmlToText, writeListingCopy } from "@/lib/ai";
 import {
   buildAspects, cleanImages, cleanTitle, DEFAULT_QUANTITY, ebayItemUrl, isEuMarket, makeSku, mostCommon,
@@ -23,7 +22,7 @@ import {
 
 export type ListingErrorCode =
   | "PLAN_REQUIRED" | "PLAN_LIMIT" | "EBAY_NOT_CONNECTED" | "EBAY_RECONNECT" | "EBAY_SETUP_REQUIRED" | "GPSR_REQUIRED"
-  | "DAILY_LIMIT" | "SUPPLIER_UNSUPPORTED" | "SUPPLIER_UNAVAILABLE" | "MARGIN_TOO_LOW" | "LISTING_BLOCKED"
+  | "DAILY_LIMIT" | "SUPPLIER_UNSUPPORTED" | "SUPPLIER_RECONNECT" | "SUPPLIER_UNAVAILABLE" | "MARGIN_TOO_LOW" | "LISTING_BLOCKED"
   | "ASPECTS_MISSING" | "NO_IMAGES" | "NO_CATEGORY" | "EBAY_REJECTED" | "INVALID_INPUT";
 
 export class ListingError extends Error {
@@ -34,49 +33,48 @@ export class ListingError extends Error {
 
 type UserWithAccounts = User & {
   ebayAccounts: { id: string; accessToken: string; accessTokenExpires: Date; refreshToken: string; refreshTokenExpires: Date }[];
-  supplierAccounts: { supplier: string; accessToken: string }[];
+  supplierAccounts: { id?: string; supplier: string; accessToken: string; refreshToken?: string | null; expiresAt?: Date | null }[];
 };
 
 export interface SupplierRef {
-  supplier: "CJ" | "ALIEXPRESS";
+  supplier: SupplierId;
   productId: string;
   variantId?: string;
 }
 
 interface LoadedVariant {
-  product: cj.CjProduct;
-  variant: cj.CjVariant;
+  info: ProductInfo;
   offer: SupplierOffer; // dans la devise du pays
 }
 
-/** Produit + variante chez CJ, avec le stock local et la livraison la moins chère, convertis dans la devise du pays. */
+/** Produit + variante chez le fournisseur, avec le stock local et la livraison la moins chère, convertis dans la devise du pays. */
 async function loadVariant(user: UserWithAccounts, ref: SupplierRef, marketId: MarketplaceId): Promise<LoadedVariant> {
-  if (ref.supplier !== "CJ") throw new ListingError("SUPPLIER_UNSUPPORTED");
-  const acc = user.supplierAccounts.find((a) => a.supplier === "CJ");
-  if (!acc) throw new ListingError("SUPPLIER_UNSUPPORTED");
-  const token = decrypt(acc.accessToken);
   const m = marketplace(marketId);
-  const product = await cj.getProduct(token, ref.productId);
-  const variant = product.variants.find((v) => v.vid === ref.variantId) ?? (ref.variantId ? undefined : product.variants[0]);
-  if (!variant) throw new ListingError("SUPPLIER_UNAVAILABLE");
-  const stock = variant.inventories?.find((i) => i.countryCode === m.country)?.totalInventory ?? 0;
-  if (stock <= 0) throw new ListingError("SUPPLIER_UNAVAILABLE");
-  const options = await cj.freightCalculate(token, variant.vid, 1, m.country);
-  if (!options.length) throw new ListingError("SUPPLIER_UNAVAILABLE");
-  const cheapest = options.reduce((a, b) => (b.logisticPrice < a.logisticPrice ? b : a));
+  let session;
+  try {
+    session = await openSession(user.supplierAccounts, ref.supplier);
+  } catch (e) {
+    if (e instanceof SupplierError) throw new ListingError(e.code === "SUPPLIER_RECONNECT" ? "SUPPLIER_RECONNECT" : "SUPPLIER_UNSUPPORTED");
+    throw e;
+  }
+  const cache = new Map<string, Promise<unknown>>();
+  const info = await productInfo(session, ref.productId, ref.variantId, m.country, cache);
+  if (!info) throw new ListingError("SUPPLIER_UNAVAILABLE");
+  const q = await quote(session, info.productId, info.variantId, 1, m.country, cache);
+  if (q.kind !== "ok" || q.deliveryDaysMax > MAX_DELIVERY_DAYS) throw new ListingError("SUPPLIER_UNAVAILABLE");
   const usd: SupplierOffer = {
-    supplier: "CJ",
-    productId: product.pid,
-    variantId: variant.vid,
-    title: product.productNameEn,
-    price: Number(variant.variantSellPrice),
-    shipping: Number(cheapest.logisticPrice),
-    stockUs: stock,
-    deliveryDaysMax: cj.parseMaxDays(cheapest.logisticAging),
+    supplier: ref.supplier,
+    productId: info.productId,
+    variantId: info.variantId,
+    title: info.title,
+    price: q.unitPrice,
+    shipping: q.shipping,
+    taxRate: q.taxRate,
+    stockUs: q.stock,
+    deliveryDaysMax: q.deliveryDaysMax,
   };
-  if (usd.deliveryDaysMax > MAX_DELIVERY_DAYS) throw new ListingError("SUPPLIER_UNAVAILABLE");
   const [offer] = m.currency === "USD" ? [usd] : offersToCurrency([usd], m.currency, await getUsdRates());
-  return { product, variant, offer };
+  return { info, offer };
 }
 
 const offerCost = (o: SupplierOffer) => landedCost({ supplierCost: o.price, supplierShipping: o.shipping, supplierTaxRate: o.taxRate });
@@ -108,7 +106,7 @@ export interface ListingDraft {
 export async function prepareListing(user: UserWithAccounts, input: { keyword: string; marketId: MarketplaceId; ref: SupplierRef }): Promise<ListingDraft> {
   if (user.plan === "NONE") throw new ListingError("PLAN_REQUIRED");
   const m = marketplace(input.marketId);
-  const { product, variant, offer } = await loadVariant(user, input.ref, m.id);
+  const { info, offer } = await loadVariant(user, input.ref, m.id);
 
   // Annonces comparables : mots-clés des titres qui vendent, catégorie la plus utilisée, prix du marché.
   const market = await ebay.searchActive(input.keyword, 50, m.id);
@@ -124,15 +122,14 @@ export async function prepareListing(user: UserWithAccounts, input: { keyword: s
   const defs = await ebay.getAspects(categoryId, m.id);
 
   const facts = [
-    htmlToText(product.description ?? ""),
-    product.materialNameEn ? `Material: ${product.materialNameEn}` : "",
-    product.packingNameEn ? `Packing: ${product.packingNameEn}` : "",
+    htmlToText(info.descriptionHtml),
+    ...info.facts,
   ].filter(Boolean).join("\n");
   const copy = await writeListingCopy({
     language: m.listingLanguage,
-    supplierTitle: product.productNameEn,
+    supplierTitle: info.title,
     supplierDescription: facts,
-    variant: variant.variantKey ?? variant.variantNameEn,
+    variant: info.variantLabel,
     comparableTitles: market.items.slice(0, 8).map((i) => i.title),
     aspects: defs,
   });
@@ -148,7 +145,7 @@ export async function prepareListing(user: UserWithAccounts, input: { keyword: s
     marketId: m.id,
     currency: m.currency,
     symbol: m.symbol,
-    ref: { supplier: "CJ", productId: product.pid, variantId: variant.vid },
+    ref: { supplier: input.ref.supplier, productId: info.productId, variantId: info.variantId },
     title,
     descriptionHtml: sanitizeDescription(copy.descriptionHtml),
     aspects,
@@ -159,7 +156,7 @@ export async function prepareListing(user: UserWithAccounts, input: { keyword: s
     missingRequired,
     categoryId,
     categoryName,
-    images: cleanImages(cj.productImages(product, variant)),
+    images: cleanImages(info.images),
     quantity: Math.min(DEFAULT_QUANTITY, offer.stockUs),
     maxQuantity: Math.min(10, offer.stockUs),
     cost,
@@ -211,7 +208,7 @@ export async function publishListing(user: UserWithAccounts, input: PublishInput
   }
 
   // Coût fournisseur frais + marge au prix choisi.
-  const { product, variant, offer } = await loadVariant(user, input.ref, m.id);
+  const { info, offer } = await loadVariant(user, input.ref, m.id);
   const price = Math.round(input.price * 100) / 100;
   const margin = computeMargin({ saleTotal: price, supplierCost: offer.price, supplierShipping: offer.shipping, supplierTaxRate: offer.taxRate, market: m });
   if (margin.marginPct < user.minMarginPct) throw new ListingError("MARGIN_TOO_LOW", String(priceForTargetMargin(offerCost(offer), user.minMarginPct, { market: m })));
@@ -226,7 +223,7 @@ export async function publishListing(user: UserWithAccounts, input: PublishInput
   if (missingRequired.length) throw new ListingError("ASPECTS_MISSING", missingRequired.join(", "));
   const vero = veroIn(title, aspects);
   if (vero) throw new ListingError("LISTING_BLOCKED", vero);
-  const images = cleanImages(cj.productImages(product, variant));
+  const images = cleanImages(info.images);
   if (!images.length) throw new ListingError("NO_IMAGES");
   const quantity = Math.max(1, Math.min(Math.floor(input.quantity) || 1, 10, offer.stockUs));
 
@@ -241,9 +238,9 @@ export async function publishListing(user: UserWithAccounts, input: PublishInput
       sku,
       title,
       price,
-      supplier: "CJ",
-      supplierProductId: product.pid,
-      supplierVariantId: variant.vid,
+      supplier: input.ref.supplier,
+      supplierProductId: info.productId,
+      supplierVariantId: info.variantId,
       supplierCost: margin.landedCost,
       lastCheckedAt: new Date(),
       lastMarginPct: margin.marginPct,

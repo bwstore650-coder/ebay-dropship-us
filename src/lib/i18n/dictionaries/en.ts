@@ -122,6 +122,9 @@ export const en = {
     feesUnverified: "eBay fees for this country still need to be confirmed: check your category rate before listing.",
     sourceNote:
       "Supplier costs converted from USD (ECB rate + 2% safety margin). Source: official eBay API. The price is weighted by each listing's estimated sales; without sales, it is the median of new active listings in the country.",
+    aeLabel: "AliExpress product link (optional)",
+    aePlaceholder: "https://www.aliexpress.com/item/…",
+    aeHint: "Only variants shipped from a warehouse in the selected country are compared (fast delivery).",
   },
   settings: {
     title: "Settings",
@@ -141,7 +144,7 @@ export const en = {
     cjButton: "Connect CJ",
     cjSuccess: "CJ connected.",
     aeTitle: "AliExpress supplier",
-    aeHelp: "Coming soon: waiting for Dropshipping access approval on AliExpress Open Platform.",
+    aeHelp: "Connect your AliExpress account to compare its products shipped from local warehouses and order them automatically.",
     marginTitle: "Minimum margin",
     marginHelp: "Only products with a {pct}% margin or more are suggested.",
     gpsrTitle: "EU responsible person (Europe only)",
@@ -160,6 +163,12 @@ export const en = {
     autoOrderOff: "Off",
     autoOrderEnable: "Turn on",
     autoOrderDisable: "Turn off",
+    aeConnect: "Connect AliExpress",
+    aeReconnect: "Reconnect",
+    aeConnectedMsg: "AliExpress account connected.",
+    aeUnavailable: "AliExpress is not configured on this site yet.",
+    aeError: "The AliExpress connection failed, please try again.",
+    aePayNote: "Orders are paid automatically if automatic payment is set up on your AliExpress account; otherwise, pay them in AliExpress.",
   },
   billing: {
     title: "Subscription",
@@ -334,6 +343,11 @@ export const en = {
       EBAY_TRACKING: "Tracking number received, but eBay refused it: {detail}. Add it on eBay yourself.",
       HANDLED_MANUALLY: "Handled by you.",
       UNKNOWN: "Check this order.",
+      MIXED_SUPPLIERS: "This order contains items from different suppliers: order them yourself.",
+      AE_ERROR: "AliExpress refused the order: {detail}",
+      AE_CANCELLED: "AliExpress cancelled this order. Check your AliExpress account.",
+      AE_UNPAID: "Ordered on AliExpress but waiting for payment: pay it in your AliExpress account (or set up automatic payment).",
+      SUPPLIER_RECONNECT: "Your supplier connection has expired. Reconnect it in Settings.",
     },
   },
   emails: {
@@ -417,6 +431,9 @@ export const en = {
     TOO_MANY_ATTEMPTS: "Too many attempts. Wait 15 minutes, or reset your password.",
     RESET_INVALID: "This link is invalid or has expired. Ask for a new one.",
     TERMS_REQUIRED: "Please accept the Terms of Service and the Privacy Policy.",
+    AE_LINK_INVALID: "This does not look like an AliExpress product link.",
+    AE_NOT_CONNECTED: "Connect your AliExpress account in Settings first.",
+    SUPPLIER_RECONNECT: "Your supplier connection has expired. Reconnect it in Settings.",
     GENERIC: "Something went wrong.",
   },
 };

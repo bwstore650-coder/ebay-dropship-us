@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EbayOrder } from "./ebay";
-import { checkOrderable, cjAddress, ebayCarrierCode, isBalanceError, isDuplicateError, mapLines, orderProfit, supplierOrderNumber } from "./orders";
+import { checkOrderable, shipAddress, ebayCarrierCode, isBalanceError, isDuplicateError, mapLines, orderProfit, supplierOrderNumber } from "./orders";
 
 const order = (o: Partial<EbayOrder> = {}): EbayOrder => ({
   orderId: "12-34567-89012",
@@ -24,17 +24,17 @@ describe("commandes : quelles ventes commander", () => {
   });
   it("relie les lignes à nos annonces CJ, signale les autres", () => {
     const o = order({ lineItems: [{ lineItemId: "L1", sku: "PL-A", quantity: 2, title: "Can opener" }, { lineItemId: "L2", sku: "OTHER", quantity: 1, title: "Old stock" }] });
-    const r = mapLines(o, new Map([["PL-A", { id: "LST", supplierVariantId: "V1", supplier: "CJ" }]]));
-    expect(r.lines).toEqual([{ lineItemId: "L1", sku: "PL-A", quantity: 2, listingId: "LST", vid: "V1", title: "Can opener" }]);
+    const r = mapLines(o, new Map([["PL-A", { id: "LST", supplierVariantId: "V1", supplierProductId: "P1", supplier: "CJ" }]]));
+    expect(r.lines).toEqual([{ lineItemId: "L1", sku: "PL-A", quantity: 2, listingId: "LST", supplier: "CJ", productId: "P1", vid: "V1", title: "Can opener" }]);
     expect(r.unknown).toEqual(["Old stock"]);
   });
 });
 
 describe("commandes : fournisseur", () => {
-  it("adresse au format CJ (téléphone nettoyé, région remplacée par la ville si absente)", () => {
+  it("adresse pour le fournisseur (téléphone nettoyé, région remplacée par la ville si absente)", () => {
     const to = order().fulfillmentStartInstructions[0].shippingStep!.shipTo;
-    expect(cjAddress(to)).toMatchObject({ shippingCustomerName: "Jane Doe", shippingAddress: "1 Main St", shippingCity: "Austin", shippingProvince: "TX", shippingZip: "73301", shippingPhone: "5551234567" });
-    expect(cjAddress({ ...to, contactAddress: { addressLine1: "Str 1", city: "Berlin", postalCode: "10115", countryCode: "DE" } }).shippingProvince).toBe("Berlin");
+    expect(shipAddress(to)).toMatchObject({ fullName: "Jane Doe", address: "1 Main St", city: "Austin", province: "TX", zip: "73301", phone: "5551234567", country: "US" });
+    expect(shipAddress({ ...to, contactAddress: { addressLine1: "Str 1", city: "Berlin", postalCode: "10115", countryCode: "DE" } }).province).toBe("Berlin");
   });
   it("numéro de commande unique ≤ 50 caractères", () => {
     expect(supplierOrderNumber("12-34567-89012")).toBe("EB-12-34567-89012");

@@ -97,3 +97,13 @@ Toutes les heures (`/api/cron/monitor`, protégée par `CRON_SECRET`), chaque an
 - de nouveau en stock et rentable → remise en ligne automatiquement ;
 - stock faible → quantité affichée réduite (jamais plus que le stock réel, 3 au maximum).
 L'option eBay « rupture de stock » (annonce masquée à quantité 0 au lieu d'être terminée) est activée automatiquement lors des réglages eBay du pays.
+
+## AliExpress
+
+1. Sur https://openservice.aliexpress.com, créer une app avec l'accès **Dropshipping** (validation par AliExpress).
+2. Déclarer l'URL de retour : `<APP_URL>/api/suppliers/aliexpress/callback`, puis mettre `ALIEXPRESS_APP_KEY` et `ALIEXPRESS_APP_SECRET` dans `.env`.
+3. Chaque client connecte son compte AliExpress dans Réglages (jeton renouvelé automatiquement).
+
+Fonctionnement : dans le chercheur, le client colle le lien d'un produit AliExpress ; seules les variantes expédiées depuis un entrepôt du pays (propriété « Ships From ») sont comparées, pour garder une livraison rapide. Publication, commandes automatiques, suivi et surveillance fonctionnent comme pour CJ.
+Paiement : la commande est payée automatiquement si le paiement automatique est activé sur le compte AliExpress ; sinon elle apparaît « à payer » dans la page Commandes.
+Méthodes API : aliexpress.ds.product.get, aliexpress.logistics.buyer.freight.calculate, aliexpress.ds.order.create, aliexpress.trade.ds.order.get (signature vérifiée contre le SDK de référence ae_sdk).

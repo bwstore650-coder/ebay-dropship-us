@@ -5,14 +5,17 @@ import { fmt } from "@/lib/i18n";
 import { getI18n } from "@/lib/i18n/server";
 import CjConnectForm from "@/components/CjConnectForm";
 import { EU_COUNTRIES } from "@/lib/eu";
+import { aeConfig } from "@/lib/suppliers";
 import { LOCALE_TAGS } from "@/lib/i18n";
 import { saveGpsr, setAutoOrder } from "./actions";
 
-export default async function Settings({ searchParams }: { searchParams: Promise<{ ebay?: string; gpsr?: string }> }) {
+export default async function Settings({ searchParams }: { searchParams: Promise<{ ebay?: string; gpsr?: string; ae?: string }> }) {
   const user = await requireUser();
   const { locale, t } = await getI18n();
   const s = t.settings;
-  const { ebay, gpsr } = await searchParams;
+  const { ebay, gpsr, ae } = await searchParams;
+  const aeAccount = user.supplierAccounts.find((a: { supplier: string }) => a.supplier === "ALIEXPRESS");
+  const aeAvailable = Boolean(aeConfig());
   const countryName = new Intl.DisplayNames([LOCALE_TAGS[locale]], { type: "region" });
   const input = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none";
   const cj = user.supplierAccounts.find((a: { supplier: string }) => a.supplier === "CJ");
@@ -49,8 +52,20 @@ export default async function Settings({ searchParams }: { searchParams: Promise
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
-        <h2 className="font-semibold">{s.aeTitle}</h2>
-        <p className="mt-1 text-sm text-slate-600">{s.aeHelp}</p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-semibold">{s.aeTitle}</h2>
+          {aeAccount && <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">{s.cjConnected}</span>}
+        </div>
+        {ae === "connected" && <p className="mt-3 rounded-lg bg-emerald-50 p-2 text-sm text-emerald-700">{s.aeConnectedMsg}</p>}
+        {ae === "error" && <p className="mt-3 rounded-lg bg-red-50 p-2 text-sm text-red-700">{s.aeError}</p>}
+        {ae === "unavailable" && <p className="mt-3 rounded-lg bg-amber-50 p-2 text-sm text-amber-700">{s.aeUnavailable}</p>}
+        <p className="mt-1 text-sm text-slate-600">{aeAvailable ? s.aeHelp : s.aeUnavailable}</p>
+        {aeAvailable && <p className="mt-1 text-xs text-slate-500">{s.aePayNote}</p>}
+        {aeAvailable && (
+          <a href="/api/suppliers/aliexpress/connect" className={`mt-3 ${aeAccount ? "btn-secondary" : "btn-primary"} px-4 py-2 text-sm`}>
+            {aeAccount ? s.aeReconnect : s.aeConnect}
+          </a>
+        )}
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">

@@ -1,11 +1,10 @@
 /**
- * Commandes automatiques : vente eBay → commande payée chez CJ → numéro de suivi renvoyé à eBay.
- * Garde-fous : jamais de double commande (verrou + numéro unique chez CJ), jamais de commande à perte
+ * Commandes automatiques : vente eBay → commande chez le fournisseur (CJ ou AliExpress) → numéro de suivi renvoyé à eBay.
+ * Garde-fous : jamais de double commande (verrou + numéro unique chez le fournisseur), jamais de commande à perte
  * sans l'accord du vendeur, adresse de l'acheteur relue chez eBay au moment de commander (non stockée).
  */
 import type { Prisma, User } from "@prisma/client";
 import { db } from "@/lib/db";
-import { decrypt } from "@/lib/crypto";
 import * as ebay from "@/lib/ebay";
 import { EbayApiError } from "@/lib/ebay";
 import { EbayReconnectRequired, userToken } from "@/lib/ebay-account";
@@ -13,21 +12,19 @@ import { getUsdRates, offersToCurrency } from "@/lib/fx";
 import { landedCost, type SupplierOffer } from "@/lib/margin";
 import { planInfo } from "@/lib/plans";
 import { ordersAttentionEmail, sendEmail } from "@/lib/email";
-import * as cj from "@/lib/suppliers/cj";
+import { openSession, placeSupplierOrder, quote, supplierOrderState, SupplierError, type Session, type SupplierId } from "@/lib/suppliers";
 import {
-  checkOrderable, cjAddress, ebayCarrierCode, isBalanceError, isDuplicateError, mapLines, orderProfit, shipTo,
+  checkOrderable, shipAddress, ebayCarrierCode, isBalanceError, isDuplicateError, mapLines, orderProfit, shipTo,
   STUCK_AFTER_MS, supplierOrderNumber, type OrderLine,
 } from "@/lib/orders";
 
 type Account = { id: string; accessToken: string; accessTokenExpires: Date; refreshToken: string; refreshTokenExpires: Date };
-type UserWithAccounts = User & { ebayAccounts: Account[]; supplierAccounts: { supplier: string; accessToken: string }[] };
+type UserWithAccounts = User & {
+  ebayAccounts: Account[];
+  supplierAccounts: { id?: string; supplier: string; accessToken: string; refreshToken?: string | null; expiresAt?: Date | null }[];
+};
 
 const LOOKBACK_DAYS = 30;
-
-function cjToken(user: UserWithAccounts): string | null {
-  const acc = user.supplierAccounts.find((a) => a.supplier === "CJ");
-  return acc ? decrypt(acc.accessToken) : null;
-}
 
 /** 1. Récupère les nouvelles ventes eBay et les enregistre (sans rien commander). */
 export async function importOrders(user: UserWithAccounts, account: Account): Promise<number> {
@@ -39,7 +36,7 @@ export async function importOrders(user: UserWithAccounts, account: Account): Pr
   const skus = [...new Set(orders.flatMap((o) => o.lineItems.map((l) => l.sku).filter((s): s is string => Boolean(s))))];
   const listings = await db.listing.findMany({
     where: { userId: user.id, sku: { in: skus } },
-    select: { id: true, sku: true, supplierVariantId: true, supplier: true, marketplace: true, currency: true },
+    select: { id: true, sku: true, supplierVariantId: true, supplierProductId: true, supplier: true, marketplace: true, currency: true },
   });
   const bySku = new Map(listings.map((l) => [l.sku, l]));
   const known = await db.order.findMany({ where: { ebayOrderId: { in: orders.map((o) => o.orderId) } }, select: { ebayOrderId: true, status: true, id: true } });
@@ -80,40 +77,31 @@ export async function importOrders(user: UserWithAccounts, account: Account): Pr
   return created;
 }
 
-export class OrderSkipped extends Error {}
-
-/** Stock, prix de chaque variante et transporteur le moins cher chez CJ (en USD). */
-async function quoteCj(token: string, lines: OrderLine[], productOf: Map<string, string>, country: string) {
-  const usd: SupplierOffer[] = [];
-  let logisticName = "";
-  for (const line of lines) {
-    const pid = productOf.get(line.listingId);
-    const product = pid ? await cj.getProduct(token, pid) : null;
-    const v = product?.variants.find((x) => x.vid === line.vid);
-    const stock = v?.inventories?.find((i) => i.countryCode === country)?.totalInventory ?? 0;
-    if (!v || stock < line.quantity) return { ok: false as const, code: "OUT_OF_STOCK", detail: line.title };
-    const options = await cj.freightCalculate(token, line.vid, line.quantity, country);
-    if (!options.length) return { ok: false as const, code: "OUT_OF_STOCK", detail: line.title };
-    const cheapest = options.reduce((x, y) => (y.logisticPrice < x.logisticPrice ? y : x));
-    logisticName ||= cheapest.logisticName;
-    usd.push({
-      supplier: "CJ",
-      productId: pid!,
-      variantId: line.vid,
-      title: line.title,
-      price: Number(v.variantSellPrice) * line.quantity,
-      shipping: Number(cheapest.logisticPrice),
-      stockUs: stock,
-      deliveryDaysMax: cj.parseMaxDays(cheapest.logisticAging),
-    });
-  }
-  return { ok: true as const, usd, logisticName };
-}
-
 const MAX_ATTEMPTS = 5;
 
+/** Session fournisseur ouverte une seule fois par passage. */
+type Sessions = Map<SupplierId, Promise<Session>>;
+function sessionFor(user: UserWithAccounts, supplier: SupplierId, sessions: Sessions): Promise<Session> {
+  if (!sessions.has(supplier)) sessions.set(supplier, openSession(user.supplierAccounts, supplier));
+  return sessions.get(supplier)!;
+}
+
+/** Lignes enregistrées avant la prise en charge d'AliExpress : fournisseur CJ et produit relu sur l'annonce. */
+async function normalizeLines(lines: OrderLine[]): Promise<OrderLine[]> {
+  const missing = lines.filter((l) => !l.productId || !l.supplier);
+  if (!missing.length) return lines;
+  const listings = await db.listing.findMany({ where: { id: { in: missing.map((l) => l.listingId) } }, select: { id: true, supplierProductId: true, supplier: true } });
+  const byId = new Map(listings.map((l) => [l.id, l]));
+  return lines.map((l) => ({
+    ...l,
+    supplier: l.supplier ?? (byId.get(l.listingId)?.supplier as SupplierId | undefined) ?? "CJ",
+    productId: l.productId ?? byId.get(l.listingId)?.supplierProductId ?? "",
+  }));
+}
+
 /**
- * 2. Passe la commande chez CJ (payée avec le solde CJ du vendeur).
+ * 2. Passe la commande chez le fournisseur (CJ : payée avec le solde CJ ; AliExpress : paiement automatique
+ * avec le moyen enregistré sur le compte AliExpress, sinon à payer dans AliExpress).
  * `force` : le vendeur a confirmé à la main (commande à perte, nouvel essai après un échec).
  */
 export async function placeOrder(user: UserWithAccounts, orderId: string, opts: { force?: boolean } = {}): Promise<string> {
@@ -131,8 +119,16 @@ export async function placeOrder(user: UserWithAccounts, orderId: string, opts: 
   };
 
   try {
-    const token = cjToken(user);
-    if (!token) return await fail("NEEDS_REVIEW", "NO_SUPPLIER");
+    const lines = await normalizeLines(order.lines as unknown as OrderLine[]);
+    const supplier = lines[0]?.supplier ?? "CJ";
+    if (lines.some((l) => l.supplier !== supplier)) return await fail("NEEDS_REVIEW", "MIXED_SUPPLIERS");
+    let session: Session;
+    try {
+      session = await openSession(user.supplierAccounts, supplier);
+    } catch (e) {
+      if (e instanceof SupplierError) return await fail("NEEDS_REVIEW", e.code === "SUPPLIER_RECONNECT" ? "SUPPLIER_RECONNECT" : "NO_SUPPLIER");
+      throw e;
+    }
     const account = user.ebayAccounts.find((a) => a.id === order.ebayAccountId);
     if (!account) return await fail("NEEDS_REVIEW", "EBAY_RECONNECT");
 
@@ -152,35 +148,43 @@ export async function placeOrder(user: UserWithAccounts, orderId: string, opts: 
     const eo = await ebay.getOrder(eToken, order.ebayOrderId);
     const check = checkOrderable(eo);
     if (!check.ok) return await fail(check.code === "CANCELLED_BY_BUYER" || check.code === "ALREADY_SHIPPED" ? "CANCELLED" : "NEEDS_REVIEW", check.code);
-    const to = shipTo(eo)!;
-    const country = to.contactAddress.countryCode;
+    const address = shipAddress(shipTo(eo)!);
+    const country = address.country;
 
-    // Coût actuel et stock chez CJ.
-    const lines = order.lines as unknown as OrderLine[];
-    const listings = await db.listing.findMany({ where: { id: { in: lines.map((l) => l.listingId) } }, select: { id: true, supplierProductId: true } });
-    const q = await quoteCj(token, lines, new Map(listings.map((l) => [l.id, l.supplierProductId])), country);
-    if (!q.ok) return await fail("NEEDS_REVIEW", q.code, q.detail);
-    const offers = order.currency === "USD" ? q.usd : offersToCurrency(q.usd, order.currency, await getUsdRates());
-    const cost = Math.round(offers.reduce((s, o) => s + landedCost({ supplierCost: o.price, supplierShipping: o.shipping }), 0) * 100) / 100;
+    // Coût actuel, stock et transporteur chez le fournisseur.
+    const usd: SupplierOffer[] = [];
+    let service = "";
+    for (const l of lines) {
+      const q = await quote(session, l.productId, l.vid, l.quantity, country);
+      if (q.kind !== "ok") return await fail("NEEDS_REVIEW", "OUT_OF_STOCK", l.title);
+      service ||= q.service;
+      usd.push({
+        supplier, productId: l.productId, variantId: l.vid, title: l.title,
+        price: q.unitPrice * l.quantity, shipping: q.shipping, taxRate: q.taxRate, stockUs: q.stock, deliveryDaysMax: q.deliveryDaysMax,
+      });
+    }
+    const offers = order.currency === "USD" ? usd : offersToCurrency(usd, order.currency, await getUsdRates());
+    const cost = Math.round(offers.reduce((s, o) => s + landedCost({ supplierCost: o.price, supplierShipping: o.shipping, supplierTaxRate: o.taxRate }), 0) * 100) / 100;
     const { fees, profit } = orderProfit(order.saleTotal, cost, order.marketplace);
     if (profit < 0 && !opts.force) {
       await db.order.update({ where: { id: orderId }, data: { supplierCost: cost, fees, profit } });
       return await fail("NEEDS_REVIEW", "LOSS", `${profit.toFixed(2)} ${order.currency}`);
     }
 
-    // Commande chez CJ, payée avec le solde (payType 2). Le numéro EB-<commande eBay> est unique chez CJ.
-    let created: Awaited<ReturnType<typeof cj.createOrder>>;
+    // Commande chez le fournisseur. Le numéro EB-<commande eBay> est unique : pas de double commande.
+    let created: { orderId: string };
     try {
-      created = await cj.createOrder(
-        token,
-        { orderNumber: supplierOrderNumber(order.ebayOrderId), logisticName: q.logisticName, ...cjAddress(to), products: lines.map((l) => ({ vid: l.vid, quantity: l.quantity })) },
-        country,
-      );
+      created = await placeSupplierOrder(session, {
+        orderNumber: supplierOrderNumber(order.ebayOrderId),
+        address,
+        service,
+        lines: lines.map((l) => ({ productId: l.productId, variantId: l.vid, quantity: l.quantity })),
+      });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (isDuplicateError(msg)) return await fail("NEEDS_REVIEW", "DUPLICATE", msg);
-      if (isBalanceError(msg)) return await fail("FAILED", "CJ_BALANCE", msg);
-      return await fail("FAILED", "CJ_ERROR", msg);
+      if (supplier === "CJ" && isBalanceError(msg)) return await fail("FAILED", "CJ_BALANCE", msg);
+      return await fail("FAILED", supplier === "CJ" ? "CJ_ERROR" : "AE_ERROR", msg);
     }
     await db.order.update({
       where: { id: orderId },
@@ -190,43 +194,51 @@ export async function placeOrder(user: UserWithAccounts, orderId: string, opts: 
   } catch (e) {
     console.error("Commande auto", order.ebayOrderId, e);
     if (e instanceof EbayReconnectRequired || (e instanceof EbayApiError && e.status === 401)) return await fail("NEEDS_REVIEW", "EBAY_RECONNECT");
-    // Erreur avant l'envoi chez CJ : on réessaiera au prochain passage (5 essais au maximum).
+    // Erreur avant l'envoi au fournisseur : on réessaiera au prochain passage (5 essais au maximum).
     if (order.attempts >= MAX_ATTEMPTS) return await fail("NEEDS_REVIEW", "RETRY_LIMIT", e instanceof Error ? e.message : String(e));
     await db.order.update({ where: { id: orderId }, data: { status: "PENDING", errorCode: "RETRY", errorMessage: (e instanceof Error ? e.message : String(e)).slice(0, 1000) } });
     return "RETRY";
   }
 }
 
-/** 3. Numéros de suivi : lus chez CJ, renvoyés à eBay. */
+/** 3. Numéros de suivi : lus chez le fournisseur, renvoyés à eBay. */
 export async function syncTracking(user: UserWithAccounts): Promise<number> {
-  const token = cjToken(user);
-  if (!token) return 0;
   const orders = await db.order.findMany({ where: { userId: user.id, status: "ORDERED", supplierOrderId: { not: null } }, take: 50, orderBy: { orderedAt: "asc" } });
+  const sessions: Sessions = new Map();
   let shipped = 0;
   for (const o of orders) {
     try {
-      const d = await cj.getOrderDetail(token, o.supplierOrderId!);
-      if (d.orderStatus === "CANCELLED") {
-        await db.order.update({ where: { id: o.id }, data: { status: "FAILED", errorCode: "CJ_CANCELLED" } });
+      const lines = await normalizeLines(o.lines as unknown as OrderLine[]);
+      const supplier = lines[0]?.supplier ?? "CJ";
+      const state = await supplierOrderState(await sessionFor(user, supplier, sessions), o.supplierOrderId!);
+      if (state.state === "CANCELLED") {
+        await db.order.update({ where: { id: o.id }, data: { status: "FAILED", errorCode: supplier === "CJ" ? "CJ_CANCELLED" : "AE_CANCELLED" } });
         continue;
       }
-      if (!d.trackNumber) continue;
+      if (state.state === "UNPAID") {
+        // AliExpress sans paiement automatique : on le signale une fois au vendeur.
+        if (o.errorCode !== "AE_UNPAID") await db.order.update({ where: { id: o.id }, data: { errorCode: "AE_UNPAID" } });
+        continue;
+      }
+      if (state.state !== "SHIPPED") {
+        if (o.errorCode === "AE_UNPAID") await db.order.update({ where: { id: o.id }, data: { errorCode: null } });
+        continue;
+      }
       const account = user.ebayAccounts.find((a) => a.id === o.ebayAccountId);
       if (!account) continue;
-      const carrier = ebayCarrierCode(d.logisticName, d.trackNumber);
-      const lines = o.lines as unknown as OrderLine[];
+      const carrier = ebayCarrierCode(state.carrierName, state.trackingNumber);
       try {
-        await ebay.addTracking(await userToken(account), o.ebayOrderId, lines.map((l) => ({ lineItemId: l.lineItemId, quantity: l.quantity })), carrier, d.trackNumber);
+        await ebay.addTracking(await userToken(account), o.ebayOrderId, lines.map((l) => ({ lineItemId: l.lineItemId, quantity: l.quantity })), carrier, state.trackingNumber);
       } catch (e) {
         await db.order.update({
           where: { id: o.id },
-          data: { trackingNumber: d.trackNumber, carrier, errorCode: "EBAY_TRACKING", errorMessage: (e instanceof EbayApiError ? e.readable : String(e)).slice(0, 1000) },
+          data: { trackingNumber: state.trackingNumber, carrier, errorCode: "EBAY_TRACKING", errorMessage: (e instanceof EbayApiError ? e.readable : String(e)).slice(0, 1000) },
         });
         continue;
       }
       await db.order.update({
         where: { id: o.id },
-        data: { status: "SHIPPED", trackingNumber: d.trackNumber, carrier, shippedAt: new Date(), errorCode: null, errorMessage: null },
+        data: { status: "SHIPPED", trackingNumber: state.trackingNumber, carrier, shippedAt: new Date(), errorCode: null, errorMessage: null },
       });
       shipped++;
     } catch (e) {

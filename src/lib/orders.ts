@@ -5,13 +5,16 @@
 import type { EbayAddress, EbayOrder } from "@/lib/ebay";
 import { ebayFees } from "@/lib/margin";
 import { marketplace } from "@/lib/marketplaces";
+import type { ShipAddress } from "@/lib/suppliers";
 
 export interface OrderLine {
   lineItemId: string;
   sku: string;
   quantity: number;
   listingId: string;
-  vid: string;
+  supplier: "CJ" | "ALIEXPRESS";
+  productId: string;
+  vid: string; // variante chez le fournisseur
   title: string;
 }
 
@@ -36,32 +39,36 @@ export function shipTo(o: EbayOrder) {
 /** Relie les lignes de la commande eBay à nos annonces (par SKU). */
 export function mapLines(
   o: EbayOrder,
-  listingsBySku: Map<string, { id: string; supplierVariantId: string | null; supplier: string }>,
+  listingsBySku: Map<string, { id: string; supplierVariantId: string | null; supplierProductId: string; supplier: string }>,
 ): { lines: OrderLine[]; unknown: string[] } {
   const lines: OrderLine[] = [];
   const unknown: string[] = [];
   for (const li of o.lineItems) {
     const l = li.sku ? listingsBySku.get(li.sku) : undefined;
-    if (!l || l.supplier !== "CJ" || !l.supplierVariantId) {
+    if (!l || (l.supplier !== "CJ" && l.supplier !== "ALIEXPRESS") || !l.supplierVariantId) {
       unknown.push(li.title || li.lineItemId);
       continue;
     }
-    lines.push({ lineItemId: li.lineItemId, sku: li.sku!, quantity: li.quantity, listingId: l.id, vid: l.supplierVariantId, title: li.title });
+    lines.push({
+      lineItemId: li.lineItemId, sku: li.sku!, quantity: li.quantity, listingId: l.id,
+      supplier: l.supplier, productId: l.supplierProductId, vid: l.supplierVariantId, title: li.title,
+    });
   }
   return { lines, unknown };
 }
 
-/** Adresse de livraison au format CJ (la région est obligatoire chez CJ : la ville la remplace si eBay n'en donne pas). */
-export function cjAddress(to: { fullName: string; primaryPhone?: { phoneNumber: string }; contactAddress: EbayAddress }) {
+/** Adresse de livraison pour le fournisseur (la région est obligatoire : la ville la remplace si eBay n'en donne pas). */
+export function shipAddress(to: { fullName: string; primaryPhone?: { phoneNumber: string }; contactAddress: EbayAddress }): ShipAddress {
   const a = to.contactAddress;
   return {
-    shippingCustomerName: to.fullName.slice(0, 50),
-    shippingAddress: a.addressLine1.slice(0, 200),
-    shippingAddress2: a.addressLine2?.slice(0, 200) || undefined,
-    shippingCity: a.city.slice(0, 50),
-    shippingProvince: (a.stateOrProvince || a.city).slice(0, 50),
-    shippingZip: (a.postalCode ?? "").slice(0, 20),
-    shippingPhone: to.primaryPhone?.phoneNumber?.replace(/[^\d+]/g, "").slice(0, 20) || undefined,
+    fullName: to.fullName.slice(0, 50),
+    address: a.addressLine1.slice(0, 200),
+    address2: a.addressLine2?.slice(0, 200) || undefined,
+    city: a.city.slice(0, 50),
+    province: (a.stateOrProvince || a.city).slice(0, 50),
+    zip: (a.postalCode ?? "").slice(0, 20),
+    phone: to.primaryPhone?.phoneNumber?.replace(/[^\d+]/g, "").slice(0, 20) || undefined,
+    country: a.countryCode,
   };
 }
 

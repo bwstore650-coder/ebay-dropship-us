@@ -1,41 +1,37 @@
 /**
  * Surveillance du stock et des prix, toutes les heures :
- * relit chaque annonce chez CJ, met en pause (quantité 0) ce qui n'est plus rentable ou plus en stock,
+ * relit chaque annonce chez son fournisseur (CJ ou AliExpress), met en pause (quantité 0) ce qui n'est plus rentable ou plus en stock,
  * relance automatiquement ce qui redevient bon, et ajuste la quantité affichée au stock réel.
  */
 import type { User } from "@prisma/client";
 import { db } from "@/lib/db";
-import { decrypt } from "@/lib/crypto";
 import * as ebay from "@/lib/ebay";
 import { userToken } from "@/lib/ebay-account";
 import { convertFromUsd, getUsdRates, type Rates } from "@/lib/fx";
 import { landedCost } from "@/lib/margin";
 import { marketplace } from "@/lib/marketplaces";
-import * as cj from "@/lib/suppliers/cj";
+import { openSession, quote, type Session, type SupplierId } from "@/lib/suppliers";
 import { CHECK_EVERY_MS, decide, type MonitorDecision } from "@/lib/monitor";
 
 type Account = { id: string; accessToken: string; accessTokenExpires: Date; refreshToken: string; refreshTokenExpires: Date };
-type UserWithAccounts = User & { ebayAccounts: Account[]; supplierAccounts: { supplier: string; accessToken: string }[] };
+type UserWithAccounts = User & {
+  ebayAccounts: Account[];
+  supplierAccounts: { id?: string; supplier: string; accessToken: string; refreshToken?: string | null; expiresAt?: Date | null }[];
+};
 
 const PER_RUN = 60;
-
-/** Messages de CJ qui signifient « ce produit n'existe plus » (et non une panne passagère). */
-const isGone = (msg: string) => /not\s*exist|not\s*found|removed|off[\s-]?shelf|下架/i.test(msg);
 
 export interface MonitorReport { checked: number; paused: number; resumed: number; updated: number; errors: number }
 
 export async function monitorUser(user: UserWithAccounts, opts: { now?: number; force?: boolean } = {}): Promise<MonitorReport> {
   const now = opts.now ?? Date.now();
   const report: MonitorReport = { checked: 0, paused: 0, resumed: 0, updated: 0, errors: 0 };
-  const cjAcc = user.supplierAccounts.find((a) => a.supplier === "CJ");
-  if (!cjAcc || user.plan === "NONE") return report;
-  const token = decrypt(cjAcc.accessToken);
+  if (user.plan === "NONE") return report;
 
   const listings = await db.listing.findMany({
     where: {
       userId: user.id,
       status: { in: ["ACTIVE", "PAUSED"] },
-      supplier: "CJ",
       ebayOfferId: { not: null },
       ...(opts.force ? {} : { OR: [{ lastCheckedAt: null }, { lastCheckedAt: { lt: new Date(now - CHECK_EVERY_MS) } }] }),
     },
@@ -45,45 +41,31 @@ export async function monitorUser(user: UserWithAccounts, opts: { now?: number; 
   if (!listings.length) return report;
 
   let rates: Rates | null = null;
-  const products = new Map<string, cj.CjProduct | null>();
+  const cache = new Map<string, Promise<unknown>>(); // une seule lecture par produit et par passage
+  const sessions = new Map<SupplierId, Session | null>();
   const changes = new Map<string, { listing: (typeof listings)[number]; decision: MonitorDecision }[]>(); // par compte eBay
 
   for (const l of listings) {
     const m = marketplace(l.marketplace);
+    const supplierId = l.supplier as SupplierId;
     try {
-      // Fiche produit (une seule lecture par produit et par passage).
-      if (!products.has(l.supplierProductId)) {
-        try {
-          products.set(l.supplierProductId, await cj.getProduct(token, l.supplierProductId));
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          if (!isGone(msg)) throw e; // panne passagère : on ne touche à rien
-          products.set(l.supplierProductId, null);
-        }
-      }
-      const product = products.get(l.supplierProductId);
-      const variant = product?.variants.find((v) => v.vid === l.supplierVariantId);
+      if (!sessions.has(supplierId)) sessions.set(supplierId, await openSession(user.supplierAccounts, supplierId).catch(() => null));
+      const session = sessions.get(supplierId);
+      if (!session || !l.supplierVariantId) continue; // fournisseur déconnecté : on ne touche à rien
+      // Une panne passagère lève une erreur (comptée, rien n'est modifié) ; « gone » = produit retiré.
+      const q = await quote(session, l.supplierProductId, l.supplierVariantId, 1, m.country, cache);
       let supplier: Parameters<typeof decide>[0]["supplier"] = { found: false };
-      if (product && variant) {
-        const stock = variant.inventories?.find((i) => i.countryCode === m.country)?.totalInventory ?? 0;
-        let cost: number | null = null;
-        let deliveryDaysMax = 99;
-        if (stock > 0) {
-          const options = await cj.freightCalculate(token, variant.vid, 1, m.country);
-          if (options.length) {
-            const cheapest = options.reduce((a, b) => (b.logisticPrice < a.logisticPrice ? b : a));
-            deliveryDaysMax = cj.parseMaxDays(cheapest.logisticAging);
-            let price = Number(variant.variantSellPrice);
-            let shipping = Number(cheapest.logisticPrice);
-            if (m.currency !== "USD") {
-              rates ??= await getUsdRates();
-              price = convertFromUsd(price, m.currency, rates);
-              shipping = convertFromUsd(shipping, m.currency, rates);
-            }
-            cost = landedCost({ supplierCost: price, supplierShipping: shipping });
-          }
+      if (q.kind === "no_stock") supplier = { found: true, stock: 0, cost: null, deliveryDaysMax: 99 };
+      else if (q.kind === "no_route") supplier = { found: true, stock: q.stock, cost: null, deliveryDaysMax: 99 };
+      else if (q.kind === "ok") {
+        let price = q.unitPrice;
+        let shipping = q.shipping;
+        if (m.currency !== "USD") {
+          rates ??= await getUsdRates();
+          price = convertFromUsd(price, m.currency, rates);
+          shipping = convertFromUsd(shipping, m.currency, rates);
         }
-        supplier = { found: true, stock, cost, deliveryDaysMax };
+        supplier = { found: true, stock: q.stock, cost: landedCost({ supplierCost: price, supplierShipping: shipping, supplierTaxRate: q.taxRate }), deliveryDaysMax: q.deliveryDaysMax };
       }
       const decision = decide({ status: l.status as "ACTIVE" | "PAUSED", price: l.price, quantity: l.quantity, marketId: m.id, minMarginPct: user.minMarginPct, supplier });
       report.checked++;

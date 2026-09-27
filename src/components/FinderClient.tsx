@@ -23,8 +23,9 @@ interface Result {
 }
 
 export default function FinderClient({
-  t, tl, markets, errors, marketIds, defaultMarket, accounts, hasGpsr,
+  t, tl, markets, errors, marketIds, defaultMarket, accounts, hasGpsr, aeConnected,
 }: {
+  aeConnected: boolean;
   t: Dict["finder"];
   tl: Dict["listing"];
   accounts: { id: string; label: string }[];
@@ -48,7 +49,7 @@ export default function FinderClient({
     const res = await fetch("/api/finder", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ keyword: form.get("keyword"), marketId: form.get("marketId") }),
+      body: JSON.stringify({ keyword: form.get("keyword"), marketId: form.get("marketId"), aeProduct: (form.get("aeProduct") as string | null) || undefined }),
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok) setR(data as Result);
@@ -69,6 +70,13 @@ export default function FinderClient({
         <button disabled={loading} className="rounded-lg bg-brand-600 px-4 shadow-sm transition hover:bg-brand-700 py-2 font-semibold text-white disabled:opacity-60">
           {loading ? t.analyzing : t.analyze}
         </button>
+        {aeConnected && (
+          <label className="w-full text-sm">
+            <span className="font-medium">{t.aeLabel}</span>
+            <input name="aeProduct" type="text" inputMode="url" placeholder={t.aePlaceholder} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none" />
+            <span className="mt-1 block text-xs text-slate-500">{t.aeHint}</span>
+          </label>
+        )}
       </form>
       {error && <p className="text-red-600">{error}</p>}
       {r && (
@@ -88,7 +96,7 @@ export default function FinderClient({
           </dl>
           {!r.feesVerified && <p className="mt-4 rounded-lg bg-amber-50 p-2 text-xs text-amber-700">{t.feesUnverified}</p>}
           <p className="mt-4 text-xs text-slate-500">{t.sourceNote}</p>
-          {r.verdict === "RENTABLE" && r.best?.supplier === "CJ" && !editing && (
+          {r.verdict === "RENTABLE" && r.best && !editing && (
             <button type="button" onClick={() => setEditing(true)} className="btn-primary mt-5">{tl.create}</button>
           )}
         </div>

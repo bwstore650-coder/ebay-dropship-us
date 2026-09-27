@@ -123,6 +123,9 @@ export const es: Dict = {
     feesUnverified: "Las comisiones de eBay de este país están por confirmar: revisa la tarifa de tu categoría antes de publicar.",
     sourceNote:
       "Costes de proveedores convertidos desde USD (tipo del BCE + 2 % de margen de seguridad). Fuente: API oficial de eBay. El precio se pondera por las ventas estimadas de cada anuncio; sin ventas, es la mediana de los anuncios activos de productos nuevos en el país.",
+    aeLabel: "Enlace de un producto de AliExpress (opcional)",
+    aePlaceholder: "https://es.aliexpress.com/item/…",
+    aeHint: "Solo se comparan las variantes enviadas desde un almacén del país elegido (entrega rápida).",
   },
   settings: {
     title: "Ajustes",
@@ -142,7 +145,7 @@ export const es: Dict = {
     cjButton: "Conectar CJ",
     cjSuccess: "CJ conectado.",
     aeTitle: "Proveedor AliExpress",
-    aeHelp: "Próximamente: a la espera de la aprobación del acceso Dropshipping en AliExpress Open Platform.",
+    aeHelp: "Conecta tu cuenta de AliExpress para comparar sus productos enviados desde almacenes locales y pedirlos automáticamente.",
     marginTitle: "Margen mínimo",
     marginHelp: "Solo se proponen productos con un margen del {pct} % o más.",
     gpsrTitle: "Persona responsable en la UE (solo Europa)",
@@ -161,6 +164,12 @@ export const es: Dict = {
     autoOrderOff: "Desactivado",
     autoOrderEnable: "Activar",
     autoOrderDisable: "Desactivar",
+    aeConnect: "Conectar AliExpress",
+    aeReconnect: "Volver a conectar",
+    aeConnectedMsg: "Cuenta de AliExpress conectada.",
+    aeUnavailable: "AliExpress aún no está configurado en este sitio.",
+    aeError: "La conexión con AliExpress ha fallado, inténtalo de nuevo.",
+    aePayNote: "Los pedidos se pagan automáticamente si tu cuenta de AliExpress tiene el pago automático activado; si no, págalos en AliExpress.",
   },
   billing: {
     title: "Suscripción",
@@ -335,6 +344,11 @@ export const es: Dict = {
       EBAY_TRACKING: "Número de seguimiento recibido, pero eBay lo ha rechazado: {detail}. Añádelo tú en eBay.",
       HANDLED_MANUALLY: "Gestionado por ti.",
       UNKNOWN: "Revisa este pedido.",
+      MIXED_SUPPLIERS: "Este pedido contiene artículos de proveedores distintos: pídelo tú.",
+      AE_ERROR: "AliExpress ha rechazado el pedido: {detail}",
+      AE_CANCELLED: "AliExpress ha cancelado este pedido. Revisa tu cuenta de AliExpress.",
+      AE_UNPAID: "Pedido en AliExpress pero pendiente de pago: págalo en tu cuenta de AliExpress (o activa el pago automático).",
+      SUPPLIER_RECONNECT: "La conexión con tu proveedor ha caducado. Vuelve a conectarla en Ajustes.",
     },
   },
   emails: {
@@ -418,6 +432,9 @@ export const es: Dict = {
     TOO_MANY_ATTEMPTS: "Demasiados intentos. Espera 15 minutos o restablece tu contraseña.",
     RESET_INVALID: "Este enlace no es válido o ha caducado. Pide uno nuevo.",
     TERMS_REQUIRED: "Acepta los Términos del servicio y la Política de privacidad.",
+    AE_LINK_INVALID: "Esto no parece un enlace de producto de AliExpress.",
+    AE_NOT_CONNECTED: "Conecta primero tu cuenta de AliExpress en Ajustes.",
+    SUPPLIER_RECONNECT: "La conexión con tu proveedor ha caducado. Vuelve a conectarla en Ajustes.",
     GENERIC: "Algo ha salido mal.",
   },
 };

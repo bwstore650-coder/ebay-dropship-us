@@ -140,7 +140,7 @@ describe("commandes automatiques", { timeout: 60_000 }, () => {
     expect(await importOrders(user(), account)).toBe(2);
     const a1 = mem.orders.find((o) => o.ebayOrderId === "A-1")!;
     expect(a1).toMatchObject({ status: "PENDING", saleTotal: 30.75, marketplace: "EBAY_US", listingId: "LST", ebayAccountId: "ACC" });
-    expect(a1.lines).toEqual([{ lineItemId: "LI-A-1", sku: "PL-OURS", quantity: 1, listingId: "LST", vid: "V1", title: "Electric Can Opener" }]);
+    expect(a1.lines).toEqual([{ lineItemId: "LI-A-1", sku: "PL-OURS", quantity: 1, listingId: "LST", supplier: "CJ", productId: "P1", vid: "V1", title: "Electric Can Opener" }]);
     expect(mem.orders.find((o) => o.ebayOrderId === "A-2")).toBeUndefined();
     expect(mem.orders.find((o) => o.ebayOrderId === "A-3")).toMatchObject({ status: "NEEDS_REVIEW", errorCode: "NOT_OURS", errorMessage: "Old stock" });
     // Filtre eBay : commandes à expédier des 30 derniers jours.

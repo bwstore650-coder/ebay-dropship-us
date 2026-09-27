@@ -123,6 +123,9 @@ export const it: Dict = {
     feesUnverified: "Le commissioni eBay di questo paese sono da confermare: verifica la tariffa della tua categoria prima di pubblicare.",
     sourceNote:
       "Costi dei fornitori convertiti da USD (tasso BCE + 2% di margine di sicurezza). Fonte: API ufficiale eBay. Il prezzo è ponderato sulle vendite stimate di ogni inserzione; senza vendite, è la mediana delle inserzioni attive di prodotti nuovi nel paese.",
+    aeLabel: "Link a un prodotto AliExpress (facoltativo)",
+    aePlaceholder: "https://it.aliexpress.com/item/…",
+    aeHint: "Vengono confrontate solo le varianti spedite da un magazzino nel paese scelto (consegna rapida).",
   },
   settings: {
     title: "Impostazioni",
@@ -142,7 +145,7 @@ export const it: Dict = {
     cjButton: "Collega CJ",
     cjSuccess: "CJ collegato.",
     aeTitle: "Fornitore AliExpress",
-    aeHelp: "Presto disponibile: in attesa dell'approvazione dell'accesso Dropshipping su AliExpress Open Platform.",
+    aeHelp: "Collega il tuo account AliExpress per confrontare i suoi prodotti spediti da magazzini locali e ordinarli automaticamente.",
     marginTitle: "Margine minimo",
     marginHelp: "Vengono proposti solo prodotti con un margine del {pct}% o superiore.",
     gpsrTitle: "Persona responsabile UE (solo Europa)",
@@ -161,6 +164,12 @@ export const it: Dict = {
     autoOrderOff: "Disattivato",
     autoOrderEnable: "Attiva",
     autoOrderDisable: "Disattiva",
+    aeConnect: "Collega AliExpress",
+    aeReconnect: "Ricollega",
+    aeConnectedMsg: "Account AliExpress collegato.",
+    aeUnavailable: "AliExpress non è ancora configurato su questo sito.",
+    aeError: "La connessione ad AliExpress non è riuscita, riprova.",
+    aePayNote: "Gli ordini vengono pagati automaticamente se sul tuo account AliExpress è attivo il pagamento automatico; altrimenti pagali su AliExpress.",
   },
   billing: {
     title: "Abbonamento",
@@ -335,6 +344,11 @@ export const it: Dict = {
       EBAY_TRACKING: "Numero di tracking ricevuto, ma eBay lo ha rifiutato: {detail}. Aggiungilo tu su eBay.",
       HANDLED_MANUALLY: "Gestito da te.",
       UNKNOWN: "Controlla questo ordine.",
+      MIXED_SUPPLIERS: "Questo ordine contiene articoli di fornitori diversi: ordinalo tu.",
+      AE_ERROR: "AliExpress ha rifiutato l'ordine: {detail}",
+      AE_CANCELLED: "AliExpress ha annullato questo ordine. Controlla il tuo account AliExpress.",
+      AE_UNPAID: "Ordinato su AliExpress ma in attesa di pagamento: pagalo nel tuo account AliExpress (o attiva il pagamento automatico).",
+      SUPPLIER_RECONNECT: "La connessione al fornitore è scaduta. Ricollegala nelle Impostazioni.",
     },
   },
   emails: {
@@ -418,6 +432,9 @@ export const it: Dict = {
     TOO_MANY_ATTEMPTS: "Troppi tentativi. Attendi 15 minuti o reimposta la password.",
     RESET_INVALID: "Questo link non è valido o è scaduto. Richiedine uno nuovo.",
     TERMS_REQUIRED: "Accetta i Termini di servizio e l'Informativa sulla privacy.",
+    AE_LINK_INVALID: "Non sembra un link a un prodotto AliExpress.",
+    AE_NOT_CONNECTED: "Collega prima il tuo account AliExpress nelle Impostazioni.",
+    SUPPLIER_RECONNECT: "La connessione al fornitore è scaduta. Ricollegala nelle Impostazioni.",
     GENERIC: "Si è verificato un errore.",
   },
 };
