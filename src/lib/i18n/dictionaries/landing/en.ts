@@ -1,0 +1,106 @@
+export const landingEn = {
+  nav: { features: "Features", how: "How it works", pricing: "Pricing", faq: "FAQ", login: "Log in", cta: "Start free trial" },
+  hero: {
+    badge: "Built for eBay's 2026 dropshipping rules",
+    title1: "Stop listing products",
+    title2: "that lose money.",
+    subtitle:
+      "{brand} checks every product against real eBay demand and the delivered cost at AliExpress and CJ, then only lets you list the ones with a 30%+ margin after fees. It lists them and places the supplier orders for you.",
+    cta: "Start your 7-day free trial",
+    secondary: "Try the free profit calculator",
+    reassurance: "Free account · 7-day free trial · Cancel anytime · Never sources from Amazon or Walmart",
+  },
+  mock: {
+    title: "Product analysis",
+    product: "Electric can opener",
+    market: "eBay US market price",
+    cost: "Delivered supplier cost",
+    fees: "eBay fees",
+    profit: "Your profit",
+    verdict: "Profitable — ready to list",
+    rejected: "Cat water fountain",
+    rejectedNote: "Loses $18.35 per sale — rejected",
+    caption: "Real numbers from our September 2026 test",
+  },
+  proof: {
+    title: "We tested it on real products before building it",
+    items: [
+      { value: "19 → 4", label: "products tested vs. kept: most \"winning products\" lose money after fees" },
+      { value: "9", label: "eBay marketplaces: US, CA, UK, AU, DE, FR, IT, ES, IE" },
+      { value: "100%", label: "official eBay API — no scraping, no bots on your account" },
+      { value: "5", label: "languages: English, French, German, Italian, Spanish" },
+    ],
+  },
+  problem: {
+    title: "Why most eBay dropshippers quit in 90 days",
+    items: [
+      { title: "Banned sources", text: "Buying from Amazon or Walmart and shipping to your buyer breaks eBay's policy. Accounts get flagged and restricted." },
+      { title: "Fees eat the margin", text: "13.6% + per-order fees + tax + ads. A product that looks like $10 profit often makes $2 — or loses money." },
+      { title: "Hours of manual work", text: "Copying titles, checking stock, placing orders, pasting tracking numbers. Every single day." },
+    ],
+  },
+  how: {
+    title: "From zero to your first profitable listing in minutes",
+    steps: [
+      { title: "Connect eBay", text: "Secure sign-in through eBay's official API. We never see your password." },
+      { title: "Find winners", text: "Type a product. We compare real eBay demand with AliExpress and CJ local-warehouse prices." },
+      { title: "List in one click", text: "AI writes the title and description in your buyer's language, at a price that keeps your margin." },
+      { title: "Orders on autopilot", text: "When it sells, we order from the supplier and send the tracking number back to eBay." },
+    ],
+  },
+  features: {
+    title: "Everything you need to sell safely and profitably",
+    items: [
+      { title: "30% margin filter", text: "Every product is checked after eBay fees, tax and shipping. Below your threshold, it's never suggested." },
+      { title: "Prices weighted by real sales", text: "Listings that actually sell count more. Overpriced listings that never sell don't fool the tool." },
+      { title: "Account protection", text: "Daily listing limits based on your account age, VeRO brand filter and fast-delivery rules you can't bypass." },
+      { title: "Auto-ordering", text: "Supplier orders placed through the official CJ and AliExpress APIs, tracking sent back automatically." },
+      { title: "Stock & price monitoring", text: "Out of stock or margin drops below your threshold? The listing is paused before you lose money." },
+      { title: "9 countries, 5 languages", text: "Sell on eBay US, Canada, UK, Australia, Germany, France, Italy, Spain and Ireland." },
+    ],
+  },
+  compare: {
+    title: "Built differently from typical dropshipping tools",
+    colTypical: "Typical tools",
+    colUs: "{brand}",
+    rows: [
+      { label: "Sources from Amazon / Walmart", typical: "Often", us: "Never" },
+      { label: "Real margin shown after all fees", typical: "Rarely", us: "Always" },
+      { label: "Demand weighted by actual sales", typical: "No", us: "Yes" },
+      { label: "Listing limits by account age", typical: "Optional or \"aggressive mode\"", us: "Built in" },
+      { label: "Countries and languages", typical: "Mostly US, English", us: "9 countries, 5 languages" },
+    ],
+  },
+  pricing: {
+    title: "Simple pricing. Start free for 7 days.",
+    subtitle: "Pay yearly and save 25%. Cancel anytime from your account.",
+    popular: "Most popular",
+    taglines: { STARTER: "Test your first products", PRO: "For growing sellers", BUSINESS: "Multiple stores, no limits", AGENCY: "For agencies and teams" },
+    cta: "Start free trial",
+  },
+  faq: {
+    title: "Frequently asked questions",
+    items: [
+      { q: "Is dropshipping allowed on eBay?", a: "Yes, with a supplier that sells wholesale to you and ships to your buyer. What eBay prohibits is buying the item from another retailer (like Amazon or Walmart) and having it shipped directly to your buyer. {brand} only works with suppliers that fit eBay's rules." },
+      { q: "Which suppliers do you support?", a: "CJDropshipping and AliExpress, using products stocked in local warehouses for fast delivery. The tool always picks the cheapest delivered cost that still meets your margin." },
+      { q: "Where do your price numbers come from?", a: "From eBay's official API: prices of new active listings, weighted by the estimated number of units each one has sold. We don't scrape eBay." },
+      { q: "Do I need a registered business?", a: "You need an eBay seller account and a supplier account. In Europe, eBay's business-seller fees apply, and a registered business is usually required." },
+      { q: "Can I cancel anytime?", a: "Yes. You manage your subscription yourself from your account, in two clicks. The 7-day trial is free." },
+      { q: "Is profit guaranteed?", a: "No tool can guarantee profit. {brand} shows you the real numbers before you list and removes products that stop being profitable, so you can decide with facts." },
+    ],
+  },
+  finalCta: {
+    title: "Your next profitable product is one search away.",
+    text: "Join now and get your first analysis in under five minutes.",
+    cta: "Start your 7-day free trial",
+  },
+  footer: {
+    product: "Product",
+    resources: "Resources",
+    calculator: "eBay profit calculator",
+    affiliate: "Affiliate program (30%)",
+    contact: "Contact",
+    rights: "© {year} {company}. All rights reserved.",
+    disclaimer: "{brand} is an independent tool and is not affiliated with, endorsed or sponsored by eBay Inc. eBay is a trademark of eBay Inc.",
+  },
+};

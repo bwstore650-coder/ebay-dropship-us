@@ -1,11 +1,13 @@
 /** English — reference dictionary. Every other language must have exactly the same keys (enforced by TypeScript). */
+import { landingEn } from "./landing/en";
 export const en = {
+  landing: landingEn,
   meta: {
     title: "eBay dropshipping tool — profitable, compliant products",
     description: "Find, list and auto-order products with a 30%+ margin on eBay, without putting your account at risk.",
   },
   common: {
-    appName: "eBay Dropship",
+    appName: "ProfitLister",
     loading: "…",
     perMonth: "/mo",
     perYear: "/yr",

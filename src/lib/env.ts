@@ -3,6 +3,7 @@ import { z } from "zod";
 const schema = z.object({
   APP_URL: z.string().url().default("http://localhost:3000"),
   DATABASE_URL: z.string().min(1),
+  ADMIN_EMAILS: z.string().default(""), // emails séparés par des virgules : accès à /admin
   SESSION_SECRET: z.string().min(32, "SESSION_SECRET : 32 caractères minimum"),
   ENCRYPTION_KEY: z.string().length(64, "ENCRYPTION_KEY : 64 caractères hexadécimaux (32 octets)"),
 

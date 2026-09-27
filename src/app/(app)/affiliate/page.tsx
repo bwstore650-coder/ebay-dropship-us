@@ -25,9 +25,9 @@ export default async function Affiliate() {
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">{a.title}</h1>
       <p className="text-slate-600">{fmt(a.intro, { rate: COMMISSION_RATE * 100, days: HOLD_DAYS, min: usd(MIN_PAYOUT_CENTS) })}</p>
-      <section className="rounded-xl border border-slate-200 bg-white p-6">
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
         <p className="text-sm text-slate-500">{a.yourLink}</p>
-        <p className="mt-1 break-all font-mono text-blue-700">{link}</p>
+        <p className="mt-1 break-all font-mono text-brand-700">{link}</p>
       </section>
       <section className="grid gap-4 sm:grid-cols-3">
         <Stat label={a.signups} value={String(referrals)} />
@@ -42,7 +42,7 @@ export default async function Affiliate() {
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5">
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-5">
       <p className="text-sm text-slate-500">{label}</p>
       <p className="mt-1 text-2xl font-bold">{value}</p>
     </div>

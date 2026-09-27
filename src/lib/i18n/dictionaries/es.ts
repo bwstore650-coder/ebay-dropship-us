@@ -1,12 +1,14 @@
 import type { Dict } from "./en";
+import { landingEs } from "./landing/es";
 
 export const es: Dict = {
+  landing: landingEs,
   meta: {
     title: "Herramienta de dropshipping para eBay — productos rentables y conformes",
     description: "Encuentra, publica y pide automáticamente productos con al menos un 30 % de margen en eBay, sin poner en riesgo tu cuenta.",
   },
   common: {
-    appName: "eBay Dropship",
+    appName: "ProfitLister",
     loading: "…",
     perMonth: "/mes",
     perYear: "/año",

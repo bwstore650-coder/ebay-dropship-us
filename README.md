@@ -66,3 +66,16 @@ npm run dev                 # http://localhost:3000
 - Recherche multi-produits, fiche produit, bouton « Mettre en vente » (titres et descriptions IA).
 - Tâches planifiées : suivi stock/prix, retrait automatique, commande automatique, renvoi du suivi.
 - Tableau de bord complet, quotas par formule, bêta fermée.
+
+## Espace administrateur (/admin)
+
+Mettre ton email dans `ADMIN_EMAILS` (plusieurs emails séparés par des virgules), puis te connecter avec ce compte : un bouton « Admin » apparaît dans l'app.
+- **Vue d'ensemble** : MRR, ARR, progression vers 100 k$/mois, clients payants, essais, inscriptions des 30 derniers jours, leads.
+- **Clients** : recherche par email, formule, statut, parrain.
+- **Affiliés** : commissions à payer, « Marquer payé » après le virement, annulation en cas de remboursement.
+- **Exporter les emails (CSV)** : leads du calculateur.
+Pour tout autre compte, /admin répond « page introuvable ».
+
+## Marque
+
+Nom provisoire « ProfitLister » : changer `NEXT_PUBLIC_BRAND_NAME` et `NEXT_PUBLIC_SUPPORT_EMAIL` dans `.env`. Ne pas mettre « eBay » dans le nom (marque déposée).

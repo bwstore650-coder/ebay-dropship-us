@@ -44,6 +44,7 @@ model User {
   plan               Plan      @default(NONE)
   stripeCustomerId   String?   @unique
   stripeSubscriptionId String? @unique
+  billingInterval    String?   // "month" | "year" (depuis Stripe)
   trialEndsAt        DateTime?
   currentPeriodEnd   DateTime?
 
@@ -145,6 +146,8 @@ model Lead {
   source    String   // ex. "profit-calculator"
   refCode   String?  // code affilié présent au moment de l'inscription
   createdAt DateTime @default(now())
+
+  @@index([createdAt])
 }
 
 enum CommissionStatus {

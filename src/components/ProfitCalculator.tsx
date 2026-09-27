@@ -48,7 +48,7 @@ export default function ProfitCalculator({
 
   return (
     <div className="mt-8 space-y-8">
-      <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-6 sm:grid-cols-2">
+      <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white shadow-sm p-6 sm:grid-cols-2">
         <label className="block text-sm sm:col-span-2">
           <span className="text-slate-600">{t.site}</span>
           <select
@@ -58,7 +58,7 @@ export default function ProfitCalculator({
               setSite(id);
               setFvf(pct(MARKETPLACES[id].fvfRate));
             }}
-            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none"
           >
             {marketIds.map((id) => <option key={id} value={id}>{markets[id]}</option>)}
           </select>
@@ -90,7 +90,7 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
   return (
     <label className="block text-sm">
       <span className="text-slate-600">{label}</span>
-      <input inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+      <input inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none" />
     </label>
   );
 }
@@ -98,7 +98,7 @@ function Field({ label, value, onChange }: { label: string; value: string; onCha
 function Stat({ label, value, tone }: { label: string; value: string; tone?: "good" | "warn" | "bad" }) {
   const color = tone === "good" ? "text-green-600" : tone === "warn" ? "text-amber-600" : tone === "bad" ? "text-red-600" : "text-slate-900";
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4">
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
       <p className="text-sm text-slate-500">{label}</p>
       <p className={`mt-1 text-2xl font-bold ${color}`}>{value}</p>
     </div>
@@ -116,14 +116,14 @@ function LeadForm({ t, errors }: { t: Dict["calculator"]; errors: Dict["errors"]
     if (res.ok) setState("done");
     else { setState("error"); setMsg(errorMessage(errors, (await res.json().catch(() => ({}))).error)); }
   }
-  if (state === "done") return <p className="rounded-xl bg-green-50 p-6 text-green-700">{t.leadDone}</p>;
+  if (state === "done") return <p className="rounded-2xl bg-emerald-50 p-6 text-emerald-700">{t.leadDone}</p>;
   return (
-    <form onSubmit={submit} className="rounded-xl border border-blue-200 bg-blue-50 p-6">
+    <form onSubmit={submit} className="rounded-2xl border border-brand-200 bg-brand-50 p-6">
       <h2 className="text-lg font-semibold">{t.leadTitle}</h2>
       <p className="mt-1 text-sm text-slate-600">{t.leadText}</p>
       <div className="mt-4 flex flex-wrap gap-2">
-        <input name="email" type="email" required placeholder={t.leadPlaceholder} className="flex-1 rounded-lg border border-slate-300 px-3 py-2" />
-        <button disabled={state === "sending"} className="rounded-lg bg-blue-600 px-5 py-2 font-semibold text-white disabled:opacity-60">
+        <input name="email" type="email" required placeholder={t.leadPlaceholder} className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none" />
+        <button disabled={state === "sending"} className="rounded-lg bg-brand-600 px-5 shadow-sm transition hover:bg-brand-700 py-2 font-semibold text-white disabled:opacity-60">
           {state === "sending" ? "…" : t.leadButton}
         </button>
       </div>

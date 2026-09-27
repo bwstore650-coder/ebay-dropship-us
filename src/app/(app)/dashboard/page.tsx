@@ -22,13 +22,13 @@ export default async function Dashboard() {
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-bold">{t.dashboard.title}</h1>
-      <section className="rounded-xl border border-slate-200 bg-white p-6">
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
         <h2 className="font-semibold">{t.dashboard.onboarding}</h2>
         <ul className="mt-3 space-y-2">
           {steps.map((s) => (
             <li key={s.label} className="flex items-center gap-2">
               <span className={s.done ? "text-green-600" : "text-slate-400"}>{s.done ? "✓" : "○"}</span>
-              {s.done ? s.label : <Link className="text-blue-600" href={s.href}>{s.label}</Link>}
+              {s.done ? s.label : <Link className="text-brand-600" href={s.href}>{s.label}</Link>}
             </li>
           ))}
         </ul>
@@ -44,7 +44,7 @@ export default async function Dashboard() {
 
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-5">
+    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-5">
       <p className="text-sm text-slate-500">{label}</p>
       <p className="mt-1 text-2xl font-bold">{value}</p>
     </div>

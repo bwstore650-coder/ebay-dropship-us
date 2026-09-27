@@ -37,7 +37,7 @@ export default function PlanPicker({
     <div className="space-y-4">
       <div className="inline-flex rounded-lg border border-slate-300 bg-white p-1 text-sm">
         {(["month", "year"] as const).map((i) => (
-          <button key={i} onClick={() => setBilling(i)} className={`rounded-md px-3 py-1 ${interval === i ? "bg-blue-600 text-white" : ""}`}>
+          <button key={i} onClick={() => setBilling(i)} className={`rounded-md px-3 py-1 ${interval === i ? "bg-brand-600 text-white" : ""}`}>
             {i === "month" ? t.monthly : t.yearly}
           </button>
         ))}
@@ -45,7 +45,7 @@ export default function PlanPicker({
       {error && <p className="text-sm text-red-600">{error}</p>}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {plans.map((p) => (
-          <div key={p.id} className={`rounded-xl border bg-white p-6 ${currentPlan === p.id ? "border-blue-600" : "border-slate-200"}`}>
+          <div key={p.id} className={`rounded-2xl border bg-white p-6 shadow-sm ${currentPlan === p.id ? "border-brand-600" : "border-slate-200"}`}>
             <h2 className="font-semibold">{tPlans[p.id]}</h2>
             <p className="mt-1 text-2xl font-bold">
               {interval === "month" ? fmt(t.perMonth, { price: p.priceUsd }) : fmt(t.perYear, { price: p.yearlyUsd })}
@@ -53,7 +53,7 @@ export default function PlanPicker({
             {interval === "year" && <p className="text-xs text-slate-500">{fmt(t.equivalent, { price: (p.yearlyUsd / 12).toFixed(2) })}</p>}
             <PlanFeatures plan={p} t={tPlans} />
             {currentPlan === "NONE" && (
-              <button onClick={() => choose(p.id)} disabled={loading !== null} className="mt-4 w-full rounded-lg bg-blue-600 py-2 font-semibold text-white disabled:opacity-60">
+              <button onClick={() => choose(p.id)} disabled={loading !== null} className="mt-4 w-full rounded-lg bg-brand-600 py-2 shadow-sm transition hover:bg-brand-700 font-semibold text-white disabled:opacity-60">
                 {loading === p.id ? "…" : trialEligible ? fmt(t.startTrial, { days: trialDays }) : t.choose}
               </button>
             )}

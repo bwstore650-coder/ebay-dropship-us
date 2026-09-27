@@ -20,7 +20,7 @@ export default function CjConnectForm({ t, errors }: { t: Dict["settings"]; erro
   }
   return (
     <form onSubmit={onSubmit} className="mt-3 flex flex-wrap gap-2">
-      <input name="apiKey" required placeholder={t.cjPlaceholder} className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+      <input name="apiKey" required placeholder={t.cjPlaceholder} className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none text-sm" />
       <button disabled={loading} className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{t.cjButton}</button>
       {msg && <p className="w-full text-sm text-slate-600">{msg}</p>}
     </form>

@@ -1,8 +1,9 @@
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { SESSION_COOKIE, signSession, verifySession } from "@/lib/session";
+import { isAdminEmail, parseAdminEmails } from "@/lib/admin";
 
 export const hashPassword = (p: string) => bcrypt.hash(p, 12);
 export const checkPassword = (p: string, h: string) => bcrypt.compare(p, h);
@@ -33,5 +34,12 @@ export async function currentUser() {
 export async function requireUser() {
   const user = await currentUser();
   if (!user) redirect("/login");
+  return user;
+}
+
+/** Administrateur (email présent dans ADMIN_EMAILS), sinon page 404 : l'espace admin reste invisible. */
+export async function requireAdmin() {
+  const user = await requireUser();
+  if (!isAdminEmail(user.email, parseAdminEmails(process.env.ADMIN_EMAILS))) notFound();
   return user;
 }

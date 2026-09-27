@@ -28,6 +28,7 @@ export async function POST(req: Request) {
       data: {
         stripeSubscriptionId: sub.id,
         plan: active ? planForPrice(item?.price.id) : "NONE",
+        billingInterval: item?.price.recurring?.interval ?? null,
         trialEndsAt: sub.trial_end ? new Date(sub.trial_end * 1000) : null,
         currentPeriodEnd: item?.current_period_end ? new Date(item.current_period_end * 1000) : null,
       },

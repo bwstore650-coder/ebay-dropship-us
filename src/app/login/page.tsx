@@ -1,15 +1,15 @@
 import AuthForm from "@/components/AuthForm";
-import LanguageSwitcher from "@/components/LanguageSwitcher";
+import SiteHeader from "@/components/SiteHeader";
 import { getI18n } from "@/lib/i18n/server";
 
 export default async function Page() {
   const { locale, t } = await getI18n();
   return (
     <>
-      <div className="mx-auto flex max-w-sm justify-end px-4 pt-6">
-        <LanguageSwitcher locale={locale} label={t.common.language} />
-      </div>
-      <AuthForm mode="login" t={t.auth} errors={t.errors} />
+      <SiteHeader locale={locale} t={t} />
+      <main className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-brand-50/60 to-slate-50">
+        <AuthForm mode="login" t={t.auth} errors={t.errors} />
+      </main>
     </>
   );
 }

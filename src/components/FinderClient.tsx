@@ -55,17 +55,17 @@ export default function FinderClient({
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">{t.title}</h1>
       <form onSubmit={search} className="flex flex-wrap gap-2">
-        <input name="keyword" required minLength={2} placeholder={t.placeholder} className="flex-1 rounded-lg border border-slate-300 px-3 py-2" />
-        <select name="marketId" defaultValue={defaultMarket} className="rounded-lg border border-slate-300 px-3 py-2">
+        <input name="keyword" required minLength={2} placeholder={t.placeholder} className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none" />
+        <select name="marketId" defaultValue={defaultMarket} className="rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none">
           {marketIds.map((id) => <option key={id} value={id}>{markets[id]}</option>)}
         </select>
-        <button disabled={loading} className="rounded-lg bg-blue-600 px-4 py-2 font-semibold text-white disabled:opacity-60">
+        <button disabled={loading} className="rounded-lg bg-brand-600 px-4 shadow-sm transition hover:bg-brand-700 py-2 font-semibold text-white disabled:opacity-60">
           {loading ? t.analyzing : t.analyze}
         </button>
       </form>
       {error && <p className="text-red-600">{error}</p>}
       {r && (
-        <div className="rounded-xl border border-slate-200 bg-white p-6">
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
           <p className={`text-lg font-semibold ${r.verdict === "RENTABLE" ? "text-green-600" : "text-amber-600"}`}>{t.verdict[r.verdict]}</p>
           <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
             <Row k={r.priceSource === "SOLD_WEIGHTED" ? t.marketPriceSold : t.marketPriceActive} v={r.marketPrice !== null ? money(r.marketPrice) : "—"} />

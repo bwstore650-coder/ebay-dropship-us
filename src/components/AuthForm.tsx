@@ -27,23 +27,25 @@ export default function AuthForm({ mode, t, errors }: { mode: "login" | "registe
   }
 
   return (
-    <main className="mx-auto max-w-sm px-4 py-20">
-      <h1 className="text-2xl font-bold">{mode === "login" ? t.loginTitle : t.registerTitle}</h1>
+    <div className="mx-auto w-full max-w-md px-4 py-16">
+      <div className="card p-8">
+      <h1 className="text-2xl font-bold tracking-tight">{mode === "login" ? t.loginTitle : t.registerTitle}</h1>
       <form onSubmit={onSubmit} className="mt-6 space-y-4">
-        <input name="email" type="email" required placeholder={t.email} aria-label={t.email} className="w-full rounded-lg border border-slate-300 px-3 py-2" />
-        <input name="password" type="password" required minLength={8} placeholder={t.password} aria-label={t.password} className="w-full rounded-lg border border-slate-300 px-3 py-2" />
+        <input name="email" type="email" required placeholder={t.email} aria-label={t.email} className="input" />
+        <input name="password" type="password" required minLength={8} placeholder={t.password} aria-label={t.password} className="input" />
         {error && <p className="text-sm text-red-600">{error}</p>}
-        <button disabled={loading} className="w-full rounded-lg bg-blue-600 py-2 font-semibold text-white disabled:opacity-60">
+        <button disabled={loading} className="btn-primary w-full">
           {loading ? "…" : mode === "login" ? t.loginButton : t.registerButton}
         </button>
       </form>
-      <p className="mt-4 text-sm text-slate-600">
+      <p className="mt-6 text-center text-sm text-slate-600">
         {mode === "login" ? (
-          <>{t.noAccount} <Link className="text-blue-600" href="/register">{t.createAccount}</Link></>
+          <>{t.noAccount} <Link className="font-medium text-brand-600 hover:underline" href="/register">{t.createAccount}</Link></>
         ) : (
-          <>{t.haveAccount} <Link className="text-blue-600" href="/login">{t.signIn}</Link></>
+          <>{t.haveAccount} <Link className="font-medium text-brand-600 hover:underline" href="/login">{t.signIn}</Link></>
         )}
       </p>
-    </main>
+      </div>
+    </div>
   );
 }
