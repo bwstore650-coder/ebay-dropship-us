@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { SESSION_COOKIE, signSession, verifySession } from "@/lib/session";
@@ -25,5 +26,12 @@ export async function endSession() {
 export async function currentUser() {
   const id = await verifySession((await cookies()).get(SESSION_COOKIE)?.value);
   if (!id) return null;
-  return db.user.findUnique({ where: { id }, include: { ebayAccount: true, supplierAccounts: true } });
+  return db.user.findUnique({ where: { id }, include: { ebayAccounts: { orderBy: { createdAt: "asc" } }, supplierAccounts: true } });
+}
+
+/** Utilisateur connecté, sinon redirection vers /login (pour les pages protégées). */
+export async function requireUser() {
+  const user = await currentUser();
+  if (!user) redirect("/login");
+  return user;
 }

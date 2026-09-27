@@ -92,25 +92,25 @@ export async function call<T = unknown>(
   return json as T;
 }
 
-/** Fiche produit livrée aux US. À VÉRIFIER : paramètres et forme de la réponse. */
-export function getProduct(cfg: AeConfig, session: string, productId: string) {
+/** Fiche produit livrée dans le pays. À VÉRIFIER : paramètres et forme de la réponse. */
+export function getProduct(cfg: AeConfig, session: string, productId: string, country = "US", currency = "USD") {
   return call(cfg, "aliexpress.ds.product.get", session, {
     product_id: productId,
-    ship_to_country: "US",
-    target_currency: "USD",
+    ship_to_country: country,
+    target_currency: currency,
     target_language: "en",
   });
 }
 
 /** Frais de port vers une adresse US. À VÉRIFIER : structure de `queryDeliveryReq`. */
-export function freightQuery(cfg: AeConfig, session: string, productId: string, skuId: string, quantity = 1) {
+export function freightQuery(cfg: AeConfig, session: string, productId: string, skuId: string, quantity = 1, country = "US", currency = "USD") {
   return call(cfg, "aliexpress.ds.freight.query", session, {
     queryDeliveryReq: {
       productId,
       selectedSkuId: skuId,
       quantity,
-      shipToCountry: "US",
-      currency: "USD",
+      shipToCountry: country,
+      currency,
       language: "en_US",
       locale: "en_US",
     },
@@ -135,11 +135,12 @@ export function createOrder(
   outOrderId: string,
   address: AeAddress,
   items: { product_id: string; sku_attr: string; product_count: number; logistics_service_name?: string }[],
+  country = "US",
 ) {
   return call(cfg, "aliexpress.ds.order.create", session, {
     param_place_order_request4_open_api_d_t_o: {
       out_order_id: outOrderId,
-      logistics_address: { country: "US", ...address },
+      logistics_address: { country, ...address },
       product_items: items,
     },
   });
@@ -153,8 +154,13 @@ export function getTracking(cfg: AeConfig, session: string, orderId: string) {
   return call(cfg, "aliexpress.ds.order.tracking.get", session, { ae_order_id: orderId, language: "en_US" });
 }
 
-/** Taxe de vente US facturée par AliExpress (estimation, à affiner par État). */
-export const AE_US_SALES_TAX_ESTIMATE = 0.07;
+/**
+ * Taxe facturée par AliExpress à l'achat, par pays (ESTIMATIONS à affiner) :
+ * US ≈ 7 % (taxe de vente, varie selon l'État), CA ≈ 13 % (TPS/TVH, varie selon la province),
+ * GB 20 % (TVA), AU 10 % (GST).
+ */
+export const AE_TAX_ESTIMATE: Record<string, number> = { US: 0.07, CA: 0.13, GB: 0.2, AU: 0.1 };
+export const AE_US_SALES_TAX_ESTIMATE = AE_TAX_ESTIMATE.US;
 
 export function toOffer(input: {
   productId: string;
@@ -164,6 +170,7 @@ export function toOffer(input: {
   shipping: number;
   stockUs: number;
   deliveryDaysMax: number;
+  country?: string;
 }): SupplierOffer {
   return {
     supplier: "ALIEXPRESS",
@@ -172,9 +179,9 @@ export function toOffer(input: {
     title: input.title,
     price: input.price,
     shipping: input.shipping,
-    taxRate: AE_US_SALES_TAX_ESTIMATE,
+    taxRate: AE_TAX_ESTIMATE[input.country ?? "US"] ?? AE_US_SALES_TAX_ESTIMATE,
     stockUs: input.stockUs,
     deliveryDaysMax: input.deliveryDaysMax,
-    url: `https://www.aliexpress.us/item/${input.productId}.html`,
+    url: `https://www.aliexpress.com/item/${input.productId}.html`,
   };
 }

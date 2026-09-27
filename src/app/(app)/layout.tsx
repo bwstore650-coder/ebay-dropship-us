@@ -14,6 +14,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <Link href="/finder" className="hover:text-blue-600">Chercheur</Link>
           <Link href="/settings" className="hover:text-blue-600">Réglages</Link>
           <Link href="/billing" className="hover:text-blue-600">Abonnement</Link>
+          <Link href="/affiliate" className="hover:text-blue-600">Affiliation</Link>
           <form action="/api/auth/logout" method="post" className="ml-auto">
             <button className="text-slate-500 hover:text-slate-900">Déconnexion</button>
           </form>

@@ -13,8 +13,9 @@ export default function Home() {
       <div className="mt-8 flex gap-3">
         <Link href="/register" className="rounded-lg bg-blue-600 px-5 py-3 font-semibold text-white hover:bg-blue-700">Essai gratuit 7 jours</Link>
         <Link href="/login" className="rounded-lg border border-slate-300 px-5 py-3 font-semibold hover:bg-white">Se connecter</Link>
+        <Link href="/ebay-profit-calculator" className="rounded-lg px-5 py-3 font-semibold text-blue-600 hover:underline">Calculateur de profit gratuit</Link>
       </div>
-      <div className="mt-16 grid gap-4 sm:grid-cols-3">
+      <div className="mt-16 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {PLANS.map((p) => (
           <div key={p.id} className="rounded-xl border border-slate-200 bg-white p-6">
             <h2 className="text-lg font-semibold">{p.name}</h2>
@@ -22,6 +23,7 @@ export default function Home() {
             <ul className="mt-4 space-y-1 text-sm text-slate-600">
               <li>{p.listingsPerMonth ?? "Illimité"} annonces / mois</li>
               <li>{p.autoOrdersPerMonth ?? "Illimité"} commandes auto / mois</li>
+              <li>{p.maxEbayAccounts} compte{p.maxEbayAccounts > 1 ? "s" : ""} eBay</li>
               <li>Filtre de marge + protection du compte</li>
             </ul>
           </div>

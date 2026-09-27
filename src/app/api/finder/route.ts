@@ -4,7 +4,10 @@ import { currentUser } from "@/lib/auth";
 import { decrypt } from "@/lib/crypto";
 import { findProduct } from "@/lib/finder";
 
-const body = z.object({ keyword: z.string().min(2).max(120) });
+const body = z.object({
+  keyword: z.string().min(2).max(120),
+  marketId: z.enum(["EBAY_US", "EBAY_CA", "EBAY_GB", "EBAY_AU"]).optional(),
+});
 
 export async function POST(req: Request) {
   const user = await currentUser();
@@ -18,6 +21,7 @@ export async function POST(req: Request) {
     const result = await findProduct(parsed.data.keyword, {
       cjToken: cjAccount ? decrypt(cjAccount.accessToken) : undefined,
       minMarginPct: user.minMarginPct,
+      marketId: parsed.data.marketId ?? (user.defaultMarketplace as "EBAY_US" | "EBAY_CA" | "EBAY_GB" | "EBAY_AU"),
     });
     return NextResponse.json(result);
   } catch (e) {

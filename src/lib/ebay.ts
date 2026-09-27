@@ -1,9 +1,10 @@
 /**
- * Client eBay (API REST officielles) — marketplace EBAY_US.
+ * Client eBay (API REST officielles) — EBAY_US par défaut, EBAY_CA / EBAY_GB / EBAY_AU via `marketId`.
  * OAuth « authorization code » pour le compte vendeur du client,
  * jeton « application » (client credentials) pour l'API Browse.
  */
 import { env } from "@/lib/env";
+import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 
 const HOSTS = {
   sandbox: { auth: "https://auth.sandbox.ebay.com", api: "https://api.sandbox.ebay.com" },
@@ -70,14 +71,15 @@ export async function getAppToken(): Promise<string> {
   return appToken.token;
 }
 
-async function api<T>(token: string, path: string, init: RequestInit = {}): Promise<T> {
+async function api<T>(token: string, path: string, init: RequestInit = {}, marketId: MarketplaceId = "EBAY_US"): Promise<T> {
+  const m = marketplace(marketId);
   const res = await fetch(`${host().api}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
-      "Content-Language": "en-US",
-      "X-EBAY-C-MARKETPLACE-ID": "EBAY_US",
+      "Content-Language": m.language,
+      "X-EBAY-C-MARKETPLACE-ID": m.id,
       ...init.headers,
     },
   });
@@ -87,7 +89,7 @@ async function api<T>(token: string, path: string, init: RequestInit = {}): Prom
   return (text ? JSON.parse(text) : undefined) as T;
 }
 
-/* ---------- Recherche (API Browse) : prix des annonces actives neuves aux US ---------- */
+/* ---------- Recherche (API Browse) : prix des annonces actives neuves dans le pays ---------- */
 
 interface ItemSummary {
   itemId: string;
@@ -104,14 +106,15 @@ export interface MarketSnapshot {
   items: { id: string; title: string; price: number; url?: string; image?: string }[];
 }
 
-export async function searchActive(q: string, limit = 50): Promise<MarketSnapshot> {
+export async function searchActive(q: string, limit = 50, marketId: MarketplaceId = "EBAY_US"): Promise<MarketSnapshot> {
+  const m = marketplace(marketId);
   const token = await getAppToken();
   const params = new URLSearchParams({
     q,
     limit: String(limit),
-    filter: "buyingOptions:{FIXED_PRICE},conditions:{NEW},itemLocationCountry:US,priceCurrency:USD",
+    filter: `buyingOptions:{FIXED_PRICE},conditions:{NEW},itemLocationCountry:${m.country},priceCurrency:${m.currency}`,
   });
-  const data = await api<{ total: number; itemSummaries?: ItemSummary[] }>(token, `/buy/browse/v1/item_summary/search?${params}`);
+  const data = await api<{ total: number; itemSummaries?: ItemSummary[] }>(token, `/buy/browse/v1/item_summary/search?${params}`, {}, m.id);
   const items = (data.itemSummaries ?? []).map((i) => {
     const ship = Number(i.shippingOptions?.[0]?.shippingCost?.value ?? 0);
     return { id: i.itemId, title: i.title, price: Number(i.price?.value ?? 0) + ship, url: i.itemWebUrl, image: i.image?.imageUrl };
@@ -123,11 +126,13 @@ export async function searchActive(q: string, limit = 50): Promise<MarketSnapsho
  * Ventes estimées d'une annonce (API Browse getItem → estimatedAvailabilities.estimatedSoldQuantity).
  * Source officielle et gratuite ; c'est une estimation d'eBay, cumulée sur la vie de l'annonce.
  */
-export async function getSoldQuantity(itemId: string): Promise<number> {
+export async function getSoldQuantity(itemId: string, marketId: MarketplaceId = "EBAY_US"): Promise<number> {
   const token = await getAppToken();
   const data = await api<{ estimatedAvailabilities?: { estimatedSoldQuantity?: number }[] }>(
     token,
     `/buy/browse/v1/item/${encodeURIComponent(itemId)}`,
+    {},
+    marketId,
   );
   return data.estimatedAvailabilities?.reduce((s, a) => s + (a.estimatedSoldQuantity ?? 0), 0) ?? 0;
 }
@@ -138,12 +143,12 @@ export interface DemandSnapshot extends MarketSnapshot {
 }
 
 /** Marché + demande : prix des annonces actives, pondérés par ce qu'elles ont réellement vendu. */
-export async function searchWithDemand(q: string, sample = 20): Promise<DemandSnapshot> {
-  const market = await searchActive(q, 50);
+export async function searchWithDemand(q: string, sample = 20, marketId: MarketplaceId = "EBAY_US"): Promise<DemandSnapshot> {
+  const market = await searchActive(q, 50, marketId);
   const soldWeighted: { price: number; weight: number }[] = [];
   for (const item of market.items.slice(0, sample)) {
     try {
-      soldWeighted.push({ price: item.price, weight: await getSoldQuantity(item.id) });
+      soldWeighted.push({ price: item.price, weight: await getSoldQuantity(item.id, marketId) });
     } catch {
       /* annonce retirée entre-temps : on l'ignore */
     }
@@ -161,7 +166,7 @@ export interface InventoryItemInput {
   quantity: number;
 }
 
-export function putInventoryItem(token: string, sku: string, i: InventoryItemInput) {
+export function putInventoryItem(token: string, sku: string, i: InventoryItemInput, marketId: MarketplaceId = "EBAY_US") {
   return api<void>(token, `/sell/inventory/v1/inventory_item/${encodeURIComponent(sku)}`, {
     method: "PUT",
     body: JSON.stringify({
@@ -169,13 +174,14 @@ export function putInventoryItem(token: string, sku: string, i: InventoryItemInp
       product: { title: i.title.slice(0, 80), description: i.description, imageUrls: i.imageUrls, aspects: i.aspects },
       availability: { shipToLocationAvailability: { quantity: i.quantity } },
     }),
-  });
+  }, marketId);
 }
 
 export interface OfferInput {
+  marketId?: MarketplaceId;
   sku: string;
   categoryId: string;
-  priceUsd: number;
+  price: number; // dans la devise du pays
   quantity: number;
   description: string;
   merchantLocationKey: string;
@@ -185,24 +191,25 @@ export interface OfferInput {
 }
 
 export function createOffer(token: string, o: OfferInput) {
+  const m = marketplace(o.marketId);
   return api<{ offerId: string }>(token, "/sell/inventory/v1/offer", {
     method: "POST",
     body: JSON.stringify({
       sku: o.sku,
-      marketplaceId: "EBAY_US",
+      marketplaceId: m.id,
       format: "FIXED_PRICE",
       availableQuantity: o.quantity,
       categoryId: o.categoryId,
       listingDescription: o.description,
       merchantLocationKey: o.merchantLocationKey,
-      pricingSummary: { price: { value: o.priceUsd.toFixed(2), currency: "USD" } },
+      pricingSummary: { price: { value: o.price.toFixed(2), currency: m.currency } },
       listingPolicies: {
         fulfillmentPolicyId: o.fulfillmentPolicyId,
         paymentPolicyId: o.paymentPolicyId,
         returnPolicyId: o.returnPolicyId,
       },
     }),
-  });
+  }, m.id);
 }
 
 export function publishOffer(token: string, offerId: string) {

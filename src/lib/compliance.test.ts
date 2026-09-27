@@ -22,3 +22,12 @@ describe("conformité", () => {
     expect(r.ok).toBe(false);
   });
 });
+
+describe("détaillants interdits hors US", () => {
+  it("bloque Amazon UK, Canada, Australie", () => {
+    expect(isBlockedSourceUrl("https://www.amazon.co.uk/dp/1")).toBe(true);
+    expect(isBlockedSourceUrl("https://www.amazon.ca/dp/1")).toBe(true);
+    expect(isBlockedSourceUrl("https://www.amazon.com.au/dp/1")).toBe(true);
+    expect(isBlockedSourceUrl("https://www.cjdropshipping.com/product/x")).toBe(false);
+  });
+});

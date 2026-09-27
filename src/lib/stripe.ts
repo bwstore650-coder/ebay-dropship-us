@@ -1,6 +1,7 @@
 import Stripe from "stripe";
-import { env } from "@/lib/env";
 import type { Plan } from "@prisma/client";
+import { env } from "@/lib/env";
+import type { BillingInterval, PaidPlan } from "@/lib/plans";
 
 let client: Stripe | null = null;
 export function stripe() {
@@ -8,15 +9,29 @@ export function stripe() {
   return client;
 }
 
-export function priceIdFor(plan: Exclude<Plan, "NONE">): string {
+export type PriceTable = Record<PaidPlan, Record<BillingInterval, string>>;
+
+export function priceTable(): PriceTable {
   const e = env();
-  return { STARTER: e.STRIPE_PRICE_STARTER, PRO: e.STRIPE_PRICE_PRO, BUSINESS: e.STRIPE_PRICE_BUSINESS }[plan];
+  return {
+    STARTER: { month: e.STRIPE_PRICE_STARTER_MONTHLY, year: e.STRIPE_PRICE_STARTER_YEARLY },
+    PRO: { month: e.STRIPE_PRICE_PRO_MONTHLY, year: e.STRIPE_PRICE_PRO_YEARLY },
+    BUSINESS: { month: e.STRIPE_PRICE_BUSINESS_MONTHLY, year: e.STRIPE_PRICE_BUSINESS_YEARLY },
+    AGENCY: { month: e.STRIPE_PRICE_AGENCY_MONTHLY, year: e.STRIPE_PRICE_AGENCY_YEARLY },
+  };
 }
 
-export function planForPrice(priceId: string | undefined): Plan {
-  const e = env();
-  if (priceId === e.STRIPE_PRICE_STARTER) return "STARTER";
-  if (priceId === e.STRIPE_PRICE_PRO) return "PRO";
-  if (priceId === e.STRIPE_PRICE_BUSINESS) return "BUSINESS";
+export function priceIdFor(plan: PaidPlan, interval: BillingInterval, table: PriceTable = priceTable()): string {
+  const id = table[plan][interval];
+  if (!id) throw new Error(`Prix Stripe manquant pour ${plan} (${interval}) : vérifie les variables STRIPE_PRICE_*`);
+  return id;
+}
+
+/** Retrouve la formule à partir d'un identifiant de prix Stripe (mensuel ou annuel). */
+export function planForPrice(priceId: string | undefined, table: PriceTable = priceTable()): Plan {
+  if (!priceId) return "NONE";
+  for (const [plan, ids] of Object.entries(table) as [PaidPlan, Record<BillingInterval, string>][]) {
+    if (ids.month === priceId || ids.year === priceId) return plan;
+  }
   return "NONE";
 }

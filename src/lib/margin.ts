@@ -1,26 +1,33 @@
 /**
- * Calcul de marge eBay US — le cœur de l'outil.
- * Frais eBay (catégories standard, 2026) : 13,6 % du total de la vente
+ * Calcul de marge eBay — le cœur de l'outil.
+ * Frais par défaut (eBay US, catégories standard, 2026) : 13,6 % du total de la vente
  * + frais fixe par commande (0,40 $ au-dessus de 10 $, 0,30 $ sinon).
+ * Les autres pays passent leurs propres taux via `market` (voir lib/marketplaces.ts).
  */
+import { MARKETPLACES, type Marketplace } from "@/lib/marketplaces";
 
-export const EBAY_FVF_RATE = 0.136;
+export const EBAY_FVF_RATE = MARKETPLACES.EBAY_US.fvfRate;
 export const MAX_DELIVERY_DAYS = 8;
 export const DEFAULT_MIN_MARGIN_PCT = 30;
 
-export function perOrderFee(saleTotal: number): number {
-  return saleTotal > 10 ? 0.4 : 0.3;
+type FeeSchedule = Pick<Marketplace, "fvfRate" | "perOrderFeeLow" | "perOrderFeeHigh" | "perOrderThreshold" | "feeTaxRate">;
+
+export function perOrderFee(saleTotal: number, market: FeeSchedule = MARKETPLACES.EBAY_US): number {
+  return saleTotal > market.perOrderThreshold ? market.perOrderFeeHigh : market.perOrderFeeLow;
 }
 
 export interface FeeOptions {
-  fvfRate?: number;       // commission eBay (0.136 par défaut)
+  fvfRate?: number;       // commission eBay (celle du pays par défaut)
   promotedRate?: number;  // publicité « Promoted Listings » (0 par défaut)
+  market?: FeeSchedule;   // pays (eBay US par défaut)
 }
 
 export function ebayFees(saleTotal: number, opts: FeeOptions = {}): number {
-  const fvf = opts.fvfRate ?? EBAY_FVF_RATE;
+  const m = opts.market ?? MARKETPLACES.EBAY_US;
+  const fvf = opts.fvfRate ?? m.fvfRate;
   const promo = opts.promotedRate ?? 0;
-  return round2(saleTotal * (fvf + promo) + perOrderFee(saleTotal));
+  const beforeTax = saleTotal * (fvf + promo) + perOrderFee(saleTotal, m);
+  return round2(beforeTax * (1 + m.feeTaxRate));
 }
 
 export interface MarginInput extends FeeOptions {
@@ -51,14 +58,16 @@ export function computeMargin(i: MarginInput): MarginResult {
   return { saleTotal: i.saleTotal, landedCost: cost, fees, profit, marginPct };
 }
 
-/** Prix de vente minimum pour atteindre la marge visée : P = (C + fixe) / (1 - taux - marge). */
+/** Prix de vente minimum pour atteindre la marge visée : P = (C + fixe × (1+t)) / (1 − taux × (1+t) − marge). */
 export function priceForTargetMargin(cost: number, targetPct: number, opts: FeeOptions = {}): number {
-  const rate = (opts.fvfRate ?? EBAY_FVF_RATE) + (opts.promotedRate ?? 0);
+  const mk = opts.market ?? MARKETPLACES.EBAY_US;
+  const tax = 1 + mk.feeTaxRate;
+  const rate = ((opts.fvfRate ?? mk.fvfRate) + (opts.promotedRate ?? 0)) * tax;
   const m = targetPct / 100;
   const denom = 1 - rate - m;
   if (denom <= 0) throw new Error("Marge visée impossible avec ces frais");
-  let p = (cost + 0.4) / denom;
-  if (p <= 10) p = (cost + 0.3) / denom;
+  let p = (cost + mk.perOrderFeeHigh * tax) / denom;
+  if (p <= mk.perOrderThreshold) p = (cost + mk.perOrderFeeLow * tax) / denom;
   return Math.ceil(p * 100) / 100;
 }
 

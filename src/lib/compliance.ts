@@ -4,8 +4,13 @@
 
 /** Détaillants interdits comme source (politique eBay sur le dropshipping). */
 export const BLOCKED_RETAILER_DOMAINS = [
+  // États-Unis
   "amazon.com", "walmart.com", "target.com", "bestbuy.com", "costco.com",
   "homedepot.com", "lowes.com", "kohls.com", "macys.com",
+  // Canada, Royaume-Uni, Australie
+  "amazon.ca", "walmart.ca", "canadiantire.ca", "bestbuy.ca", "costco.ca",
+  "amazon.co.uk", "argos.co.uk", "tesco.com", "currys.co.uk", "johnlewis.com",
+  "amazon.com.au", "kmart.com.au", "bigw.com.au", "target.com.au", "jbhifi.com.au",
 ];
 
 export function isBlockedSourceUrl(url: string): boolean {

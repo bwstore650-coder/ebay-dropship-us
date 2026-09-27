@@ -1,3 +1,4 @@
+import { MARKETPLACES } from "./marketplaces";
 import { describe, expect, it } from "vitest";
 import { weightedMedian, computeMargin, ebayFees, evaluateProduct, median, pickBestOffer, priceForTargetMargin, type SupplierOffer } from "./margin";
 
@@ -69,5 +70,23 @@ describe("médiane pondérée par les ventes", () => {
   });
   it("null sans aucune vente", () => {
     expect(weightedMedian([{ price: 15, weight: 0 }])).toBeNull();
+  });
+});
+
+
+describe("frais par pays", () => {
+  it("Canada = mêmes taux que les US", () => {
+    expect(ebayFees(30.75, { market: MARKETPLACES.EBAY_CA })).toBe(4.58);
+  });
+  it("Royaume-Uni : 12,9 % + 0,40 £, TVA 20 % sur les frais", () => {
+    expect(ebayFees(30, { market: MARKETPLACES.EBAY_GB })).toBe(5.12);
+  });
+  it("le prix pour 30 % tient compte de la TVA sur les frais", () => {
+    const m = MARKETPLACES.EBAY_GB;
+    const p = priceForTargetMargin(10, 30, { market: m });
+    expect(computeMargin({ saleTotal: p, supplierCost: 10, market: m }).marginPct).toBeGreaterThanOrEqual(30);
+  });
+  it("Australie : frais fixe 0,30 A$", () => {
+    expect(ebayFees(20, { market: MARKETPLACES.EBAY_AU })).toBe(2.98);
   });
 });

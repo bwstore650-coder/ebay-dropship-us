@@ -15,6 +15,15 @@ et conformes** sur eBay US, avec AliExpress et CJ comme fournisseurs. Cahier des
 - **Écrans** : accueil, inscription, connexion, tableau de bord, chercheur de produits, réglages (eBay, CJ), abonnement.
 - **Base de données** : `prisma/schema.prisma` (utilisateurs, comptes eBay/fournisseurs chiffrés, annonces, commandes).
 
+## Croissance (ajouté le 27/09/2026)
+
+- **Calculateur de profit gratuit** (`/ebay-profit-calculator`, en anglais pour Google US) + récolte d'emails (table `Lead`).
+- **Affiliation 30 % à vie** : lien `?ref=CODE` (cookie 60 jours), commission créée à chaque facture Stripe payée,
+  disponible après 30 jours, versement manuel dès 50 $ (page `/affiliate`). Remboursement : passer la commission en `VOID` à la main.
+- **Formule Agence** (249 $/mois, 10 comptes eBay) et **paiement annuel −25 %** ; Business passe à 3 comptes eBay.
+- **eBay Canada, Royaume-Uni, Australie** : frais par pays (`src/lib/marketplaces.ts`), conversion des coûts USD
+  (taux BCE + 2 % de sécurité), détaillants interdits par pays. Frais UK et AU marqués « à confirmer ».
+
 ## Source des prix eBay
 
 100 % API officielle : prix des annonces actives neuves aux US, pondérés par les ventes estimées de chaque annonce
@@ -38,8 +47,9 @@ npm run dev                 # http://localhost:3000
 2. **eBay Developer Program** (developer.ebay.com) : clés sandbox, puis un RuName dont l'« Auth accepted URL » = `APP_URL/api/ebay/callback`.
 3. **CJDropshipping** : ta clé API se trouve dans CJ > Apps > API (à coller dans Réglages).
 4. **AliExpress Open Platform** (openservice.aliexpress.com) : créer une app et demander l'accès Dropshipping.
-5. **Stripe** (mode test) : 3 produits à 29 $, 59 $, 99 $/mois → `STRIPE_PRICE_*`, puis un webhook vers `APP_URL/api/stripe/webhook`
-   (événements `customer.subscription.*`).
+5. **Stripe** (mode test) : 4 produits (Starter 29 $, Pro 59 $, Business 99 $, Agence 249 $), chacun avec un prix mensuel
+   et un prix annuel (261 $, 531 $, 891 $, 2 241 $) → les 8 variables `STRIPE_PRICE_*`. Webhook vers `APP_URL/api/stripe/webhook`
+   avec les événements `customer.subscription.created/updated/deleted` et `invoice.paid`.
 
 ## À faire ensuite (semaines 3–8)
 

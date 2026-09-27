@@ -58,9 +58,9 @@ export function refreshAccessToken(refreshToken: string) {
   });
 }
 
-/** Recherche de produits en entrepôt US. */
-export function searchProducts(token: string, keyWord: string, page = 1, size = 20) {
-  const q = new URLSearchParams({ keyWord, countryCode: "US", page: String(page), size: String(size) });
+/** Recherche de produits dans l'entrepôt du pays (US, CA, GB, AU). */
+export function searchProducts(token: string, keyWord: string, page = 1, size = 20, countryCode = "US") {
+  const q = new URLSearchParams({ keyWord, countryCode, page: String(page), size: String(size) });
   return cjFetch<unknown>(`/product/listV2?${q}`, { token });
 }
 
@@ -90,21 +90,22 @@ export interface CjFreightOption {
   logisticAging: string; // ex. "3-8"
 }
 
-export function freightCalculate(token: string, vid: string, quantity = 1, startCountryCode = "US") {
+/** Frais de port d'un entrepôt local vers un client du même pays. */
+export function freightCalculate(token: string, vid: string, quantity = 1, countryCode = "US") {
   return cjFetch<CjFreightOption[]>("/logistic/freightCalculate", {
     method: "POST",
     token,
-    body: JSON.stringify({ startCountryCode, endCountryCode: "US", products: [{ vid, quantity }] }),
+    body: JSON.stringify({ startCountryCode: countryCode, endCountryCode: countryCode, products: [{ vid, quantity }] }),
   });
 }
 
 /** Transforme un produit CJ en offres comparables (une par variante), avec la livraison la moins chère. */
-export async function toOffers(token: string, product: CjProduct): Promise<SupplierOffer[]> {
+export async function toOffers(token: string, product: CjProduct, countryCode = "US"): Promise<SupplierOffer[]> {
   const offers: SupplierOffer[] = [];
   for (const v of product.variants) {
-    const stockUs = v.inventories?.find((i) => i.countryCode === "US")?.totalInventory ?? 0;
+    const stockUs = v.inventories?.find((i) => i.countryCode === countryCode)?.totalInventory ?? 0;
     if (stockUs <= 0) continue;
-    const options = await freightCalculate(token, v.vid);
+    const options = await freightCalculate(token, v.vid, 1, countryCode);
     if (!options.length) continue;
     const cheapest = options.reduce((a, b) => (b.logisticPrice < a.logisticPrice ? b : a));
     offers.push({
@@ -134,16 +135,18 @@ export interface CjOrderInput {
   products: { vid: string; quantity: number }[];
 }
 
-/** Crée la commande chez CJ, payée avec le solde du compte CJ du client (payType 2). */
-export function createOrder(token: string, o: CjOrderInput) {
+const COUNTRY_NAMES: Record<string, string> = { US: "United States", CA: "Canada", GB: "United Kingdom", AU: "Australia" };
+
+/** Crée la commande chez CJ (entrepôt local), payée avec le solde du compte CJ du client (payType 2). */
+export function createOrder(token: string, o: CjOrderInput, countryCode = "US") {
   return cjFetch<{ orderId: string }>("/shopping/order/createOrderV2", {
     method: "POST",
     token,
     body: JSON.stringify({
       ...o,
-      shippingCountryCode: "US",
-      shippingCountry: "United States",
-      fromCountryCode: "US",
+      shippingCountryCode: countryCode,
+      shippingCountry: COUNTRY_NAMES[countryCode] ?? countryCode,
+      fromCountryCode: countryCode,
       payType: 2,
     }),
   });

@@ -16,9 +16,14 @@ const schema = z.object({
 
   STRIPE_SECRET_KEY: z.string().default(""),
   STRIPE_WEBHOOK_SECRET: z.string().default(""),
-  STRIPE_PRICE_STARTER: z.string().default(""),
-  STRIPE_PRICE_PRO: z.string().default(""),
-  STRIPE_PRICE_BUSINESS: z.string().default(""),
+  STRIPE_PRICE_STARTER_MONTHLY: z.string().default(""),
+  STRIPE_PRICE_STARTER_YEARLY: z.string().default(""),
+  STRIPE_PRICE_PRO_MONTHLY: z.string().default(""),
+  STRIPE_PRICE_PRO_YEARLY: z.string().default(""),
+  STRIPE_PRICE_BUSINESS_MONTHLY: z.string().default(""),
+  STRIPE_PRICE_BUSINESS_YEARLY: z.string().default(""),
+  STRIPE_PRICE_AGENCY_MONTHLY: z.string().default(""),
+  STRIPE_PRICE_AGENCY_YEARLY: z.string().default(""),
 });
 
 let cached: z.infer<typeof schema> | null = null;

@@ -13,6 +13,7 @@ enum Plan {
   STARTER
   PRO
   BUSINESS
+  AGENCY
 }
 
 enum Supplier {
@@ -47,9 +48,18 @@ model User {
   currentPeriodEnd   DateTime?
 
   minMarginPct       Float     @default(30)    // seuil de marge (%)
+  defaultMarketplace String    @default("EBAY_US") // EBAY_US, EBAY_CA, EBAY_GB, EBAY_AU
   ebayAccountOpenedAt DateTime?                // pour les limites anti-ban
 
-  ebayAccount        EbayAccount?
+  // Affiliation
+  referralCode       String?   @unique
+  referredById       String?
+  referredBy         User?     @relation("Referrals", fields: [referredById], references: [id])
+  referrals          User[]    @relation("Referrals")
+  commissionsEarned  Commission[] @relation("AffiliateCommissions")
+  commissionsFrom    Commission[] @relation("ReferredCommissions")
+
+  ebayAccounts       EbayAccount[]
   supplierAccounts   SupplierAccount[]
   listings           Listing[]
   orders             Order[]
@@ -57,8 +67,9 @@ model User {
 
 model EbayAccount {
   id                 String   @id @default(cuid())
-  userId             String   @unique
+  userId             String
   user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label              String?  // nom donné par le client (formule Agence : un compte par boutique gérée)
   ebayUserId         String?
   accessToken        String   // chiffré au repos (voir lib/crypto.ts)
   accessTokenExpires DateTime
@@ -66,6 +77,8 @@ model EbayAccount {
   refreshTokenExpires DateTime
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model SupplierAccount {
@@ -87,15 +100,17 @@ model Listing {
   userId           String
   user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   status           ListingStatus @default(DRAFT)
+  marketplace      String        @default("EBAY_US")
+  currency         String        @default("USD")
   sku              String        @unique
   ebayOfferId      String?
   ebayListingId    String?
   title            String
-  priceUsd         Float
+  price            Float         // dans la devise de la marketplace
   supplier         Supplier
   supplierProductId String
   supplierVariantId String?
-  supplierCostUsd  Float         // coût produit + livraison au moment du dernier contrôle
+  supplierCost     Float         // coût produit + livraison (devise de la marketplace) au dernier contrôle
   lastCheckedAt    DateTime?
   lastMarginPct    Float?
   createdAt        DateTime      @default(now())
@@ -110,13 +125,49 @@ model Order {
   listingId          String?
   listing            Listing?    @relation(fields: [listingId], references: [id])
   ebayOrderId        String      @unique
+  marketplace        String      @default("EBAY_US")
+  currency           String      @default("USD")
   status             OrderStatus @default(PENDING)
-  saleTotalUsd       Float
+  saleTotal          Float
   supplierOrderId    String?
-  supplierCostUsd    Float?
+  supplierCost       Float?
   trackingNumber     String?
   carrier            String?
   errorMessage       String?
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
+}
+
+/// Emails récoltés par les outils gratuits (calculateur, etc.)
+model Lead {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  source    String   // ex. "profit-calculator"
+  refCode   String?  // code affilié présent au moment de l'inscription
+  createdAt DateTime @default(now())
+}
+
+enum CommissionStatus {
+  PENDING   // en période de garantie (remboursements possibles)
+  PAYABLE   // à verser à l'affilié
+  PAID
+  VOID      // annulée (remboursement, fraude)
+}
+
+/// Commission d'affiliation : 30 % de chaque facture payée par un client parrainé, à vie.
+model Commission {
+  id              String           @id @default(cuid())
+  affiliateId     String
+  affiliate       User             @relation("AffiliateCommissions", fields: [affiliateId], references: [id], onDelete: Cascade)
+  referredUserId  String
+  referredUser    User             @relation("ReferredCommissions", fields: [referredUserId], references: [id], onDelete: Cascade)
+  stripeInvoiceId String           @unique   // une commission par facture (idempotent)
+  amountCents     Int
+  currency        String           @default("usd")
+  status          CommissionStatus @default(PENDING)
+  availableAt     DateTime                    // fin de la période de garantie
+  paidAt          DateTime?
+  createdAt       DateTime         @default(now())
+
+  @@index([affiliateId, status])
 }

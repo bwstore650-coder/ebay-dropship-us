@@ -4,6 +4,7 @@ import { currentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { encrypt } from "@/lib/crypto";
 import { exchangeCode } from "@/lib/ebay";
+import { maxEbayAccounts } from "@/lib/plans";
 
 /** URL de retour à déclarer comme « Auth accepted URL » du RuName eBay. */
 export async function GET(req: Request) {
@@ -26,6 +27,16 @@ export async function GET(req: Request) {
     refreshToken: encrypt(t.refresh_token ?? ""),
     refreshTokenExpires: new Date(now + (t.refresh_token_expires_in ?? 0) * 1000),
   };
-  await db.ebayAccount.upsert({ where: { userId: user.id }, create: { userId: user.id, ...data }, update: data });
+  // Reconnexion d'un compte existant (?account=… passé dans l'état) ou ajout dans la limite de la formule.
+  const reconnectId = jar.get("ebay_reconnect")?.value;
+  jar.delete("ebay_reconnect");
+  const existing = reconnectId ? user.ebayAccounts.find((a: { id: string }) => a.id === reconnectId) : undefined;
+  if (existing) {
+    await db.ebayAccount.update({ where: { id: existing.id }, data });
+  } else if (user.ebayAccounts.length < maxEbayAccounts(user.plan)) {
+    await db.ebayAccount.create({ data: { userId: user.id, ...data } });
+  } else {
+    return NextResponse.redirect(new URL("/settings?ebay=limit", req.url));
+  }
   return NextResponse.redirect(new URL("/settings?ebay=connected", req.url));
 }
