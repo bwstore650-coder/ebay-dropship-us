@@ -16,6 +16,7 @@ function match(row: Row, where: Row = {}): boolean {
       if ("not" in c) return c.not === null ? v !== null && v !== undefined : v !== c.not;
       if ("lt" in c) return v instanceof Date && v < (c.lt as Date);
       if ("gte" in c) return v instanceof Date && v >= (c.gte as Date);
+      if ("gt" in c) return v instanceof Date && v > (c.gt as Date);
     }
     return v === cond;
   });
@@ -56,6 +57,7 @@ vi.mock("@/lib/db", () => ({
       }),
     },
     ebayAccount: { update: vi.fn() },
+    user: { update: vi.fn() },
   },
 }));
 vi.mock("@/lib/crypto", () => ({ decrypt: (s: string) => s, encrypt: (s: string) => s }));

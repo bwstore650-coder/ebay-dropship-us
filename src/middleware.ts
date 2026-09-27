@@ -4,6 +4,7 @@ import { SESSION_COOKIE, verifySession } from "@/lib/session";
 const PROTECTED = ["/dashboard", "/finder", "/settings", "/billing", "/affiliate", "/admin", "/review", "/listings", "/orders"];
 const REF_COOKIE = "ref";
 const REF_COOKIE_DAYS = 60;
+const CONSENT_COOKIE = "consent";
 
 export async function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
@@ -14,10 +15,12 @@ export async function middleware(req: NextRequest) {
   }
 
   const res = NextResponse.next();
-  // Lien d'affiliation : ?ref=CODE → cookie 60 jours (le premier affilié garde le client).
+  // Lien d'affiliation : ?ref=CODE (le premier affilié garde le client).
+  // Sans accord aux cookies : cookie de session (effacé à la fermeture du navigateur) ; avec accord : 60 jours.
   const ref = req.nextUrl.searchParams.get("ref")?.trim().toLowerCase();
   if (ref && /^[a-z0-9]{4,32}$/.test(ref) && !req.cookies.get(REF_COOKIE)) {
-    res.cookies.set(REF_COOKIE, ref, { httpOnly: true, sameSite: "lax", path: "/", maxAge: REF_COOKIE_DAYS * 86_400 });
+    const consented = req.cookies.get(CONSENT_COOKIE)?.value === "all";
+    res.cookies.set(REF_COOKIE, ref, { httpOnly: true, sameSite: "lax", path: "/", ...(consented ? { maxAge: REF_COOKIE_DAYS * 86_400 } : {}) });
   }
   return res;
 }

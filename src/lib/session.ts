@@ -21,3 +21,14 @@ export async function verifySession(token: string | undefined): Promise<string |
     return null;
   }
 }
+
+/** Identifiant et date d'émission (secondes) de la session, ou null. */
+export async function readSession(token: string | undefined): Promise<{ userId: string; issuedAt?: number } | null> {
+  if (!token) return null;
+  try {
+    const { payload } = await jwtVerify(token, secret());
+    return typeof payload.sub === "string" ? { userId: payload.sub, issuedAt: payload.iat } : null;
+  } catch {
+    return null;
+  }
+}

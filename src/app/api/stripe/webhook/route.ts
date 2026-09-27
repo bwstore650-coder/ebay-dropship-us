@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { env } from "@/lib/env";
 import { planForPrice, stripe } from "@/lib/stripe";
 import { availableAt, commissionCents } from "@/lib/affiliate";
+import { paymentFailedEmail, sendEmail } from "@/lib/email";
 
 /** Webhook Stripe : tient la formule de chaque client à jour. */
 export async function POST(req: Request) {
@@ -58,6 +59,15 @@ export async function POST(req: Request) {
           update: {},
         });
       }
+    }
+  }
+
+  // Paiement refusé : on prévient le client (une seule fois par facture, même si Stripe renvoie l'événement).
+  if (event.type === "invoice.payment_failed") {
+    const inv = event.data.object as Stripe.Invoice;
+    if (inv.customer) {
+      const u = await db.user.findUnique({ where: { stripeCustomerId: String(inv.customer) }, select: { email: true, locale: true } });
+      if (u) await sendEmail(paymentFailedEmail(u.email, u.locale), `payfail-${inv.id ?? event.id}`);
     }
   }
 

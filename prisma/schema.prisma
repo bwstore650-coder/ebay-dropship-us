@@ -43,6 +43,13 @@ model User {
   email              String    @unique
   passwordHash       String
   createdAt          DateTime  @default(now())
+  locale             String    @default("en") // langue des emails
+  termsAcceptedAt    DateTime?
+  passwordChangedAt  DateTime?  // les sessions ouvertes avant cette date sont refusées
+  failedLogins       Int       @default(0)
+  lockedUntil        DateTime?  // blocage temporaire après trop d'essais de mot de passe
+  lastAttentionEmailAt DateTime? // dernier email « commandes à vérifier »
+  resetTokens        PasswordResetToken[]
 
   plan               Plan      @default(NONE)
   stripeCustomerId   String?   @unique
@@ -254,4 +261,17 @@ model Review {
   approvedAt DateTime?
 
   @@index([status, approvedAt])
+}
+
+/// Lien « mot de passe oublié » : seule l'empreinte SHA-256 du jeton est enregistrée ; valable 1 heure, une seule fois.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId, createdAt])
 }

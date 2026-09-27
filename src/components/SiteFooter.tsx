@@ -31,7 +31,13 @@ export default function SiteFooter({ locale, t }: { locale: Locale; t: Dict }) {
           </ul>
         </div>
         <div>
-          <h3 className="text-sm font-semibold">{f.contact}</h3>
+          <h3 className="text-sm font-semibold">{t.legal.legal}</h3>
+          <ul className="mt-3 space-y-2 text-sm text-slate-600">
+            <li><Link href="/terms" className="hover:text-slate-900">{t.legal.terms}</Link></li>
+            <li><Link href="/privacy" className="hover:text-slate-900">{t.legal.privacy}</Link></li>
+            <li><Link href="/refund" className="hover:text-slate-900">{t.legal.refund}</Link></li>
+          </ul>
+          <h3 className="mt-6 text-sm font-semibold">{f.contact}</h3>
           <p className="mt-3 text-sm text-slate-600">
             <a href={`mailto:${BRAND.supportEmail}`} className="hover:text-slate-900">{BRAND.supportEmail}</a>
           </p>

@@ -12,6 +12,7 @@ import { EbayReconnectRequired, userToken } from "@/lib/ebay-account";
 import { getUsdRates, offersToCurrency } from "@/lib/fx";
 import { landedCost, type SupplierOffer } from "@/lib/margin";
 import { planInfo } from "@/lib/plans";
+import { ordersAttentionEmail, sendEmail } from "@/lib/email";
 import * as cj from "@/lib/suppliers/cj";
 import {
   checkOrderable, cjAddress, ebayCarrierCode, isBalanceError, isDuplicateError, mapLines, orderProfit, shipTo,
@@ -266,7 +267,22 @@ export async function runForUser(user: UserWithAccounts): Promise<RunReport> {
     }
   }
   report.shipped = await syncTracking(user);
+  await notifyAttention(user);
   return report;
+}
+
+/** Email « commandes à vérifier » : seulement s'il y a du nouveau, et au plus une fois toutes les 6 heures. */
+const ATTENTION_EVERY_MS = 6 * 3600_000;
+async function notifyAttention(user: UserWithAccounts) {
+  const last = user.lastAttentionEmailAt;
+  if (last && Date.now() - last.getTime() < ATTENTION_EVERY_MS) return;
+  const fresh = await db.order.count({
+    where: { userId: user.id, status: { in: ["NEEDS_REVIEW", "FAILED"] }, ...(last ? { updatedAt: { gt: last } } : {}) },
+  });
+  if (!fresh) return;
+  const total = await db.order.count({ where: { userId: user.id, status: { in: ["NEEDS_REVIEW", "FAILED"] } } });
+  await db.user.update({ where: { id: user.id }, data: { lastAttentionEmailAt: new Date() } });
+  await sendEmail(ordersAttentionEmail(user.email, user.locale, total));
 }
 
 /** Tous les vendeurs actifs (tâche planifiée), dans la limite de temps donnée. */

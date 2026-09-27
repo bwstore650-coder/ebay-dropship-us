@@ -2,7 +2,8 @@ import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
-import { SESSION_COOKIE, signSession, verifySession } from "@/lib/session";
+import { readSession, SESSION_COOKIE, signSession } from "@/lib/session";
+import { sessionStillValid } from "@/lib/password-reset";
 import { isAdminEmail, parseAdminEmails } from "@/lib/admin";
 
 export const hashPassword = (p: string) => bcrypt.hash(p, 12);
@@ -25,9 +26,12 @@ export async function endSession() {
 
 /** Utilisateur connecté, ou null. */
 export async function currentUser() {
-  const id = await verifySession((await cookies()).get(SESSION_COOKIE)?.value);
-  if (!id) return null;
-  return db.user.findUnique({ where: { id }, include: { ebayAccounts: { orderBy: { createdAt: "asc" } }, supplierAccounts: true } });
+  const session = await readSession((await cookies()).get(SESSION_COOKIE)?.value);
+  if (!session) return null;
+  const user = await db.user.findUnique({ where: { id: session.userId }, include: { ebayAccounts: { orderBy: { createdAt: "asc" } }, supplierAccounts: true } });
+  // Mot de passe changé depuis l'ouverture de cette session : elle n'est plus valable.
+  if (!user || !sessionStillValid(session.issuedAt, user.passwordChangedAt)) return null;
+  return user;
 }
 
 /** Utilisateur connecté, sinon redirection vers /login (pour les pages protégées). */
