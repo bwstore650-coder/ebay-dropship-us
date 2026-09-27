@@ -295,6 +295,57 @@ export function publishOffer(token: string, offerId: string, marketId: Marketpla
   return api<{ listingId: string }>(token, `/sell/inventory/v1/offer/${encodeURIComponent(offerId)}/publish`, { method: "POST" }, marketId);
 }
 
+/** Quantités (et prix) de plusieurs annonces d'un coup : 25 au maximum par appel. */
+export async function bulkUpdateQuantity(
+  token: string,
+  items: { sku: string; offerId: string; quantity: number }[],
+): Promise<{ sku: string; ok: boolean; message?: string }[]> {
+  const out: { sku: string; ok: boolean; message?: string }[] = [];
+  for (let i = 0; i < items.length; i += 25) {
+    const chunk = items.slice(i, i + 25);
+    const d = await api<{ responses?: { sku?: string; offerId?: string; statusCode?: number; errors?: EbayErrorDetail[] }[] }>(
+      token,
+      "/sell/inventory/v1/bulk_update_price_quantity",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          requests: chunk.map((c) => ({
+            sku: c.sku,
+            shipToLocationAvailability: { quantity: c.quantity },
+            offers: [{ offerId: c.offerId, availableQuantity: c.quantity }],
+          })),
+        }),
+      },
+    );
+    for (const c of chunk) {
+      const rs = (d.responses ?? []).filter((r) => r.sku === c.sku || r.offerId === c.offerId);
+      const bad = rs.find((r) => (r.statusCode ?? 200) >= 400);
+      out.push(bad ? { sku: c.sku, ok: false, message: bad.errors?.map((e) => e.longMessage || e.message).join(" · ") } : { sku: c.sku, ok: true });
+    }
+  }
+  return out;
+}
+
+/**
+ * Active l'option « rupture de stock » du vendeur (API Trading SetUserPreferences) :
+ * une annonce à quantité 0 reste en ligne mais masquée, et garde son historique de ventes.
+ */
+export async function enableOutOfStockControl(token: string): Promise<boolean> {
+  const res = await fetch(`${host().api}/ws/api.dll`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/xml",
+      "X-EBAY-API-CALL-NAME": "SetUserPreferences",
+      "X-EBAY-API-SITEID": "0",
+      "X-EBAY-API-COMPATIBILITY-LEVEL": "1349",
+      "X-EBAY-API-IAF-TOKEN": token,
+    },
+    body: '<?xml version="1.0" encoding="utf-8"?><SetUserPreferencesRequest xmlns="urn:ebay:apis:eBLBaseComponents"><OutOfStockControlPreference>true</OutOfStockControlPreference></SetUserPreferencesRequest>',
+  });
+  const text = await res.text();
+  return res.ok && /<Ack>(Success|Warning)<\/Ack>/.test(text);
+}
+
 /* ---------- Réglages du compte (API Account) ---------- */
 
 export interface PolicyOption { id: string; name: string }

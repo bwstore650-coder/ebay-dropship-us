@@ -5,7 +5,7 @@ import { fmt, LOCALE_TAGS } from "@/lib/i18n";
 import { getI18n } from "@/lib/i18n/server";
 import { ebayItemUrl } from "@/lib/listing";
 import { marketplace } from "@/lib/marketplaces";
-import { endListingAction } from "./actions";
+import { checkNowAction, endListingAction } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -27,8 +27,16 @@ export default async function ListingsPage() {
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">{L.title}</h1>
-        <Link href="/finder" className="btn-primary px-4 py-2 text-sm">{L.findProduct}</Link>
+        <div className="flex flex-wrap gap-2">
+          {listings.length > 0 && (
+            <form action={checkNowAction}>
+              <button className="btn-secondary px-4 py-2 text-sm">{L.checkNow}</button>
+            </form>
+          )}
+          <Link href="/finder" className="btn-primary px-4 py-2 text-sm">{L.findProduct}</Link>
+        </div>
       </div>
+      <p className="text-sm text-slate-600">{L.monitorNote}</p>
       {listings.length === 0 ? (
         <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-500">{L.empty}</p>
       ) : (
@@ -52,8 +60,16 @@ export default async function ListingsPage() {
                   <tr key={l.id} className="align-top">
                     <td className="max-w-sm px-4 py-3">
                       <p className="font-medium text-slate-900">{l.title}</p>
-                      {l.errorMessage && l.status !== "ACTIVE" && (
+                      {l.status === "PAUSED" && l.pauseReason && (
+                        <p className="mt-1 text-xs text-amber-700">
+                          {fmt((L.pause as Record<string, string>)[l.pauseReason] ?? L.pause.OUT_OF_STOCK, { detail: l.pauseDetail ? `${l.pauseDetail} ${m.symbol}` : "" })}
+                        </p>
+                      )}
+                      {l.errorMessage && (
                         <p className="mt-1 text-xs text-red-600">{fmt(L.lastError, { message: l.errorMessage })}</p>
+                      )}
+                      {l.lastCheckedAt && l.status !== "DRAFT" && l.status !== "ENDED" && (
+                        <p className="mt-1 text-xs text-slate-400">{fmt(L.checkedAt, { date: l.lastCheckedAt.toLocaleString(LOCALE_TAGS[locale], { dateStyle: "short", timeStyle: "short" }) })}</p>
                       )}
                     </td>
                     <td className="px-4 py-3">{t.markets[m.id]}</td>
@@ -68,7 +84,7 @@ export default async function ListingsPage() {
                         {l.ebayListingId && l.status === "ACTIVE" && (
                           <a href={ebayItemUrl(m.id, l.ebayListingId)} target="_blank" rel="noopener noreferrer" className="font-medium text-brand-600 hover:underline">{L.view}</a>
                         )}
-                        {l.status === "ACTIVE" && (
+                        {(l.status === "ACTIVE" || l.status === "PAUSED") && (
                           <form action={endListingAction}>
                             <input type="hidden" name="listingId" value={l.id} />
                             <button className="font-medium text-slate-500 hover:text-red-600">{L.end}</button>

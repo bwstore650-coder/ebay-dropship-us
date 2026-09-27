@@ -266,6 +266,15 @@ export const es: Dict = {
     statusACTIVE: "Activo",
     statusPAUSED: "En pausa",
     statusENDED: "Finalizado",
+    checkNow: "Comprobar existencias y precios ahora",
+    monitorNote: "Las existencias y los precios se comprueban cada hora. Un anuncio se pausa (cantidad 0, oculto pero conservando su historial de ventas) cuando el proveedor se queda sin existencias o tu margen baja de tu mínimo, y vuelve automáticamente cuando todo está en orden.",
+    checkedAt: "Comprobado el {date}",
+    pause: {
+      OUT_OF_STOCK: "En pausa: sin existencias en el almacén local del proveedor.",
+      MARGIN: "En pausa: el coste del proveedor ha subido y tu margen está por debajo de tu mínimo. Precio mínimo para volver a publicarlo: {detail}.",
+      SLOW: "En pausa: el proveedor ya no ofrece envío rápido.",
+      SUPPLIER_GONE: "En pausa: el proveedor ha retirado este producto.",
+    },
   },
   orders: {
     title: "Pedidos",

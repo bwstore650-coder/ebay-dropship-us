@@ -266,6 +266,15 @@ export const de: Dict = {
     statusACTIVE: "Online",
     statusPAUSED: "Pausiert",
     statusENDED: "Beendet",
+    checkNow: "Bestand und Preise jetzt prüfen",
+    monitorNote: "Bestand und Preise werden stündlich geprüft. Ein Angebot wird pausiert (Menge 0, ausgeblendet, aber mit seiner Verkaufshistorie erhalten), wenn der Lieferant ausverkauft ist oder deine Marge unter dein Minimum fällt, und kommt automatisch zurück, sobald alles wieder passt.",
+    checkedAt: "Geprüft am {date}",
+    pause: {
+      OUT_OF_STOCK: "Pausiert: im lokalen Lager des Lieferanten ausverkauft.",
+      MARGIN: "Pausiert: Die Lieferantenkosten sind gestiegen und deine Marge liegt unter deinem Minimum. Mindestpreis zum erneuten Einstellen: {detail}.",
+      SLOW: "Pausiert: Der Lieferant bietet keine schnelle Lieferung mehr an.",
+      SUPPLIER_GONE: "Pausiert: Der Lieferant hat dieses Produkt entfernt.",
+    },
   },
   orders: {
     title: "Bestellungen",

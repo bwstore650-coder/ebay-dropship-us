@@ -266,6 +266,15 @@ export const it: Dict = {
     statusACTIVE: "Online",
     statusPAUSED: "In pausa",
     statusENDED: "Chiusa",
+    checkNow: "Controlla ora scorte e prezzi",
+    monitorNote: "Scorte e prezzi vengono controllati ogni ora. Un'inserzione viene messa in pausa (quantità 0, nascosta ma conservata con il suo storico vendite) quando il fornitore esaurisce il prodotto o il tuo margine scende sotto il minimo, e torna automaticamente online quando tutto è di nuovo a posto.",
+    checkedAt: "Controllata il {date}",
+    pause: {
+      OUT_OF_STOCK: "In pausa: esaurito nel magazzino locale del fornitore.",
+      MARGIN: "In pausa: il costo del fornitore è aumentato e il tuo margine è sotto il minimo. Prezzo minimo per rimetterla in vendita: {detail}.",
+      SLOW: "In pausa: il fornitore non offre più una consegna rapida.",
+      SUPPLIER_GONE: "In pausa: il fornitore ha rimosso questo prodotto.",
+    },
   },
   orders: {
     title: "Ordini",

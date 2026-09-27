@@ -148,6 +148,9 @@ model Listing {
   supplierCost     Float         // coût produit + livraison (devise de la marketplace) au dernier contrôle
   lastCheckedAt    DateTime?
   lastMarginPct    Float?
+  quantity         Int           @default(3)   // quantité affichée sur eBay quand l'annonce est active
+  pauseReason      String?       // OUT_OF_STOCK, MARGIN, SLOW, SUPPLIER_GONE : pourquoi l'annonce est en pause
+  pauseDetail      String?       // ex. prix minimum conseillé pour retrouver la marge
   categoryId       String?
   errorMessage     String?       // dernier refus d'eBay, pour l'afficher au client
   publishedAt      DateTime?

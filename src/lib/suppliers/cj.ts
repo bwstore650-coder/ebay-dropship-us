@@ -14,15 +14,17 @@ interface CjResponse<T> {
   data: T;
 }
 
-let lastCall = 0;
-async function throttle() {
-  const wait = lastCall + 1100 - Date.now();
-  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-  lastCall = Date.now();
+/** Limite de CJ : 1 appel par seconde et par compte. Chaque compte (jeton) a son propre rythme. */
+const lastCalls = new Map<string, number>();
+async function throttle(key: string) {
+  const now = Date.now();
+  const next = Math.max(now, (lastCalls.get(key) ?? 0) + 1100);
+  lastCalls.set(key, next); // réservé avant d'attendre : deux appels simultanés ne partent pas ensemble
+  if (next > now) await new Promise((r) => setTimeout(r, next - now));
 }
 
 async function cjFetch<T>(path: string, init: RequestInit & { token?: string } = {}): Promise<T> {
-  await throttle();
+  await throttle(init.token ?? "public");
   const res = await fetch(`${BASE}${path}`, {
     ...init,
     headers: {

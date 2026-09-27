@@ -265,6 +265,15 @@ export const en = {
     statusACTIVE: "Live",
     statusPAUSED: "Paused",
     statusENDED: "Ended",
+    checkNow: "Check stock and prices now",
+    monitorNote: "Stock and prices are checked every hour. A listing is paused (quantity 0, hidden but kept with its sales history) when the supplier runs out or your margin drops below your minimum, and it comes back automatically when everything is OK again.",
+    checkedAt: "Checked {date}",
+    pause: {
+      OUT_OF_STOCK: "Paused: out of stock at the supplier's local warehouse.",
+      MARGIN: "Paused: the supplier cost went up and your margin is below your minimum. Minimum price to list again: {detail}.",
+      SLOW: "Paused: no fast delivery available from the supplier any more.",
+      SUPPLIER_GONE: "Paused: the supplier removed this product.",
+    },
   },
   orders: {
     title: "Orders",

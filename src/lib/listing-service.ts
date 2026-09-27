@@ -247,6 +247,7 @@ export async function publishListing(user: UserWithAccounts, input: PublishInput
       supplierCost: margin.landedCost,
       lastCheckedAt: new Date(),
       lastMarginPct: margin.marginPct,
+      quantity,
       categoryId: input.categoryId,
     },
   });
@@ -324,6 +325,8 @@ export async function saveSetup(
     throw new ListingError("INVALID_INPUT");
   const postal = i.postalCode.trim().toUpperCase();
   const key = `PL-${m.country}-${postal.replace(/[^A-Z0-9]/g, "")}`.slice(0, 50);
+  // Annonces à quantité 0 masquées au lieu d'être terminées (utile pour la mise en pause automatique).
+  await ebay.enableOutOfStockControl(token).catch((e) => console.error("Option rupture de stock", e));
   await ebay.ensureLocation(token, key, { postalCode: postal, city: i.city?.trim() || undefined, stateOrProvince: i.stateOrProvince?.trim() || undefined, country: m.country });
   const data = {
     fulfillmentPolicyId: i.fulfillmentPolicyId,
@@ -343,7 +346,7 @@ export async function endListing(user: UserWithAccounts, listingId: string) {
   const listing = await db.listing.findFirst({ where: { id: listingId, userId: user.id } });
   if (!listing) throw new ListingError("INVALID_INPUT");
   const account = user.ebayAccounts.find((a) => a.id === listing.ebayAccountId);
-  if (listing.ebayOfferId && account && listing.status === "ACTIVE") {
+  if (listing.ebayOfferId && account && (listing.status === "ACTIVE" || listing.status === "PAUSED")) {
     await ebay.withdrawOffer(await userToken(account), listing.ebayOfferId, marketplace(listing.marketplace).id);
   }
   await db.listing.update({ where: { id: listing.id }, data: { status: "ENDED" } });

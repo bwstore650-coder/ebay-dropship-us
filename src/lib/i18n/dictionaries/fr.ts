@@ -266,6 +266,15 @@ export const fr: Dict = {
     statusACTIVE: "En ligne",
     statusPAUSED: "En pause",
     statusENDED: "Retirée",
+    checkNow: "Vérifier le stock et les prix maintenant",
+    monitorNote: "Le stock et les prix sont vérifiés toutes les heures. Une annonce est mise en pause (quantité 0, masquée mais conservée avec son historique de ventes) quand le fournisseur est en rupture ou que votre marge passe sous votre minimum, puis elle revient automatiquement dès que tout est rentré dans l'ordre.",
+    checkedAt: "Vérifiée le {date}",
+    pause: {
+      OUT_OF_STOCK: "En pause : rupture dans l'entrepôt local du fournisseur.",
+      MARGIN: "En pause : le coût du fournisseur a augmenté et votre marge est sous votre minimum. Prix minimum pour la remettre en vente : {detail}.",
+      SLOW: "En pause : le fournisseur ne propose plus de livraison rapide.",
+      SUPPLIER_GONE: "En pause : le fournisseur a retiré ce produit.",
+    },
   },
   orders: {
     title: "Commandes",

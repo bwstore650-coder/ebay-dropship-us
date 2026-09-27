@@ -89,3 +89,11 @@ Toutes les 15 minutes (tâche planifiée `vercel.json` → `/api/cron/orders`, p
 Jamais de commande à perte, en rupture ou annulée sans l'accord du vendeur (statut « À vérifier » dans /orders).
 L'adresse de l'acheteur est relue chez eBay au moment de commander : elle n'est pas enregistrée dans la base.
 Sur Vercel, une tâche toutes les 15 minutes demande la formule Pro ; sinon, appeler l'URL depuis un service externe (ex. cron-job.org) avec l'en-tête `Authorization: Bearer <CRON_SECRET>`.
+
+## Surveillance du stock et des prix
+
+Toutes les heures (`/api/cron/monitor`, protégée par `CRON_SECRET`), chaque annonce est relue chez CJ :
+- rupture, produit retiré, livraison lente ou marge sous le minimum → annonce en pause (quantité 0 sur eBay) ;
+- de nouveau en stock et rentable → remise en ligne automatiquement ;
+- stock faible → quantité affichée réduite (jamais plus que le stock réel, 3 au maximum).
+L'option eBay « rupture de stock » (annonce masquée à quantité 0 au lieu d'être terminée) est activée automatiquement lors des réglages eBay du pays.
