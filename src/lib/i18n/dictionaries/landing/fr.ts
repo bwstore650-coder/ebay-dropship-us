@@ -91,6 +91,12 @@ export const landingFr: typeof landingEn = {
       { q: "Le profit est-il garanti ?", a: "Aucun outil ne peut garantir un profit. {brand} te montre les vrais chiffres avant de lister et retire les produits qui ne sont plus rentables, pour que tu décides sur des faits." },
     ],
   },
+  reviews: {
+    title: "Ce qu'en disent les vendeurs",
+    subtitle: "Avis de vrais utilisateurs, publiés avec leur accord.",
+    summary: "Note moyenne {avg}/5 · {n} avis",
+    verified: "Utilisateur vérifié",
+  },
   finalCta: {
     title: "Ton prochain produit rentable est à une recherche.",
     text: "Inscris-toi maintenant et obtiens ta première analyse en moins de cinq minutes.",

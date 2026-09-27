@@ -91,6 +91,12 @@ export const landingIt: typeof landingEn = {
       { q: "Il profitto è garantito?", a: "Nessuno strumento può garantire un profitto. {brand} ti mostra i numeri reali prima di pubblicare e rimuove i prodotti che smettono di essere redditizi, così decidi sulla base dei fatti." },
     ],
   },
+  reviews: {
+    title: "Cosa dicono i venditori",
+    subtitle: "Recensioni di utenti reali, pubblicate con il loro consenso.",
+    summary: "Media {avg}/5 · {n} recensioni",
+    verified: "Utente verificato",
+  },
   finalCta: {
     title: "Il tuo prossimo prodotto redditizio è a una ricerca di distanza.",
     text: "Iscriviti ora e ottieni la tua prima analisi in meno di cinque minuti.",

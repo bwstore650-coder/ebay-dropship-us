@@ -91,6 +91,12 @@ export const landingDe: typeof landingEn = {
       { q: "Ist Gewinn garantiert?", a: "Kein Tool kann Gewinn garantieren. {brand} zeigt dir die echten Zahlen vor dem Einstellen und entfernt Produkte, die nicht mehr profitabel sind – so entscheidest du auf Basis von Fakten." },
     ],
   },
+  reviews: {
+    title: "Das sagen Verkäufer",
+    subtitle: "Bewertungen echter Nutzer, veröffentlicht mit ihrer Zustimmung.",
+    summary: "Durchschnitt {avg}/5 · {n} Bewertungen",
+    verified: "Verifizierter Nutzer",
+  },
   finalCta: {
     title: "Dein nächstes profitables Produkt ist nur eine Suche entfernt.",
     text: "Jetzt registrieren und die erste Analyse in unter fünf Minuten erhalten.",

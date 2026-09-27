@@ -29,3 +29,17 @@ export async function voidCommission(formData: FormData) {
   revalidatePath("/admin/affiliates");
   revalidatePath("/admin");
 }
+
+/** Publie ou refuse un avis client. */
+export async function moderateReview(formData: FormData) {
+  await requireAdmin();
+  const id = String(formData.get("reviewId") ?? "");
+  const decision = String(formData.get("decision") ?? "");
+  if (!id || (decision !== "APPROVED" && decision !== "REJECTED")) return;
+  await db.review.update({
+    where: { id },
+    data: { status: decision, approvedAt: decision === "APPROVED" ? new Date() : null },
+  });
+  revalidatePath("/admin/reviews");
+  revalidatePath("/");
+}

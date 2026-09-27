@@ -89,6 +89,12 @@ export const landingEn = {
       { q: "Is profit guaranteed?", a: "No tool can guarantee profit. {brand} shows you the real numbers before you list and removes products that stop being profitable, so you can decide with facts." },
     ],
   },
+  reviews: {
+    title: "What sellers say",
+    subtitle: "Reviews from real users, published with their permission.",
+    summary: "{avg}/5 average · {n} reviews",
+    verified: "Verified user",
+  },
   finalCta: {
     title: "Your next profitable product is one search away.",
     text: "Join now and get your first analysis in under five minutes.",

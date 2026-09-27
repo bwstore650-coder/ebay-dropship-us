@@ -91,6 +91,12 @@ export const landingEs: typeof landingEn = {
       { q: "¿El beneficio está garantizado?", a: "Ninguna herramienta puede garantizar beneficios. {brand} te muestra las cifras reales antes de publicar y retira los productos que dejan de ser rentables, para que decidas con datos." },
     ],
   },
+  reviews: {
+    title: "Lo que dicen los vendedores",
+    subtitle: "Opiniones de usuarios reales, publicadas con su permiso.",
+    summary: "Media {avg}/5 · {n} opiniones",
+    verified: "Usuario verificado",
+  },
   finalCta: {
     title: "Tu próximo producto rentable está a una búsqueda.",
     text: "Regístrate ahora y obtén tu primer análisis en menos de cinco minutos.",

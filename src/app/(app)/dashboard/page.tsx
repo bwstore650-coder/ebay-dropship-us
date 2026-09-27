@@ -21,7 +21,14 @@ export default async function Dashboard() {
   ];
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold">{t.dashboard.title}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="text-2xl font-bold">{t.dashboard.title}</h1>
+        {user.plan !== "NONE" && (
+          <Link href="/review" className="rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium hover:bg-slate-50">
+            ★ {t.review.dashboardCta}
+          </Link>
+        )}
+      </div>
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
         <h2 className="font-semibold">{t.dashboard.onboarding}</h2>
         <ul className="mt-3 space-y-2">

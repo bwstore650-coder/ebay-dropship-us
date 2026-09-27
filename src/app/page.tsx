@@ -6,6 +6,7 @@ import { getI18n } from "@/lib/i18n/server";
 import SiteHeader from "@/components/SiteHeader";
 import SiteFooter from "@/components/SiteFooter";
 import Pricing from "@/components/landing/Pricing";
+import Reviews from "@/components/landing/Reviews";
 
 /** Icônes simples (traits) pour les 6 fonctionnalités, dans le même ordre que le dictionnaire. */
 const FEATURE_ICONS = [
@@ -181,6 +182,9 @@ export default async function Home() {
             </div>
           </div>
         </section>
+
+        {/* AVIS (seulement s'il y a des avis réels publiés) */}
+        <Reviews t={L.reviews} />
 
         {/* TARIFS */}
         <section id="pricing" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-20">

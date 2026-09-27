@@ -13,6 +13,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin" className="hover:text-brand-300">Vue d&apos;ensemble</Link>
           <Link href="/admin/users" className="hover:text-brand-300">Clients</Link>
           <Link href="/admin/affiliates" className="hover:text-brand-300">Affiliés</Link>
+          <Link href="/admin/reviews" className="hover:text-brand-300">Avis</Link>
           <a href="/api/admin/leads" className="hover:text-brand-300">Exporter les emails (CSV)</a>
           <span className="ml-auto text-slate-400">{admin.email}</span>
           <Link href="/dashboard" className="text-slate-300 hover:text-white">← App</Link>

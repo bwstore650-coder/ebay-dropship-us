@@ -64,6 +64,7 @@ model User {
   supplierAccounts   SupplierAccount[]
   listings           Listing[]
   orders             Order[]
+  review             Review?
 }
 
 model EbayAccount {
@@ -173,4 +174,29 @@ model Commission {
   createdAt       DateTime         @default(now())
 
   @@index([affiliateId, status])
+}
+
+// Avis clients : écrits par de vrais utilisateurs connectés, publiés seulement après validation dans /admin/reviews.
+enum ReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model Review {
+  id         String       @id @default(cuid())
+  userId     String       @unique // un avis par compte
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  rating     Int          // 1 à 5
+  text       String
+  authorName String       // nom affiché (choisi par le client)
+  authorInfo String?      // ex. « Vendeur eBay, Texas »
+  locale     String
+  consent    Boolean      // accord pour publication sur le site
+  status     ReviewStatus @default(PENDING)
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  approvedAt DateTime?
+
+  @@index([status, approvedAt])
 }
