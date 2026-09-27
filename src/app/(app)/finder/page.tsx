@@ -7,6 +7,8 @@ interface Result {
   marketPrice: number | null;
   ebayListingsCount: number;
   offersChecked: number;
+  unitsSold: number;
+  priceSource: "SOLD_WEIGHTED" | "ACTIVE_LISTINGS";
   best: { supplier: string; title: string; price: number; shipping: number; deliveryDaysMax: number; stockUs: number } | null;
   margin: { landedCost: number; fees: number; profit: number; marginPct: number } | null;
   minPriceForTarget: number | null;
@@ -45,8 +47,9 @@ export default function Finder() {
         <div className="rounded-xl border border-slate-200 bg-white p-6">
           <p className={`text-lg font-semibold ${r.verdict === "RENTABLE" ? "text-green-600" : "text-amber-600"}`}>{LABEL[r.verdict]}</p>
           <dl className="mt-4 grid gap-3 sm:grid-cols-2 text-sm">
-            <Row k="Prix du marché eBay (médiane)" v={r.marketPrice !== null ? `${r.marketPrice.toFixed(2)} $` : "—"} />
+            <Row k={r.priceSource === "SOLD_WEIGHTED" ? "Prix du marché (pondéré par les ventes)" : "Prix du marché (annonces actives)"} v={r.marketPrice !== null ? `${r.marketPrice.toFixed(2)} $` : "—"} />
             <Row k="Annonces eBay trouvées" v={r.ebayListingsCount} />
+            <Row k="Unités vendues (20 premières annonces, estimation eBay)" v={r.unitsSold} />
             <Row k="Offres fournisseurs comparées" v={r.offersChecked} />
             {r.best && <Row k="Meilleur fournisseur" v={`${r.best.supplier} — ${r.best.title}`} />}
             {r.best && <Row k="Livraison" v={`≤ ${r.best.deliveryDaysMax} jours · stock US ${r.best.stockUs}`} />}
@@ -55,7 +58,7 @@ export default function Finder() {
             {r.margin && <Row k="Profit estimé" v={`${r.margin.profit.toFixed(2)} $ (${r.margin.marginPct} %)`} />}
             {r.minPriceForTarget && <Row k="Prix minimum pour ta marge cible" v={`${r.minPriceForTarget.toFixed(2)} $`} />}
           </dl>
-          <p className="mt-4 text-xs text-slate-500">Prix du marché calculé sur les annonces actives neuves aux US (en attendant la source des ventes réelles).</p>
+          <p className="mt-4 text-xs text-slate-500">Source : API officielle eBay. Le prix est pondéré par les ventes estimées de chaque annonce ; sans ventes, c&apos;est la médiane des annonces actives neuves aux US.</p>
         </div>
       )}
     </div>

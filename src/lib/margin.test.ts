@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { computeMargin, ebayFees, evaluateProduct, median, pickBestOffer, priceForTargetMargin, type SupplierOffer } from "./margin";
+import { weightedMedian, computeMargin, ebayFees, evaluateProduct, median, pickBestOffer, priceForTargetMargin, type SupplierOffer } from "./margin";
 
 describe("frais eBay", () => {
   it("13,6 % + 0,40 $ au-dessus de 10 $", () => {
@@ -60,5 +60,14 @@ describe("évaluation d'un produit", () => {
   });
   it("PAS_DE_FOURNISSEUR si aucune offre valide", () => {
     expect(evaluateProduct([20], [offer({ stockUs: 0 })]).verdict).toBe("PAS_DE_FOURNISSEUR");
+  });
+});
+
+describe("médiane pondérée par les ventes", () => {
+  it("ignore les annonces qui ne vendent pas", () => {
+    expect(weightedMedian([{ price: 15, weight: 0 }, { price: 25, weight: 40 }, { price: 60, weight: 2 }])).toBe(25);
+  });
+  it("null sans aucune vente", () => {
+    expect(weightedMedian([{ price: 15, weight: 0 }])).toBeNull();
   });
 });

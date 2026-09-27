@@ -119,6 +119,38 @@ export async function searchActive(q: string, limit = 50): Promise<MarketSnapsho
   return { total: data.total, prices: items.map((i) => i.price).filter((p) => p > 0), items };
 }
 
+/**
+ * Ventes estimées d'une annonce (API Browse getItem → estimatedAvailabilities.estimatedSoldQuantity).
+ * Source officielle et gratuite ; c'est une estimation d'eBay, cumulée sur la vie de l'annonce.
+ */
+export async function getSoldQuantity(itemId: string): Promise<number> {
+  const token = await getAppToken();
+  const data = await api<{ estimatedAvailabilities?: { estimatedSoldQuantity?: number }[] }>(
+    token,
+    `/buy/browse/v1/item/${encodeURIComponent(itemId)}`,
+  );
+  return data.estimatedAvailabilities?.reduce((s, a) => s + (a.estimatedSoldQuantity ?? 0), 0) ?? 0;
+}
+
+export interface DemandSnapshot extends MarketSnapshot {
+  unitsSold: number;                                  // total estimé sur les annonces analysées
+  soldWeighted: { price: number; weight: number }[]; // prix × unités vendues
+}
+
+/** Marché + demande : prix des annonces actives, pondérés par ce qu'elles ont réellement vendu. */
+export async function searchWithDemand(q: string, sample = 20): Promise<DemandSnapshot> {
+  const market = await searchActive(q, 50);
+  const soldWeighted: { price: number; weight: number }[] = [];
+  for (const item of market.items.slice(0, sample)) {
+    try {
+      soldWeighted.push({ price: item.price, weight: await getSoldQuantity(item.id) });
+    } catch {
+      /* annonce retirée entre-temps : on l'ignore */
+    }
+  }
+  return { ...market, soldWeighted, unitsSold: soldWeighted.reduce((s, p) => s + p.weight, 0) };
+}
+
 /* ---------- Mise en vente (API Inventory) ---------- */
 
 export interface InventoryItemInput {

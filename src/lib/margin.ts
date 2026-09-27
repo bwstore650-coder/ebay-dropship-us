@@ -94,6 +94,22 @@ export function median(values: number[]): number | null {
   return v.length % 2 ? v[mid] : round2((v[mid - 1] + v[mid]) / 2);
 }
 
+/**
+ * Médiane pondérée par les ventes : chaque annonce compte autant de fois qu'elle a vendu d'unités.
+ * Donne le prix auquel le marché achète vraiment, pas le prix affiché par les annonces qui ne vendent pas.
+ */
+export function weightedMedian(points: { price: number; weight: number }[]): number | null {
+  const v = points.filter((p) => p.price > 0 && p.weight > 0).sort((a, b) => a.price - b.price);
+  const total = v.reduce((s, p) => s + p.weight, 0);
+  if (!total) return null;
+  let acc = 0;
+  for (const p of v) {
+    acc += p.weight;
+    if (acc >= total / 2) return round2(p.price);
+  }
+  return null;
+}
+
 export type Verdict = "RENTABLE" | "TROP_FAIBLE" | "PAS_DE_FOURNISSEUR" | "PAS_DE_PRIX";
 
 export interface Evaluation {

@@ -15,6 +15,13 @@ et conformes** sur eBay US, avec AliExpress et CJ comme fournisseurs. Cahier des
 - **Écrans** : accueil, inscription, connexion, tableau de bord, chercheur de produits, réglages (eBay, CJ), abonnement.
 - **Base de données** : `prisma/schema.prisma` (utilisateurs, comptes eBay/fournisseurs chiffrés, annonces, commandes).
 
+## Source des prix eBay
+
+100 % API officielle : prix des annonces actives neuves aux US, pondérés par les ventes estimées de chaque annonce
+(`estimatedSoldQuantity` de l'API Browse). Pas de scraping : depuis fin août 2026, les ventes réussies d'eBay exigent une
+connexion, et les récupérer autrement irait contre les conditions d'eBay. Limite par défaut de l'API Browse : environ 5 000 appels
+par jour (1 recherche = 1 + 20 appels) — à faire relever par eBay avant le lancement.
+
 ## Démarrer en local
 
 ```bash
@@ -36,7 +43,7 @@ npm run dev                 # http://localhost:3000
 
 ## À faire ensuite (semaines 3–8)
 
-- Choisir la **source des prix vendus** eBay (le chercheur utilise pour l'instant les annonces actives).
+- Déposer la demande « Application Growth Check » chez eBay pour l'API Marketplace Insights (ventes réelles 90 jours).
 - Recherche multi-produits, fiche produit, bouton « Mettre en vente » (titres et descriptions IA).
 - Tâches planifiées : suivi stock/prix, retrait automatique, commande automatique, renvoi du suivi.
 - Tableau de bord complet, quotas par formule, bêta fermée.
