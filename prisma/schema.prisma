@@ -1,0 +1,122 @@
+// Schéma de la base de données (Postgres) — V1
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Plan {
+  NONE
+  STARTER
+  PRO
+  BUSINESS
+}
+
+enum Supplier {
+  ALIEXPRESS
+  CJ
+}
+
+enum ListingStatus {
+  DRAFT
+  ACTIVE
+  PAUSED     // retirée automatiquement (rupture, marge sous le seuil)
+  ENDED
+}
+
+enum OrderStatus {
+  PENDING          // vente eBay reçue, pas encore commandée
+  ORDERED          // commandée chez le fournisseur
+  SHIPPED          // suivi reçu et renvoyé à eBay
+  FAILED
+}
+
+model User {
+  id                 String    @id @default(cuid())
+  email              String    @unique
+  passwordHash       String
+  createdAt          DateTime  @default(now())
+
+  plan               Plan      @default(NONE)
+  stripeCustomerId   String?   @unique
+  stripeSubscriptionId String? @unique
+  trialEndsAt        DateTime?
+  currentPeriodEnd   DateTime?
+
+  minMarginPct       Float     @default(30)    // seuil de marge (%)
+  ebayAccountOpenedAt DateTime?                // pour les limites anti-ban
+
+  ebayAccount        EbayAccount?
+  supplierAccounts   SupplierAccount[]
+  listings           Listing[]
+  orders             Order[]
+}
+
+model EbayAccount {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ebayUserId         String?
+  accessToken        String   // chiffré au repos (voir lib/crypto.ts)
+  accessTokenExpires DateTime
+  refreshToken       String   // chiffré au repos
+  refreshTokenExpires DateTime
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model SupplierAccount {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  supplier     Supplier
+  accessToken  String   // chiffré au repos
+  refreshToken String?
+  expiresAt    DateTime?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([userId, supplier])
+}
+
+model Listing {
+  id               String        @id @default(cuid())
+  userId           String
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status           ListingStatus @default(DRAFT)
+  sku              String        @unique
+  ebayOfferId      String?
+  ebayListingId    String?
+  title            String
+  priceUsd         Float
+  supplier         Supplier
+  supplierProductId String
+  supplierVariantId String?
+  supplierCostUsd  Float         // coût produit + livraison au moment du dernier contrôle
+  lastCheckedAt    DateTime?
+  lastMarginPct    Float?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  orders           Order[]
+}
+
+model Order {
+  id                 String      @id @default(cuid())
+  userId             String
+  user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listingId          String?
+  listing            Listing?    @relation(fields: [listingId], references: [id])
+  ebayOrderId        String      @unique
+  status             OrderStatus @default(PENDING)
+  saleTotalUsd       Float
+  supplierOrderId    String?
+  supplierCostUsd    Float?
+  trackingNumber     String?
+  carrier            String?
+  errorMessage       String?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+}

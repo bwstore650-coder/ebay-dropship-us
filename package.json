@@ -1,0 +1,38 @@
+{
+  "name": "ebay-dropship-us",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "vitest run",
+    "db:push": "prisma db push",
+    "db:generate": "prisma generate",
+    "postinstall": "prisma generate"
+  },
+  "dependencies": {
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "next": "15.5.26",
+    "@prisma/client": "^6.16.0",
+    "stripe": "^18.5.0",
+    "zod": "^3.25.0",
+    "bcryptjs": "^3.0.2",
+    "jose": "^6.1.0"
+  },
+  "devDependencies": {
+    "typescript": "^5",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@tailwindcss/postcss": "^4",
+    "tailwindcss": "^4",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.26",
+    "@eslint/eslintrc": "^3",
+    "prisma": "^6.16.0",
+    "vitest": "^3.2.4"
+  }
+}
