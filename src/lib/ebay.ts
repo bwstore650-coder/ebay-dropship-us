@@ -85,8 +85,35 @@ async function api<T>(token: string, path: string, init: RequestInit = {}, marke
   });
   if (res.status === 204) return undefined as T;
   const text = await res.text();
-  if (!res.ok) throw new Error(`eBay ${path} ${res.status} : ${text}`);
+  if (!res.ok) throw new EbayApiError(path, res.status, text);
   return (text ? JSON.parse(text) : undefined) as T;
+}
+
+export interface EbayErrorDetail {
+  errorId?: number;
+  message?: string;
+  longMessage?: string;
+  parameters?: { name: string; value: string }[];
+}
+
+/** Erreur renvoyée par eBay, avec les messages lisibles (à montrer au vendeur). */
+export class EbayApiError extends Error {
+  readonly errors: EbayErrorDetail[];
+  constructor(readonly path: string, readonly status: number, body: string) {
+    super(`eBay ${path} ${status} : ${body.slice(0, 2000)}`);
+    let errors: EbayErrorDetail[] = [];
+    try {
+      errors = (JSON.parse(body) as { errors?: EbayErrorDetail[] }).errors ?? [];
+    } catch {
+      /* corps non JSON */
+    }
+    this.errors = errors;
+  }
+  /** Messages d'eBay, dédoublonnés, pour l'écran du vendeur. */
+  get readable(): string {
+    const msgs = this.errors.map((e) => e.longMessage || e.message).filter(Boolean) as string[];
+    return [...new Set(msgs)].join(" · ") || `HTTP ${this.status}`;
+  }
 }
 
 /* ---------- Recherche (API Browse) : prix des annonces actives neuves dans le pays ---------- */
@@ -98,12 +125,13 @@ interface ItemSummary {
   shippingOptions?: { shippingCost?: { value: string } }[];
   itemWebUrl?: string;
   image?: { imageUrl: string };
+  leafCategoryIds?: string[];
 }
 
 export interface MarketSnapshot {
   total: number;
   prices: number[]; // prix total acheteur (produit + livraison)
-  items: { id: string; title: string; price: number; url?: string; image?: string }[];
+  items: { id: string; title: string; price: number; url?: string; image?: string; categoryId?: string }[];
 }
 
 export async function searchActive(q: string, limit = 50, marketId: MarketplaceId = "EBAY_US"): Promise<MarketSnapshot> {
@@ -117,7 +145,14 @@ export async function searchActive(q: string, limit = 50, marketId: MarketplaceI
   const data = await api<{ total: number; itemSummaries?: ItemSummary[] }>(token, `/buy/browse/v1/item_summary/search?${params}`, {}, m.id);
   const items = (data.itemSummaries ?? []).map((i) => {
     const ship = Number(i.shippingOptions?.[0]?.shippingCost?.value ?? 0);
-    return { id: i.itemId, title: i.title, price: Number(i.price?.value ?? 0) + ship, url: i.itemWebUrl, image: i.image?.imageUrl };
+    return {
+      id: i.itemId,
+      title: i.title,
+      price: Number(i.price?.value ?? 0) + ship,
+      url: i.itemWebUrl,
+      image: i.image?.imageUrl,
+      categoryId: i.leafCategoryIds?.[0],
+    };
   });
   return { total: data.total, prices: items.map((i) => i.price).filter((p) => p > 0), items };
 }
@@ -177,6 +212,18 @@ export function putInventoryItem(token: string, sku: string, i: InventoryItemInp
   }, marketId);
 }
 
+export interface Regulatory {
+  responsiblePersons?: {
+    companyName: string;
+    addressLine1: string;
+    city: string;
+    postalCode: string;
+    country: string;
+    email: string;
+    types: ["EUResponsiblePerson"];
+  }[];
+}
+
 export interface OfferInput {
   marketId?: MarketplaceId;
   sku: string;
@@ -188,37 +235,201 @@ export interface OfferInput {
   fulfillmentPolicyId: string;
   paymentPolicyId: string;
   returnPolicyId: string;
+  regulatory?: Regulatory;
+}
+
+function offerBody(o: OfferInput) {
+  const m = marketplace(o.marketId);
+  return {
+    sku: o.sku,
+    marketplaceId: m.id,
+    format: "FIXED_PRICE",
+    listingDuration: "GTC",
+    availableQuantity: o.quantity,
+    categoryId: o.categoryId,
+    listingDescription: o.description,
+    merchantLocationKey: o.merchantLocationKey,
+    pricingSummary: { price: { value: o.price.toFixed(2), currency: m.currency } },
+    listingPolicies: {
+      fulfillmentPolicyId: o.fulfillmentPolicyId,
+      paymentPolicyId: o.paymentPolicyId,
+      returnPolicyId: o.returnPolicyId,
+    },
+    ...(o.regulatory ? { regulatory: o.regulatory } : {}),
+  };
 }
 
 export function createOffer(token: string, o: OfferInput) {
   const m = marketplace(o.marketId);
-  return api<{ offerId: string }>(token, "/sell/inventory/v1/offer", {
-    method: "POST",
-    body: JSON.stringify({
-      sku: o.sku,
-      marketplaceId: m.id,
-      format: "FIXED_PRICE",
-      availableQuantity: o.quantity,
-      categoryId: o.categoryId,
-      listingDescription: o.description,
-      merchantLocationKey: o.merchantLocationKey,
-      pricingSummary: { price: { value: o.price.toFixed(2), currency: m.currency } },
-      listingPolicies: {
-        fulfillmentPolicyId: o.fulfillmentPolicyId,
-        paymentPolicyId: o.paymentPolicyId,
-        returnPolicyId: o.returnPolicyId,
-      },
-    }),
-  }, m.id);
+  return api<{ offerId: string }>(token, "/sell/inventory/v1/offer", { method: "POST", body: JSON.stringify(offerBody(o)) }, m.id);
 }
 
-export function publishOffer(token: string, offerId: string) {
-  return api<{ listingId: string }>(token, `/sell/inventory/v1/offer/${offerId}/publish`, { method: "POST" });
+export function updateOffer(token: string, offerId: string, o: OfferInput) {
+  const m = marketplace(o.marketId);
+  return api<void>(token, `/sell/inventory/v1/offer/${encodeURIComponent(offerId)}`, { method: "PUT", body: JSON.stringify(offerBody(o)) }, m.id);
+}
+
+/** Offre déjà créée pour ce SKU dans ce pays (après un essai qui a échoué à la publication), sinon null. */
+export async function findOfferId(token: string, sku: string, marketId: MarketplaceId): Promise<string | null> {
+  const q = new URLSearchParams({ sku, marketplace_id: marketId });
+  try {
+    const data = await api<{ offers?: { offerId: string }[] }>(token, `/sell/inventory/v1/offer?${q}`, {}, marketId);
+    return data.offers?.[0]?.offerId ?? null;
+  } catch (e) {
+    if (e instanceof EbayApiError && (e.status === 404 || e.status === 400)) return null;
+    throw e;
+  }
+}
+
+/** Crée l'offre, ou met à jour celle qui existe déjà pour ce SKU, puis la publie. */
+export async function createOrUpdateAndPublish(token: string, o: OfferInput): Promise<{ offerId: string; listingId: string }> {
+  const m = marketplace(o.marketId);
+  let offerId = await findOfferId(token, o.sku, m.id);
+  if (offerId) await updateOffer(token, offerId, o);
+  else offerId = (await createOffer(token, o)).offerId;
+  const { listingId } = await publishOffer(token, offerId, m.id);
+  return { offerId, listingId };
+}
+
+export function publishOffer(token: string, offerId: string, marketId: MarketplaceId = "EBAY_US") {
+  return api<{ listingId: string }>(token, `/sell/inventory/v1/offer/${encodeURIComponent(offerId)}/publish`, { method: "POST" }, marketId);
+}
+
+/* ---------- Réglages du compte (API Account) ---------- */
+
+export interface PolicyOption { id: string; name: string }
+export interface SellerPolicies { fulfillment: PolicyOption[]; payment: PolicyOption[]; returns: PolicyOption[] }
+
+/** Active les « politiques professionnelles » du vendeur (sans effet si c'est déjà fait). */
+export async function optInBusinessPolicies(token: string): Promise<void> {
+  try {
+    await api<void>(token, "/sell/account/v1/program/opt_in", { method: "POST", body: JSON.stringify({ programType: "SELLING_POLICY_MANAGEMENT" }) });
+  } catch (e) {
+    if (!(e instanceof EbayApiError) || e.status >= 500) throw e; // déjà inscrit : eBay répond par une erreur 4xx
+  }
+}
+
+type RawPolicy = { name: string; categoryTypes?: { name: string }[] } & Record<string, unknown>;
+
+/** Politiques utilisables pour des produits classiques (hors véhicules). */
+function usable(list: RawPolicy[] | undefined, idKey: string): PolicyOption[] {
+  return (list ?? [])
+    .filter((p) => !p.categoryTypes?.length || p.categoryTypes.some((c) => c.name === "ALL_EXCLUDING_MOTORS_VEHICLES"))
+    .map((p) => ({ id: String(p[idKey]), name: p.name }));
+}
+
+export async function getPolicies(token: string, marketId: MarketplaceId): Promise<SellerPolicies> {
+  const q = `marketplace_id=${marketId}`;
+  const [f, p, r] = await Promise.all([
+    api<{ fulfillmentPolicies?: RawPolicy[] }>(token, `/sell/account/v1/fulfillment_policy?${q}`, {}, marketId),
+    api<{ paymentPolicies?: RawPolicy[] }>(token, `/sell/account/v1/payment_policy?${q}`, {}, marketId),
+    api<{ returnPolicies?: RawPolicy[] }>(token, `/sell/account/v1/return_policy?${q}`, {}, marketId),
+  ]);
+  return {
+    fulfillment: usable(f.fulfillmentPolicies, "fulfillmentPolicyId"),
+    payment: usable(p.paymentPolicies, "paymentPolicyId"),
+    returns: usable(r.returnPolicies, "returnPolicyId"),
+  };
+}
+
+export interface ShipFrom { postalCode: string; city?: string; stateOrProvince?: string; country: string }
+
+/** Crée le lieu d'expédition (entrepôt) s'il n'existe pas encore. La clé ne peut plus changer ensuite. */
+export async function ensureLocation(token: string, key: string, a: ShipFrom): Promise<void> {
+  try {
+    await api<unknown>(token, `/sell/inventory/v1/location/${encodeURIComponent(key)}`);
+    return;
+  } catch (e) {
+    if (!(e instanceof EbayApiError) || e.status !== 404) throw e;
+  }
+  await api<void>(token, `/sell/inventory/v1/location/${encodeURIComponent(key)}`, {
+    method: "POST",
+    body: JSON.stringify({
+      name: `Warehouse ${a.country} ${a.postalCode}`.slice(0, 1000),
+      locationTypes: ["WAREHOUSE"],
+      merchantLocationStatus: "ENABLED",
+      location: {
+        address: {
+          postalCode: a.postalCode,
+          country: a.country,
+          ...(a.city ? { city: a.city } : {}),
+          ...(a.stateOrProvince ? { stateOrProvince: a.stateOrProvince } : {}),
+        },
+      },
+    }),
+  });
+}
+
+/* ---------- Catégories et caractéristiques (API Taxonomy, jeton application) ---------- */
+
+const treeIds = new Map<string, string>();
+async function categoryTreeId(marketId: MarketplaceId): Promise<string> {
+  const cached = treeIds.get(marketId);
+  if (cached) return cached;
+  const d = await api<{ categoryTreeId: string }>(await getAppToken(), `/commerce/taxonomy/v1/get_default_category_tree_id?marketplace_id=${marketId}`, {}, marketId);
+  treeIds.set(marketId, d.categoryTreeId);
+  return d.categoryTreeId;
+}
+
+export async function suggestCategory(q: string, marketId: MarketplaceId): Promise<{ id: string; name: string } | null> {
+  const tree = await categoryTreeId(marketId);
+  const d = await api<{ categorySuggestions?: { category: { categoryId: string; categoryName: string } }[] }>(
+    await getAppToken(),
+    `/commerce/taxonomy/v1/category_tree/${tree}/get_category_suggestions?${new URLSearchParams({ q })}`,
+    {},
+    marketId,
+  );
+  const c = d.categorySuggestions?.[0]?.category;
+  return c ? { id: c.categoryId, name: c.categoryName } : null;
+}
+
+export interface AspectDef {
+  name: string;
+  required: boolean;
+  mode: "FREE_TEXT" | "SELECTION_ONLY";
+  multi: boolean;
+  maxLength?: number;
+  values: string[]; // valeurs proposées par eBay (obligatoires si SELECTION_ONLY)
+}
+
+export async function getAspects(categoryId: string, marketId: MarketplaceId): Promise<AspectDef[]> {
+  const tree = await categoryTreeId(marketId);
+  const d = await api<{
+    aspects?: {
+      localizedAspectName: string;
+      aspectConstraint?: { aspectRequired?: boolean; aspectMode?: string; itemToAspectCardinality?: string; aspectMaxLength?: number; aspectUsage?: string };
+      aspectValues?: { localizedValue: string }[];
+    }[];
+  }>(await getAppToken(), `/commerce/taxonomy/v1/category_tree/${tree}/get_item_aspects_for_category?category_id=${encodeURIComponent(categoryId)}`, {}, marketId);
+  return (d.aspects ?? []).map((a) => ({
+    name: a.localizedAspectName,
+    required: a.aspectConstraint?.aspectRequired === true,
+    mode: a.aspectConstraint?.aspectMode === "SELECTION_ONLY" ? "SELECTION_ONLY" : "FREE_TEXT",
+    multi: a.aspectConstraint?.itemToAspectCardinality === "MULTI",
+    maxLength: a.aspectConstraint?.aspectMaxLength,
+    values: (a.aspectValues ?? []).map((v) => v.localizedValue),
+  }));
+}
+
+/** Nom lisible d'une catégorie (chemin court). */
+export async function categoryName(categoryId: string, marketId: MarketplaceId): Promise<string | null> {
+  try {
+    const tree = await categoryTreeId(marketId);
+    const d = await api<{ categorySubtreeNode?: { category?: { categoryName: string } } }>(
+      await getAppToken(),
+      `/commerce/taxonomy/v1/category_tree/${tree}/get_category_subtree?category_id=${encodeURIComponent(categoryId)}`,
+      {},
+      marketId,
+    );
+    return d.categorySubtreeNode?.category?.categoryName ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** Retire l'annonce (rupture ou marge sous le seuil). */
-export function withdrawOffer(token: string, offerId: string) {
-  return api<{ listingId: string }>(token, `/sell/inventory/v1/offer/${offerId}/withdraw`, { method: "POST" });
+export function withdrawOffer(token: string, offerId: string, marketId: MarketplaceId = "EBAY_US") {
+  return api<{ listingId: string }>(token, `/sell/inventory/v1/offer/${encodeURIComponent(offerId)}/withdraw`, { method: "POST" }, marketId);
 }
 
 /* ---------- Commandes (API Fulfillment) ---------- */

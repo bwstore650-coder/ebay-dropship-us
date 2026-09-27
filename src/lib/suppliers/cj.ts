@@ -68,6 +68,8 @@ export interface CjVariant {
   vid: string;
   variantSku: string;
   variantKey?: string;
+  variantNameEn?: string;
+  variantImage?: string;
   variantSellPrice: number;
   inventories?: { countryCode: string; totalInventory: number }[];
 }
@@ -75,9 +77,38 @@ export interface CjVariant {
 export interface CjProduct {
   pid: string;
   productNameEn: string;
-  productImage?: string;
+  productImage?: string;          // une URL, ou une liste JSON d'URL selon les produits
+  productImageSet?: string[] | string;
+  description?: string;           // HTML
+  materialNameEn?: string;
+  packingNameEn?: string;
+  productWeight?: number | string;
   sellPrice: number | string;
   variants: CjVariant[];
+}
+
+/** Toutes les URL d'images d'un produit CJ (les champs varient d'un produit à l'autre). */
+export function productImages(p: CjProduct, v?: CjVariant): string[] {
+  const out: string[] = [];
+  const add = (x: unknown) => {
+    if (Array.isArray(x)) x.forEach(add);
+    else if (typeof x === "string") {
+      const t = x.trim();
+      if (t.startsWith("[")) {
+        try {
+          add(JSON.parse(t));
+          return;
+        } catch {
+          /* pas du JSON */
+        }
+      }
+      t.split(/[,;\s]+(?=https?:)/).forEach((u) => /^https?:\/\//.test(u) && out.push(u));
+    }
+  };
+  add(v?.variantImage);
+  add(p.productImage);
+  add(p.productImageSet);
+  return out;
 }
 
 export function getProduct(token: string, pid: string) {

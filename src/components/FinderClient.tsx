@@ -3,8 +3,10 @@ import { useState } from "react";
 import { fmt, type Dict } from "@/lib/i18n";
 import { errorMessage } from "@/lib/i18n/errors";
 import type { MarketplaceId } from "@/lib/marketplaces";
+import ListingEditor from "@/components/ListingEditor";
 
 interface Result {
+  marketId: MarketplaceId;
   symbol: string;
   currency: string;
   feesVerified: boolean;
@@ -15,15 +17,18 @@ interface Result {
   offersChecked: number;
   unitsSold: number;
   priceSource: "SOLD_WEIGHTED" | "ACTIVE_LISTINGS";
-  best: { supplier: string; title: string; price: number; shipping: number; deliveryDaysMax: number; stockUs: number } | null;
+  best: { supplier: "CJ" | "ALIEXPRESS"; productId: string; variantId?: string; title: string; price: number; shipping: number; deliveryDaysMax: number; stockUs: number } | null;
   margin: { landedCost: number; fees: number; profit: number; marginPct: number } | null;
   minPriceForTarget: number | null;
 }
 
 export default function FinderClient({
-  t, markets, errors, marketIds, defaultMarket,
+  t, tl, markets, errors, marketIds, defaultMarket, accounts, hasGpsr,
 }: {
   t: Dict["finder"];
+  tl: Dict["listing"];
+  accounts: { id: string; label: string }[];
+  hasGpsr: boolean;
   markets: Dict["markets"];
   errors: Dict["errors"];
   marketIds: MarketplaceId[];
@@ -32,11 +37,13 @@ export default function FinderClient({
   const [r, setR] = useState<Result | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   async function search(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setLoading(true);
     setError(null);
+    setEditing(false);
     const form = new FormData(e.currentTarget);
     const res = await fetch("/api/finder", {
       method: "POST",
@@ -66,7 +73,7 @@ export default function FinderClient({
       {error && <p className="text-red-600">{error}</p>}
       {r && (
         <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
-          <p className={`text-lg font-semibold ${r.verdict === "RENTABLE" ? "text-green-600" : "text-amber-600"}`}>{t.verdict[r.verdict]}</p>
+          <p className={`text-lg font-semibold ${r.verdict === "RENTABLE" ? "text-emerald-600" : "text-amber-600"}`}>{t.verdict[r.verdict]}</p>
           <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
             <Row k={r.priceSource === "SOLD_WEIGHTED" ? t.marketPriceSold : t.marketPriceActive} v={r.marketPrice !== null ? money(r.marketPrice) : "—"} />
             <Row k={t.listingsFound} v={r.ebayListingsCount} />
@@ -81,7 +88,23 @@ export default function FinderClient({
           </dl>
           {!r.feesVerified && <p className="mt-4 rounded-lg bg-amber-50 p-2 text-xs text-amber-700">{t.feesUnverified}</p>}
           <p className="mt-4 text-xs text-slate-500">{t.sourceNote}</p>
+          {r.verdict === "RENTABLE" && r.best?.supplier === "CJ" && !editing && (
+            <button type="button" onClick={() => setEditing(true)} className="btn-primary mt-5">{tl.create}</button>
+          )}
         </div>
+      )}
+      {r && editing && r.best && (
+        <ListingEditor
+          t={tl}
+          errors={errors}
+          markets={markets}
+          accounts={accounts}
+          hasGpsr={hasGpsr}
+          keyword={r.keyword}
+          marketId={r.marketId}
+          supplierRef={{ supplier: r.best.supplier, productId: r.best.productId, variantId: r.best.variantId }}
+          onClose={() => setEditing(false)}
+        />
       )}
     </div>
   );

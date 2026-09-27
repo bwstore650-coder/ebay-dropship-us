@@ -12,6 +12,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const links = [
     ["/dashboard", t.nav.dashboard],
     ["/finder", t.nav.finder],
+    ["/listings", t.nav.listings],
     ["/settings", t.nav.settings],
     ["/billing", t.nav.billing],
     ["/affiliate", t.nav.affiliate],

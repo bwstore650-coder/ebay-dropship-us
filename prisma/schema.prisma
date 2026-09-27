@@ -52,6 +52,14 @@ model User {
   defaultMarketplace String    @default("EBAY_US") // EBAY_US, EBAY_CA, EBAY_GB, EBAY_AU
   ebayAccountOpenedAt DateTime?                // pour les limites anti-ban
 
+  // Personne responsable dans l'UE (règlement GPSR) : obligatoire pour vendre sur eBay DE, FR, IT, ES, IE
+  euRpCompany        String?
+  euRpAddress        String?
+  euRpCity           String?
+  euRpPostalCode     String?
+  euRpCountry        String?   // code pays ISO (DE, FR…)
+  euRpEmail          String?
+
   // Affiliation
   referralCode       String?   @unique
   referredById       String?
@@ -79,8 +87,26 @@ model EbayAccount {
   refreshTokenExpires DateTime
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+  listings           Listing[]
+  marketSetups       EbayMarketSetup[]
 
   @@index([userId])
+}
+
+/// Réglages eBay obligatoires avant de publier dans un pays : politiques (livraison, paiement, retours) + lieu d'expédition.
+model EbayMarketSetup {
+  id                  String      @id @default(cuid())
+  ebayAccountId       String
+  ebayAccount         EbayAccount @relation(fields: [ebayAccountId], references: [id], onDelete: Cascade)
+  marketplaceId       String
+  fulfillmentPolicyId String
+  paymentPolicyId     String
+  returnPolicyId      String
+  merchantLocationKey String
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  @@unique([ebayAccountId, marketplaceId])
 }
 
 model SupplierAccount {
@@ -102,6 +128,8 @@ model Listing {
   userId           String
   user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   status           ListingStatus @default(DRAFT)
+  ebayAccountId    String?
+  ebayAccount      EbayAccount?  @relation(fields: [ebayAccountId], references: [id], onDelete: SetNull)
   marketplace      String        @default("EBAY_US")
   currency         String        @default("USD")
   sku              String        @unique
@@ -115,9 +143,15 @@ model Listing {
   supplierCost     Float         // coût produit + livraison (devise de la marketplace) au dernier contrôle
   lastCheckedAt    DateTime?
   lastMarginPct    Float?
+  categoryId       String?
+  errorMessage     String?       // dernier refus d'eBay, pour l'afficher au client
+  publishedAt      DateTime?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   orders           Order[]
+
+  @@index([ebayAccountId, publishedAt])
+  @@index([userId, createdAt])
 }
 
 model Order {
