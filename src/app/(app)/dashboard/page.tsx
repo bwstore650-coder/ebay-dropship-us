@@ -1,24 +1,29 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { getI18n } from "@/lib/i18n/server";
 
 export default async function Dashboard() {
   const user = await requireUser();
+  const { t } = await getI18n();
   const [listings, orders] = await Promise.all([
     db.listing.count({ where: { userId: user.id, status: "ACTIVE" } }),
     db.order.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 10 }),
   ]);
+  const profitUsd = orders
+    .filter((o: { currency: string }) => o.currency === "USD")
+    .reduce((s: number, o: { saleTotal: number; supplierCost: number | null }) => s + (o.saleTotal - (o.supplierCost ?? 0)), 0);
   const steps = [
-    { done: user.plan !== "NONE", label: "Choisir une formule", href: "/billing" },
-    { done: user.ebayAccounts.length > 0, label: "Connecter ton compte eBay", href: "/settings" },
-    { done: user.supplierAccounts.length > 0, label: "Connecter un fournisseur (CJ ou AliExpress)", href: "/settings" },
-    { done: listings > 0, label: "Mettre en vente ton premier produit rentable", href: "/finder" },
+    { done: user.plan !== "NONE", label: t.dashboard.stepPlan, href: "/billing" },
+    { done: user.ebayAccounts.length > 0, label: t.dashboard.stepEbay, href: "/settings" },
+    { done: user.supplierAccounts.length > 0, label: t.dashboard.stepSupplier, href: "/settings" },
+    { done: listings > 0, label: t.dashboard.stepFirstListing, href: "/finder" },
   ];
   return (
     <div className="space-y-8">
-      <h1 className="text-2xl font-bold">Tableau de bord</h1>
+      <h1 className="text-2xl font-bold">{t.dashboard.title}</h1>
       <section className="rounded-xl border border-slate-200 bg-white p-6">
-        <h2 className="font-semibold">Démarrage</h2>
+        <h2 className="font-semibold">{t.dashboard.onboarding}</h2>
         <ul className="mt-3 space-y-2">
           {steps.map((s) => (
             <li key={s.label} className="flex items-center gap-2">
@@ -29,9 +34,9 @@ export default async function Dashboard() {
         </ul>
       </section>
       <section className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Annonces actives" value={listings} />
-        <Stat label="Commandes (10 dernières)" value={orders.length} />
-        <Stat label="Profit sur ces commandes (USD)" value={`${orders.filter((o: { currency: string }) => o.currency === "USD").reduce((s: number, o: { saleTotal: number; supplierCost: number | null }) => s + (o.saleTotal - (o.supplierCost ?? 0)), 0).toFixed(2)} $`} />
+        <Stat label={t.dashboard.activeListings} value={listings} />
+        <Stat label={t.dashboard.recentOrders} value={orders.length} />
+        <Stat label={t.dashboard.profitUsd} value={`$${profitUsd.toFixed(2)}`} />
       </section>
     </div>
   );

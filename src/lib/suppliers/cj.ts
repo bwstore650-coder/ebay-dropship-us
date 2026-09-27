@@ -135,7 +135,10 @@ export interface CjOrderInput {
   products: { vid: string; quantity: number }[];
 }
 
-const COUNTRY_NAMES: Record<string, string> = { US: "United States", CA: "Canada", GB: "United Kingdom", AU: "Australia" };
+const COUNTRY_NAMES: Record<string, string> = {
+  US: "United States", CA: "Canada", GB: "United Kingdom", AU: "Australia",
+  DE: "Germany", FR: "France", IT: "Italy", ES: "Spain", IE: "Ireland",
+};
 
 /** Crée la commande chez CJ (entrepôt local), payée avec le solde du compte CJ du client (payType 2). */
 export function createOrder(token: string, o: CjOrderInput, countryCode = "US") {

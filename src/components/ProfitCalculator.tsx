@@ -1,23 +1,39 @@
 "use client";
 import { useMemo, useState } from "react";
-import { computeMargin, EBAY_FVF_RATE, priceForTargetMargin } from "@/lib/margin";
+import { computeMargin, priceForTargetMargin } from "@/lib/margin";
+import { MARKETPLACES, type MarketplaceId } from "@/lib/marketplaces";
+import type { Dict } from "@/lib/i18n";
+import { errorMessage } from "@/lib/i18n/errors";
 
 function num(v: string): number {
   const n = parseFloat(v.replace(",", "."));
   return Number.isFinite(n) && n >= 0 ? n : 0;
 }
+const pct = (rate: number) => String(+(rate * 100).toFixed(2));
 
-export default function ProfitCalculator() {
+export default function ProfitCalculator({
+  t, markets, errors, marketIds, defaultMarket,
+}: {
+  t: Dict["calculator"];
+  markets: Dict["markets"];
+  errors: Dict["errors"];
+  marketIds: MarketplaceId[];
+  defaultMarket: MarketplaceId;
+}) {
+  const [site, setSite] = useState<MarketplaceId>(defaultMarket);
   const [sale, setSale] = useState("30");
   const [shipCharged, setShipCharged] = useState("0");
   const [cost, setCost] = useState("12");
   const [supplierShip, setSupplierShip] = useState("0");
   const [tax, setTax] = useState("0");
   const [promo, setPromo] = useState("0");
-  const [fvf, setFvf] = useState(String(+(EBAY_FVF_RATE * 100).toFixed(2)));
+  const [fvf, setFvf] = useState(pct(MARKETPLACES[defaultMarket].fvfRate));
+
+  const market = MARKETPLACES[site];
+  const s = market.symbol;
 
   const r = useMemo(() => {
-    const opts = { fvfRate: num(fvf) / 100, promotedRate: num(promo) / 100 };
+    const opts = { market, fvfRate: num(fvf) / 100, promotedRate: num(promo) / 100 };
     const saleTotal = num(sale) + num(shipCharged);
     const m = computeMargin({ ...opts, saleTotal, supplierCost: num(cost), supplierShipping: num(supplierShip), supplierTaxRate: num(tax) / 100 });
     let breakEven: number | null = null;
@@ -25,31 +41,47 @@ export default function ProfitCalculator() {
     try { breakEven = priceForTargetMargin(m.landedCost, 0, opts); } catch { /* frais ≥ 100 % */ }
     try { for30 = priceForTargetMargin(m.landedCost, 30, opts); } catch { /* impossible */ }
     return { ...m, breakEven, for30 };
-  }, [sale, shipCharged, cost, supplierShip, tax, promo, fvf]);
+  }, [market, sale, shipCharged, cost, supplierShip, tax, promo, fvf]);
 
   const good = r.marginPct >= 30;
+  const money = (v: number) => `${v.toFixed(2)} ${s}`;
+
   return (
     <div className="mt-8 space-y-8">
       <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-6 sm:grid-cols-2">
-        <Field label="Item price ($)" value={sale} onChange={setSale} />
-        <Field label="Shipping you charge the buyer ($)" value={shipCharged} onChange={setShipCharged} />
-        <Field label="Supplier item cost ($)" value={cost} onChange={setCost} />
-        <Field label="Supplier shipping ($)" value={supplierShip} onChange={setSupplierShip} />
-        <Field label="Sales tax your supplier charges (%)" value={tax} onChange={setTax} />
-        <Field label="Promoted Listings ad rate (%)" value={promo} onChange={setPromo} />
-        <Field label="eBay final value fee (%)" value={fvf} onChange={setFvf} />
+        <label className="block text-sm sm:col-span-2">
+          <span className="text-slate-600">{t.site}</span>
+          <select
+            value={site}
+            onChange={(e) => {
+              const id = e.target.value as MarketplaceId;
+              setSite(id);
+              setFvf(pct(MARKETPLACES[id].fvfRate));
+            }}
+            className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"
+          >
+            {marketIds.map((id) => <option key={id} value={id}>{markets[id]}</option>)}
+          </select>
+        </label>
+        <Field label={`${t.itemPrice} (${s})`} value={sale} onChange={setSale} />
+        <Field label={`${t.shippingCharged} (${s})`} value={shipCharged} onChange={setShipCharged} />
+        <Field label={`${t.supplierCost} (${s})`} value={cost} onChange={setCost} />
+        <Field label={`${t.supplierShipping} (${s})`} value={supplierShip} onChange={setSupplierShip} />
+        <Field label={t.salesTax} value={tax} onChange={setTax} />
+        <Field label={t.promoted} value={promo} onChange={setPromo} />
+        <Field label={t.fvf} value={fvf} onChange={setFvf} />
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        <Stat label="Profit" value={`$${r.profit.toFixed(2)}`} tone={r.profit > 0 ? (good ? "good" : "warn") : "bad"} />
-        <Stat label="Margin" value={`${r.marginPct}%`} tone={good ? "good" : r.profit > 0 ? "warn" : "bad"} />
-        <Stat label="eBay fees" value={`$${r.fees.toFixed(2)}`} />
-        <Stat label="Your total cost" value={`$${r.landedCost.toFixed(2)}`} />
-        <Stat label="Break-even price" value={r.breakEven !== null ? `$${r.breakEven.toFixed(2)}` : "—"} />
-        <Stat label="Price for a 30% margin" value={r.for30 !== null ? `$${r.for30.toFixed(2)}` : "—"} />
+        <Stat label={t.profit} value={money(r.profit)} tone={r.profit > 0 ? (good ? "good" : "warn") : "bad"} />
+        <Stat label={t.margin} value={`${r.marginPct} %`} tone={good ? "good" : r.profit > 0 ? "warn" : "bad"} />
+        <Stat label={t.fees} value={money(r.fees)} />
+        <Stat label={t.totalCost} value={money(r.landedCost)} />
+        <Stat label={t.breakEven} value={r.breakEven !== null ? money(r.breakEven) : "—"} />
+        <Stat label={t.for30} value={r.for30 !== null ? money(r.for30) : "—"} />
       </div>
 
-      <LeadForm />
+      <LeadForm t={t} errors={errors} />
     </div>
   );
 }
@@ -73,7 +105,7 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: "go
   );
 }
 
-function LeadForm() {
+function LeadForm({ t, errors }: { t: Dict["calculator"]; errors: Dict["errors"] }) {
   const [state, setState] = useState<"idle" | "sending" | "done" | "error">("idle");
   const [msg, setMsg] = useState("");
   async function submit(e: React.FormEvent<HTMLFormElement>) {
@@ -82,17 +114,17 @@ function LeadForm() {
     const email = new FormData(e.currentTarget).get("email");
     const res = await fetch("/api/leads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email, source: "profit-calculator" }) });
     if (res.ok) setState("done");
-    else { setState("error"); setMsg((await res.json()).error ?? "Something went wrong."); }
+    else { setState("error"); setMsg(errorMessage(errors, (await res.json().catch(() => ({}))).error)); }
   }
-  if (state === "done") return <p className="rounded-xl bg-green-50 p-6 text-green-700">You&apos;re in. The next list of winning products will land in your inbox.</p>;
+  if (state === "done") return <p className="rounded-xl bg-green-50 p-6 text-green-700">{t.leadDone}</p>;
   return (
     <form onSubmit={submit} className="rounded-xl border border-blue-200 bg-blue-50 p-6">
-      <h2 className="text-lg font-semibold">Get 10 profitable eBay products every week — free</h2>
-      <p className="mt-1 text-sm text-slate-600">Checked against real eBay demand, 30%+ margin, US suppliers only, no Amazon or Walmart.</p>
+      <h2 className="text-lg font-semibold">{t.leadTitle}</h2>
+      <p className="mt-1 text-sm text-slate-600">{t.leadText}</p>
       <div className="mt-4 flex flex-wrap gap-2">
-        <input name="email" type="email" required placeholder="you@email.com" className="flex-1 rounded-lg border border-slate-300 px-3 py-2" />
+        <input name="email" type="email" required placeholder={t.leadPlaceholder} className="flex-1 rounded-lg border border-slate-300 px-3 py-2" />
         <button disabled={state === "sending"} className="rounded-lg bg-blue-600 px-5 py-2 font-semibold text-white disabled:opacity-60">
-          {state === "sending" ? "…" : "Send me the list"}
+          {state === "sending" ? "…" : t.leadButton}
         </button>
       </div>
       {state === "error" && <p className="mt-2 text-sm text-red-600">{msg}</p>}

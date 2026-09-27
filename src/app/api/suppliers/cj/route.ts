@@ -10,9 +10,9 @@ const body = z.object({ apiKey: z.string().min(10) });
 /** Connecte le compte CJ du client avec sa clé API (CJ > Apps > API). */
 export async function POST(req: Request) {
   const user = await currentUser();
-  if (!user) return NextResponse.json({ error: "Non connecté" }, { status: 401 });
-  const parsed = body.safeParse(await req.json());
-  if (!parsed.success) return NextResponse.json({ error: "Clé API invalide" }, { status: 400 });
+  if (!user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const parsed = body.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "INVALID_KEY" }, { status: 400 });
   try {
     const t = await getAccessToken(parsed.data.apiKey);
     const data = {
@@ -27,6 +27,7 @@ export async function POST(req: Request) {
     });
     return NextResponse.json({ ok: true });
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 400 });
+    console.error("CJ connect", e);
+    return NextResponse.json({ error: "INVALID_KEY" }, { status: 400 });
   }
 }

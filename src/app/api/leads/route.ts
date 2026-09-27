@@ -11,7 +11,7 @@ const body = z.object({
 /** Enregistre un email venant d'un outil gratuit (sans doublon). */
 export async function POST(req: Request) {
   const parsed = body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Please enter a valid email." }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "INVALID_EMAIL" }, { status: 400 });
   const refCode = (await cookies()).get("ref")?.value ?? null;
   await db.lead.upsert({
     where: { email: parsed.data.email.toLowerCase() },

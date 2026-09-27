@@ -10,7 +10,7 @@ export const EBAY_FVF_RATE = MARKETPLACES.EBAY_US.fvfRate;
 export const MAX_DELIVERY_DAYS = 8;
 export const DEFAULT_MIN_MARGIN_PCT = 30;
 
-type FeeSchedule = Pick<Marketplace, "fvfRate" | "perOrderFeeLow" | "perOrderFeeHigh" | "perOrderThreshold" | "feeTaxRate">;
+type FeeSchedule = Pick<Marketplace, "fvfRate" | "regulatoryRate" | "perOrderFeeLow" | "perOrderFeeHigh" | "perOrderThreshold" | "feeTaxRate">;
 
 export function perOrderFee(saleTotal: number, market: FeeSchedule = MARKETPLACES.EBAY_US): number {
   return saleTotal > market.perOrderThreshold ? market.perOrderFeeHigh : market.perOrderFeeLow;
@@ -26,7 +26,7 @@ export function ebayFees(saleTotal: number, opts: FeeOptions = {}): number {
   const m = opts.market ?? MARKETPLACES.EBAY_US;
   const fvf = opts.fvfRate ?? m.fvfRate;
   const promo = opts.promotedRate ?? 0;
-  const beforeTax = saleTotal * (fvf + promo) + perOrderFee(saleTotal, m);
+  const beforeTax = saleTotal * (fvf + promo + m.regulatoryRate) + perOrderFee(saleTotal, m);
   return round2(beforeTax * (1 + m.feeTaxRate));
 }
 
@@ -58,11 +58,11 @@ export function computeMargin(i: MarginInput): MarginResult {
   return { saleTotal: i.saleTotal, landedCost: cost, fees, profit, marginPct };
 }
 
-/** Prix de vente minimum pour atteindre la marge visée : P = (C + fixe × (1+t)) / (1 − taux × (1+t) − marge). */
+/** Prix de vente minimum pour la marge visée : P = (C + fixe × (1+t)) / (1 − (taux + réglementaire) × (1+t) − marge). */
 export function priceForTargetMargin(cost: number, targetPct: number, opts: FeeOptions = {}): number {
   const mk = opts.market ?? MARKETPLACES.EBAY_US;
   const tax = 1 + mk.feeTaxRate;
-  const rate = ((opts.fvfRate ?? mk.fvfRate) + (opts.promotedRate ?? 0)) * tax;
+  const rate = ((opts.fvfRate ?? mk.fvfRate) + (opts.promotedRate ?? 0) + mk.regulatoryRate) * tax;
   const m = targetPct / 100;
   const denom = 1 - rate - m;
   if (denom <= 0) throw new Error("Marge visée impossible avec ces frais");

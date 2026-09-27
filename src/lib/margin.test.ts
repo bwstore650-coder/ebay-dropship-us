@@ -90,3 +90,30 @@ describe("frais par pays", () => {
     expect(ebayFees(20, { market: MARKETPLACES.EBAY_AU })).toBe(2.98);
   });
 });
+
+describe("frais Europe (vendeurs pro, hors TVA)", () => {
+  it("Allemagne : 14 % + 0,45 € au-dessus de 10 €", () => {
+    expect(ebayFees(20, { market: MARKETPLACES.EBAY_DE })).toBe(3.25);
+    expect(ebayFees(8, { market: MARKETPLACES.EBAY_DE })).toBe(1.47);
+  });
+  it("France : 9 % + 0,35 % réglementaire + 0,35 €", () => {
+    expect(ebayFees(20, { market: MARKETPLACES.EBAY_FR })).toBe(2.22);
+  });
+  it("Italie : 11 % + 0,35 % + 0,35 €", () => {
+    expect(ebayFees(20, { market: MARKETPLACES.EBAY_IT })).toBe(2.62);
+  });
+  it("Espagne : 9 % + 0,35 % + 0,45 € au-dessus de 10 €", () => {
+    expect(ebayFees(20, { market: MARKETPLACES.EBAY_ES })).toBe(2.32);
+  });
+  it("Irlande : 11 % + 0,35 % + 0,45 €", () => {
+    expect(ebayFees(20, { market: MARKETPLACES.EBAY_IE })).toBe(2.72);
+  });
+  it("le prix pour 30 % tient compte des frais réglementaires", () => {
+    for (const m of [MARKETPLACES.EBAY_FR, MARKETPLACES.EBAY_IT, MARKETPLACES.EBAY_ES, MARKETPLACES.EBAY_IE, MARKETPLACES.EBAY_DE]) {
+      const p = priceForTargetMargin(12, 30, { market: m });
+      const got = computeMargin({ saleTotal: p, supplierCost: 12, market: m }).marginPct;
+      expect(got).toBeGreaterThanOrEqual(30);
+      expect(got).toBeLessThan(30.5);
+    }
+  });
+});

@@ -9,10 +9,10 @@ const body = z.object({ email: z.string().email(), password: z.string().min(8) }
 
 export async function POST(req: Request) {
   const parsed = body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return NextResponse.json({ error: "Email ou mot de passe invalide (8 caractères min.)" }, { status: 400 });
+  if (!parsed.success) return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
   const email = parsed.data.email.toLowerCase();
   if (await db.user.findUnique({ where: { email } }))
-    return NextResponse.json({ error: "Un compte existe déjà avec cet email" }, { status: 409 });
+    return NextResponse.json({ error: "EMAIL_TAKEN" }, { status: 409 });
 
   // Parrain : code du cookie « ref », s'il correspond à un utilisateur existant.
   const refCode = sanitizeRefCode((await cookies()).get(REF_COOKIE)?.value);

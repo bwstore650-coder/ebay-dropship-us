@@ -1,5 +1,5 @@
 /**
- * Conversion de devises pour comparer un coût fournisseur (USD) à un prix eBay local (CAD, GBP, AUD).
+ * Conversion de devises pour comparer un coût fournisseur (USD) à un prix eBay local (CAD, GBP, AUD, EUR).
  * Taux : Banque centrale européenne via l'API gratuite Frankfurter v1 (https://frankfurter.dev/v1/), cache 12 h.
  * Une marge de sécurité de 2 % est ajoutée sur le coût converti (frais de change de la carte).
  */
@@ -12,7 +12,7 @@ let cache: { rates: Rates; at: number } | null = null;
 
 export async function getUsdRates(): Promise<Rates> {
   if (cache && Date.now() - cache.at < 12 * 3600_000) return cache.rates;
-  const res = await fetch("https://api.frankfurter.dev/v1/latest?base=USD&symbols=CAD,GBP,AUD");
+  const res = await fetch("https://api.frankfurter.dev/v1/latest?base=USD&symbols=CAD,GBP,AUD,EUR");
   if (!res.ok) throw new Error(`Taux de change indisponibles (${res.status})`);
   const data = (await res.json()) as { rates: Rates };
   cache = { rates: { USD: 1, ...data.rates }, at: Date.now() };

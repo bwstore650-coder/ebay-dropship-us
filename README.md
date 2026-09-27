@@ -24,6 +24,15 @@ et conformes** sur eBay US, avec AliExpress et CJ comme fournisseurs. Cahier des
 - **eBay Canada, Royaume-Uni, Australie** : frais par pays (`src/lib/marketplaces.ts`), conversion des coûts USD
   (taux BCE + 2 % de sécurité), détaillants interdits par pays. Frais UK et AU marqués « à confirmer ».
 
+## Europe et langues (ajouté le 27/09/2026)
+
+- **eBay Allemagne, France, Italie, Espagne, Irlande** : frais vendeurs pro vérifiés sur les pages officielles d'eBay
+  (hors TVA, frais réglementaires 0,35 % inclus pour FR/IT/ES/IE), coûts convertis en EUR, détaillants interdits par pays
+  (Amazon, Cdiscount, Otto, MediaMarkt…). CJ n'a pas d'entrepôt dans tous ces pays : « aucun fournisseur local » est normal.
+- **5 langues** : anglais (par défaut), français, allemand, italien, espagnol. Langue choisie par le sélecteur (cookie `lang`)
+  ou celle du navigateur. Textes dans `src/lib/i18n/dictionaries/` ; un test vérifie que chaque langue a toutes les clés
+  et les mêmes variables `{…}`. Les API renvoient des codes d'erreur traduits côté écran.
+
 ## Source des prix eBay
 
 100 % API officielle : prix des annonces actives neuves aux US, pondérés par les ventes estimées de chaque annonce

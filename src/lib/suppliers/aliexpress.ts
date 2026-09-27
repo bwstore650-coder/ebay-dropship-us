@@ -157,9 +157,12 @@ export function getTracking(cfg: AeConfig, session: string, orderId: string) {
 /**
  * Taxe facturée par AliExpress à l'achat, par pays (ESTIMATIONS à affiner) :
  * US ≈ 7 % (taxe de vente, varie selon l'État), CA ≈ 13 % (TPS/TVH, varie selon la province),
- * GB 20 % (TVA), AU 10 % (GST).
+ * GB 20 % (TVA), AU 10 % (GST), UE : TVA du pays (DE 19 %, FR 20 %, IT 22 %, ES 21 %, IE 23 %).
+ * Pour un vendeur européen assujetti, cette TVA est récupérable : estimation volontairement prudente.
  */
-export const AE_TAX_ESTIMATE: Record<string, number> = { US: 0.07, CA: 0.13, GB: 0.2, AU: 0.1 };
+export const AE_TAX_ESTIMATE: Record<string, number> = {
+  US: 0.07, CA: 0.13, GB: 0.2, AU: 0.1, DE: 0.19, FR: 0.2, IT: 0.22, ES: 0.21, IE: 0.23,
+};
 export const AE_US_SALES_TAX_ESTIMATE = AE_TAX_ESTIMATE.US;
 
 export function toOffer(input: {

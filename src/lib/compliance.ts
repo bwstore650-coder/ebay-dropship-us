@@ -11,6 +11,12 @@ export const BLOCKED_RETAILER_DOMAINS = [
   "amazon.ca", "walmart.ca", "canadiantire.ca", "bestbuy.ca", "costco.ca",
   "amazon.co.uk", "argos.co.uk", "tesco.com", "currys.co.uk", "johnlewis.com",
   "amazon.com.au", "kmart.com.au", "bigw.com.au", "target.com.au", "jbhifi.com.au",
+  // Allemagne, France, Italie, Espagne, Irlande
+  "amazon.de", "otto.de", "mediamarkt.de", "saturn.de", "kaufland.de", "lidl.de", "zalando.de",
+  "amazon.fr", "cdiscount.com", "fnac.com", "darty.com", "boulanger.com", "carrefour.fr", "leroymerlin.fr", "zalando.fr",
+  "amazon.it", "mediaworld.it", "unieuro.it", "zalando.it",
+  "amazon.es", "elcorteingles.es", "mediamarkt.es", "pccomponentes.com", "zalando.es",
+  "harveynorman.ie", "currys.ie", "argos.ie",
 ];
 
 export function isBlockedSourceUrl(url: string): boolean {

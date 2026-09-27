@@ -19,7 +19,13 @@ export async function GET(req: Request) {
   if (!code || !expected || url.searchParams.get("state") !== expected)
     return NextResponse.redirect(new URL("/settings?ebay=error", req.url));
 
-  const t = await exchangeCode(code);
+  let t: Awaited<ReturnType<typeof exchangeCode>>;
+  try {
+    t = await exchangeCode(code);
+  } catch (e) {
+    console.error("eBay OAuth", e);
+    return NextResponse.redirect(new URL("/settings?ebay=error", req.url));
+  }
   const now = Date.now();
   const data = {
     accessToken: encrypt(t.access_token),

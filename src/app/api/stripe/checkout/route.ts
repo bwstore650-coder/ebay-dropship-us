@@ -14,15 +14,16 @@ const body = z.object({
 /** Crée une session Stripe Checkout (abonnement avec essai gratuit). */
 export async function POST(req: Request) {
   const user = await currentUser();
-  if (!user) return NextResponse.json({ error: "Non connecté" }, { status: 401 });
-  const parsed = body.safeParse(await req.json());
-  if (!parsed.success) return NextResponse.json({ error: "Formule inconnue" }, { status: 400 });
+  if (!user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  const parsed = body.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
 
   let priceId: string;
   try {
     priceId = priceIdFor(parsed.data.plan, parsed.data.interval);
   } catch (e) {
-    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+    console.error("Checkout", e);
+    return NextResponse.json({ error: "CONFIG_MISSING" }, { status: 500 });
   }
 
   let customerId = user.stripeCustomerId;

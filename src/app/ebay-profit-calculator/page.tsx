@@ -1,23 +1,28 @@
 import type { Metadata } from "next";
 import ProfitCalculator from "@/components/ProfitCalculator";
+import LanguageSwitcher from "@/components/LanguageSwitcher";
+import { getI18n } from "@/lib/i18n/server";
+import { MARKETPLACE_IDS } from "@/lib/marketplaces";
 
-export const metadata: Metadata = {
-  title: "Free eBay Profit Calculator (2026 fees) — Dropshipping margin & break-even",
-  description:
-    "Calculate your real eBay profit after the 13.6% final value fee, the per-order fee, sales tax and promoted listings. See your break-even price and the price you need for a 30% margin.",
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const { t } = await getI18n();
+  return { title: t.calculator.metaTitle, description: t.calculator.metaDescription };
+}
 
-export default function Page() {
+const DEFAULT_SITE = { en: "EBAY_US", fr: "EBAY_FR", de: "EBAY_DE", it: "EBAY_IT", es: "EBAY_ES" } as const;
+
+export default async function Page() {
+  const { locale, t } = await getI18n();
+  const c = t.calculator;
   return (
-    <main className="mx-auto max-w-3xl px-4 py-12">
-      <p className="text-sm font-semibold uppercase tracking-wide text-blue-600">Free tool</p>
-      <h1 className="mt-2 text-3xl font-bold sm:text-4xl">eBay Profit Calculator</h1>
-      <p className="mt-3 text-slate-600">
-        Enter your selling price and your supplier cost. You get your real profit after eBay fees, your break-even price and
-        the price you need for a 30% margin. Uses the standard eBay US fee: 13.6% of the total sale + $0.40 per order
-        ($0.30 for orders of $10 or less). Some categories use a different rate — you can change it below.
-      </p>
-      <ProfitCalculator />
+    <main className="mx-auto max-w-3xl px-4 py-10">
+      <div className="flex justify-end">
+        <LanguageSwitcher locale={locale} label={t.common.language} />
+      </div>
+      <p className="mt-4 text-sm font-semibold uppercase tracking-wide text-blue-600">{c.kicker}</p>
+      <h1 className="mt-2 text-3xl font-bold sm:text-4xl">{c.title}</h1>
+      <p className="mt-3 text-slate-600">{c.intro}</p>
+      <ProfitCalculator t={c} markets={t.markets} errors={t.errors} marketIds={MARKETPLACE_IDS} defaultMarket={DEFAULT_SITE[locale]} />
     </main>
   );
 }
