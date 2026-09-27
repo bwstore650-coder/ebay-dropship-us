@@ -6,7 +6,7 @@ import { getI18n } from "@/lib/i18n/server";
 import CjConnectForm from "@/components/CjConnectForm";
 import { EU_COUNTRIES } from "@/lib/eu";
 import { LOCALE_TAGS } from "@/lib/i18n";
-import { saveGpsr } from "./actions";
+import { saveGpsr, setAutoOrder } from "./actions";
 
 export default async function Settings({ searchParams }: { searchParams: Promise<{ ebay?: string; gpsr?: string }> }) {
   const user = await requireUser();
@@ -51,6 +51,22 @@ export default async function Settings({ searchParams }: { searchParams: Promise
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
         <h2 className="font-semibold">{s.aeTitle}</h2>
         <p className="mt-1 text-sm text-slate-600">{s.aeHelp}</p>
+      </section>
+
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-semibold">{s.autoOrderTitle}</h2>
+          <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${user.autoOrder ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
+            {user.autoOrder ? s.autoOrderOn : s.autoOrderOff}
+          </span>
+        </div>
+        <p className="mt-1 text-sm text-slate-600">{s.autoOrderHelp}</p>
+        <form action={setAutoOrder} className="mt-3">
+          <input type="hidden" name="autoOrder" value={user.autoOrder ? "off" : "on"} />
+          <button className={user.autoOrder ? "btn-secondary px-4 py-2 text-sm" : "btn-primary px-4 py-2 text-sm"}>
+            {user.autoOrder ? s.autoOrderDisable : s.autoOrderEnable}
+          </button>
+        </form>
       </section>
 
       <section id="gpsr" className="scroll-mt-24 rounded-2xl border border-slate-200 bg-white shadow-sm p-6">

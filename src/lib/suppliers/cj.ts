@@ -173,7 +173,7 @@ const COUNTRY_NAMES: Record<string, string> = {
 
 /** Crée la commande chez CJ (entrepôt local), payée avec le solde du compte CJ du client (payType 2). */
 export function createOrder(token: string, o: CjOrderInput, countryCode = "US") {
-  return cjFetch<{ orderId: string }>("/shopping/order/createOrderV2", {
+  return cjFetch<{ orderId: string; orderAmount?: number | string; orderStatus?: string }>("/shopping/order/createOrderV2", {
     method: "POST",
     token,
     body: JSON.stringify({
@@ -184,6 +184,19 @@ export function createOrder(token: string, o: CjOrderInput, countryCode = "US") 
       payType: 2,
     }),
   });
+}
+
+export interface CjOrderDetail {
+  orderId: string;
+  orderNumber?: string;
+  orderStatus?: string; // CREATED, IN_CART, UNPAID, PENDING, PROCESSING, UNSHIPPED, SHIPPED, DELIVERED, CANCELLED, OTHER
+  trackNumber?: string;
+  logisticName?: string;
+  orderAmount?: number | string;
+}
+
+export function getOrderDetail(token: string, orderId: string) {
+  return cjFetch<CjOrderDetail>(`/shopping/order/getOrderDetail?${new URLSearchParams({ orderId })}`, { token });
 }
 
 export function trackInfo(token: string, trackNumber: string) {

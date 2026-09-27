@@ -79,3 +79,13 @@ Pour tout autre compte, /admin répond « page introuvable ».
 ## Marque
 
 Nom provisoire « ProfitLister » : changer `NEXT_PUBLIC_BRAND_NAME` et `NEXT_PUBLIC_SUPPORT_EMAIL` dans `.env`. Ne pas mettre « eBay » dans le nom (marque déposée).
+
+## Commandes automatiques
+
+Toutes les 15 minutes (tâche planifiée `vercel.json` → `/api/cron/orders`, protégée par `CRON_SECRET`) :
+1. les nouvelles ventes eBay des annonces créées avec l'outil sont importées ;
+2. chaque vente payée est commandée chez CJ (numéro unique `EB-<commande eBay>`, payée avec le solde CJ du vendeur) ;
+3. le numéro de suivi CJ est renvoyé à eBay.
+Jamais de commande à perte, en rupture ou annulée sans l'accord du vendeur (statut « À vérifier » dans /orders).
+L'adresse de l'acheteur est relue chez eBay au moment de commander : elle n'est pas enregistrée dans la base.
+Sur Vercel, une tâche toutes les 15 minutes demande la formule Pro ; sinon, appeler l'URL depuis un service externe (ex. cron-job.org) avec l'en-tête `Authorization: Bearer <CRON_SECRET>`.

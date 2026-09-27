@@ -434,37 +434,56 @@ export function withdrawOffer(token: string, offerId: string, marketId: Marketpl
 
 /* ---------- Commandes (API Fulfillment) ---------- */
 
+export interface EbayAddress {
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  stateOrProvince?: string;
+  postalCode?: string;
+  countryCode: string;
+}
+
 export interface EbayOrder {
   orderId: string;
   creationDate: string;
-  orderFulfillmentStatus: string;
-  pricingSummary: { total: { value: string } };
-  lineItems: { lineItemId: string; sku?: string; quantity: number; title: string }[];
+  orderFulfillmentStatus: string;            // NOT_STARTED | IN_PROGRESS | FULFILLED
+  orderPaymentStatus?: string;               // PAID | PENDING | FAILED | FULLY_REFUNDED | PARTIALLY_REFUNDED
+  cancelStatus?: { cancelState?: string };   // NONE_REQUESTED si aucune annulation
+  pricingSummary: { total: { value: string; currency?: string } };
+  lineItems: { lineItemId: string; sku?: string; quantity: number; title: string; lineItemFulfillmentStatus?: string }[];
   fulfillmentStartInstructions: {
     shippingStep?: {
       shipTo: {
         fullName: string;
+        email?: string;
         primaryPhone?: { phoneNumber: string };
-        contactAddress: {
-          addressLine1: string;
-          addressLine2?: string;
-          city: string;
-          stateOrProvince: string;
-          postalCode: string;
-          countryCode: string;
-        };
+        contactAddress: EbayAddress;
       };
     };
   }[];
 }
 
-export async function getOpenOrders(token: string): Promise<EbayOrder[]> {
-  const q = new URLSearchParams({ filter: "orderfulfillmentstatus:{NOT_STARTED|IN_PROGRESS}", limit: "50" });
-  const data = await api<{ orders?: EbayOrder[] }>(token, `/sell/fulfillment/v1/order?${q}`);
-  return data.orders ?? [];
+/** Commandes à expédier créées depuis `since` (toutes les pages, 200 au maximum). */
+export async function getOrdersToShip(token: string, since: Date): Promise<EbayOrder[]> {
+  const out: EbayOrder[] = [];
+  for (let offset = 0; offset < 200; offset += 50) {
+    const q = new URLSearchParams({
+      filter: `creationdate:[${since.toISOString()}..],orderfulfillmentstatus:{NOT_STARTED|IN_PROGRESS}`,
+      limit: "50",
+      offset: String(offset),
+    });
+    const data = await api<{ orders?: EbayOrder[]; total?: number }>(token, `/sell/fulfillment/v1/order?${q}`);
+    out.push(...(data.orders ?? []));
+    if (!data.orders?.length || out.length >= (data.total ?? 0)) break;
+  }
+  return out;
 }
 
-/** Renvoie le numéro de suivi à eBay. */
+export function getOrder(token: string, orderId: string) {
+  return api<EbayOrder>(token, `/sell/fulfillment/v1/order/${encodeURIComponent(orderId)}`);
+}
+
+/** Renvoie le numéro de suivi à eBay (la commande passe « expédiée » pour l'acheteur). */
 export function addTracking(
   token: string,
   orderId: string,
@@ -472,7 +491,7 @@ export function addTracking(
   carrierCode: string,
   trackingNumber: string,
 ) {
-  return api<void>(token, `/sell/fulfillment/v1/order/${orderId}/shipping_fulfillment`, {
+  return api<void>(token, `/sell/fulfillment/v1/order/${encodeURIComponent(orderId)}/shipping_fulfillment`, {
     method: "POST",
     body: JSON.stringify({
       lineItems,

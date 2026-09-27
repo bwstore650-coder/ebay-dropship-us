@@ -24,3 +24,11 @@ export async function saveGpsr(formData: FormData) {
   revalidatePath("/settings");
   redirect("/settings?gpsr=saved#gpsr");
 }
+
+/** Active ou désactive la commande automatique chez le fournisseur. */
+export async function setAutoOrder(formData: FormData) {
+  const user = await requireUser();
+  await db.user.update({ where: { id: user.id }, data: { autoOrder: formData.get("autoOrder") === "on" } });
+  revalidatePath("/settings");
+  revalidatePath("/orders");
+}

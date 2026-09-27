@@ -1,18 +1,21 @@
 import Link from "next/link";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
+import { fmt } from "@/lib/i18n";
 import { getI18n } from "@/lib/i18n/server";
 
 export default async function Dashboard() {
   const user = await requireUser();
   const { t } = await getI18n();
-  const [listings, orders] = await Promise.all([
+  const [listings, orders, attention] = await Promise.all([
     db.listing.count({ where: { userId: user.id, status: "ACTIVE" } }),
     db.order.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 10 }),
+    db.order.count({ where: { userId: user.id, status: { in: ["NEEDS_REVIEW", "FAILED"] } } }),
   ]);
+  // Profit réel (après frais eBay et coût fournisseur) des commandes passées, en USD.
   const profitUsd = orders
-    .filter((o: { currency: string }) => o.currency === "USD")
-    .reduce((s: number, o: { saleTotal: number; supplierCost: number | null }) => s + (o.saleTotal - (o.supplierCost ?? 0)), 0);
+    .filter((o) => o.currency === "USD" && (o.status === "ORDERED" || o.status === "SHIPPED"))
+    .reduce((s, o) => s + (o.profit ?? 0), 0);
   const steps = [
     { done: user.plan !== "NONE", label: t.dashboard.stepPlan, href: "/billing" },
     { done: user.ebayAccounts.length > 0, label: t.dashboard.stepEbay, href: "/settings" },
@@ -29,6 +32,12 @@ export default async function Dashboard() {
           </Link>
         )}
       </div>
+      {attention > 0 && (
+        <p className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-amber-50 p-3 text-sm font-medium text-amber-800">
+          {fmt(t.dashboard.attention, { n: attention })}
+          <Link href="/orders" className="underline">{t.dashboard.seeOrders}</Link>
+        </p>
+      )}
       <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
         <h2 className="font-semibold">{t.dashboard.onboarding}</h2>
         <ul className="mt-3 space-y-2">

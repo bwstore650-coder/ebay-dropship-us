@@ -30,9 +30,12 @@ enum ListingStatus {
 
 enum OrderStatus {
   PENDING          // vente eBay reçue, pas encore commandée
-  ORDERED          // commandée chez le fournisseur
+  ORDERING         // commande fournisseur en cours (verrou contre les doublons)
+  ORDERED          // commandée et payée chez le fournisseur
   SHIPPED          // suivi reçu et renvoyé à eBay
-  FAILED
+  NEEDS_REVIEW     // à vérifier par le vendeur (perte, rupture, article inconnu…)
+  FAILED           // le fournisseur a refusé (solde insuffisant, adresse…)
+  CANCELLED        // annulée sur eBay, ou traitée à la main par le vendeur
 }
 
 model User {
@@ -51,6 +54,7 @@ model User {
   minMarginPct       Float     @default(30)    // seuil de marge (%)
   defaultMarketplace String    @default("EBAY_US") // EBAY_US, EBAY_CA, EBAY_GB, EBAY_AU
   ebayAccountOpenedAt DateTime?                // pour les limites anti-ban
+  autoOrder          Boolean   @default(true)    // commander automatiquement chez le fournisseur à chaque vente
 
   // Personne responsable dans l'UE (règlement GPSR) : obligatoire pour vendre sur eBay DE, FR, IT, ES, IE
   euRpCompany        String?
@@ -88,6 +92,7 @@ model EbayAccount {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   listings           Listing[]
+  orders             Order[]
   marketSetups       EbayMarketSetup[]
 
   @@index([userId])
@@ -158,20 +163,33 @@ model Order {
   id                 String      @id @default(cuid())
   userId             String
   user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  listingId          String?
+  ebayAccountId      String?
+  ebayAccount        EbayAccount? @relation(fields: [ebayAccountId], references: [id], onDelete: SetNull)
+  listingId          String?     // première annonce de la commande
   listing            Listing?    @relation(fields: [listingId], references: [id])
   ebayOrderId        String      @unique
+  ebayCreatedAt      DateTime?
   marketplace        String      @default("EBAY_US")
   currency           String      @default("USD")
   status             OrderStatus @default(PENDING)
+  lines              Json        @default("[]") // [{ lineItemId, sku, quantity, listingId, vid, title }]
   saleTotal          Float
   supplierOrderId    String?
-  supplierCost       Float?
+  supplierCost       Float?      // coût fournisseur (devise de la commande)
+  fees               Float?      // frais eBay estimés
+  profit             Float?
   trackingNumber     String?
   carrier            String?
-  errorMessage       String?
+  errorCode          String?     // raison lisible, traduite à l'écran (LOSS, OUT_OF_STOCK…)
+  errorMessage       String?     // détail (message du fournisseur ou d'eBay)
+  attempts           Int         @default(0)
+  orderedAt          DateTime?
+  shippedAt          DateTime?
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
+
+  @@index([userId, status])
+  @@index([status, updatedAt])
 }
 
 /// Emails récoltés par les outils gratuits (calculateur, etc.)
