@@ -557,6 +557,11 @@ export async function createDefaultPolicies(
   }
 }
 
+/** Clé publique d'eBay pour vérifier la signature d'une notification (API Notification). */
+export async function getNotificationPublicKey(kid: string): Promise<{ algorithm: string; digest: string; key: string }> {
+  return api(await getAppToken(), `/commerce/notification/v1/public_key/${encodeURIComponent(kid)}`);
+}
+
 export interface ShipFrom { postalCode: string; city?: string; stateOrProvince?: string; country: string }
 
 /** Crée le lieu d'expédition (entrepôt) s'il n'existe pas encore. La clé ne peut plus changer ensuite. */
