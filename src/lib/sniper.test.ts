@@ -28,6 +28,11 @@ describe("tri des produits", () => {
   it("rentable avec de vraies ventes : gardé", () => {
     expect(classify(ev(), { unitsSold: 12 })).toEqual({ status: "PROFITABLE" });
   });
+  it("high ticket : rejeté sous 100 de profit, gardé au-dessus", () => {
+    expect(classify(ev(), { unitsSold: 12, minProfit: 100 })).toEqual({ status: "REJECTED", reason: "LOW_PROFIT" });
+    const big = ev({ marketPrice: 420, margin: { saleTotal: 420, landedCost: 210, fees: 60, profit: 150, marginPct: 35.7 } });
+    expect(classify(big, { unitsSold: 5, minProfit: 100 })).toEqual({ status: "PROFITABLE" });
+  });
   it("écarté : marge, demande, prix, fournisseur, fourchette, marque protégée", () => {
     expect(classify(ev({ verdict: "TROP_FAIBLE" }), { unitsSold: 50 })).toEqual({ status: "REJECTED", reason: "LOW_MARGIN" });
     expect(classify(ev(), { unitsSold: 1 })).toEqual({ status: "REJECTED", reason: "NO_DEMAND" });

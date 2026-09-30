@@ -40,6 +40,7 @@ export const de: Dict = {
     competitors: "Konkurrenz",
     titleBuilder: "Title Builder",
     bestSellers: "Bestseller",
+    highTicket: "High Ticket",
     returns: "Rücksendungen",
   },
   markets: {
@@ -528,6 +529,9 @@ export const de: Dict = {
     keywordsPlaceholder: "electric can opener\nled closet light\nsilicone stretch lids",
     keywordsHint: "Eine pro Zeile, bis zu 50.",
     autoList: "Automatisch auf eBay einstellen",
+    highTicket: "High Ticket (mind. 100 $ Gewinn pro Verkauf)",
+    highTicketHint: "Sucht nur teure Produkte (Möbel, E-Bikes, Fitnessgeräte, Powerstations…), die nach allen Gebühren mindestens 100 $ Gewinn bringen.",
+    highTicketBadge: "High Ticket",
     autoListHint: "Jedes profitable Produkt wird von der KI geschrieben und mit deinen üblichen Prüfungen veröffentlicht (Marge, geschützte Marken, Tageslimit).",
     account: "eBay-Konto",
     launch: "Sniper starten",
@@ -603,6 +607,7 @@ export const de: Dict = {
     },
     reasons: {
       LOW_MARGIN: "Marge zu niedrig",
+      LOW_PROFIT: "Gewinn unter 100 $",
       NO_DEMAND: "Zu wenige eBay-Verkäufe",
       NO_PRICE: "Keine vergleichbaren eBay-Angebote",
       NO_SUPPLIER: "Nicht lokal auf Lager / Lieferung zu langsam",
@@ -613,6 +618,16 @@ export const de: Dict = {
       UPSTREAM: "Analyse fehlgeschlagen, übersprungen",
       AUTO_LIST: "Nicht automatisch eingestellt: {reason}",
     },
+  },
+  highTicket: {
+    title: "High Ticket",
+    subtitle: "Teure Produkte mit mindestens 100 $ Gewinn pro Verkauf nach allen eBay-Gebühren, bereits von Sellvela analysiert.",
+    cta: "High-Ticket-Produkte mit dem Sniper suchen",
+    empty: "Noch keine High-Ticket-Produkte bereit: Der Katalog wird stündlich analysiert. Schau bald wieder vorbei oder starte eine High-Ticket-Suche.",
+    tipsTitle: "Bevor du High Ticket verkaufst",
+    tip1: "eBay begrenzt, wie viel ein neues Konto verkaufen darf: Starte mit wenigen Produkten und erhöhe deine Limits mit der Zeit.",
+    tip2: "Rücksendungen kosten bei großen Artikeln mehr: Prüfe die Rückgabe- und Garantiebedingungen des Lieferanten vor dem Einstellen.",
+    tip3: "Halte genug Guthaben bei CJ, um den Lieferanten bei jeder Bestellung zu bezahlen.",
   },
   winners: {
     title: "Gewinnerprodukte",

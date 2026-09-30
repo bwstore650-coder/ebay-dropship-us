@@ -40,6 +40,7 @@ export const es: Dict = {
     competitors: "Competidores",
     titleBuilder: "Title Builder",
     bestSellers: "Más vendidos",
+    highTicket: "High ticket",
     returns: "Devoluciones",
   },
   markets: {
@@ -528,6 +529,9 @@ export const es: Dict = {
     keywordsPlaceholder: "electric can opener\nled closet light\nsilicone stretch lids",
     keywordsHint: "Una por línea, hasta 50.",
     autoList: "Publicar automáticamente en eBay",
+    highTicket: "High ticket (mín. 100 $ de beneficio por venta)",
+    highTicketHint: "Busca solo productos caros (muebles, bicicletas eléctricas, máquinas de fitness, estaciones de energía…) que dejan al menos 100 $ de beneficio después de todas las comisiones.",
+    highTicketBadge: "High ticket",
     autoListHint: "Cada producto rentable lo redacta la IA y se publica con tus controles habituales (margen, marcas protegidas, límite diario).",
     account: "Cuenta de eBay",
     launch: "Lanzar el Sniper",
@@ -603,6 +607,7 @@ export const es: Dict = {
     },
     reasons: {
       LOW_MARGIN: "Margen demasiado bajo",
+      LOW_PROFIT: "Beneficio inferior a 100 $",
       NO_DEMAND: "Pocas ventas en eBay",
       NO_PRICE: "Ningún anuncio de eBay comparable",
       NO_SUPPLIER: "Sin stock local / entrega demasiado lenta",
@@ -613,6 +618,16 @@ export const es: Dict = {
       UPSTREAM: "Análisis imposible, se omite",
       AUTO_LIST: "No publicado automáticamente: {reason}",
     },
+  },
+  highTicket: {
+    title: "High ticket",
+    subtitle: "Productos caros que dejan al menos 100 $ de beneficio por venta después de todas las comisiones de eBay, ya analizados por Sellvela.",
+    cta: "Buscar productos high ticket con el Sniper",
+    empty: "Todavía no hay productos high ticket listos: el catálogo se analiza cada hora. Vuelve pronto o lanza una búsqueda high ticket.",
+    tipsTitle: "Antes de vender high ticket",
+    tip1: "eBay limita lo que puede vender una cuenta nueva: empieza con pocos productos y sube tus límites con el tiempo.",
+    tip2: "Las devoluciones cuestan más en artículos grandes: revisa las condiciones de devolución y garantía del proveedor antes de publicar.",
+    tip3: "Mantén saldo suficiente en CJ para pagar al proveedor en cada pedido.",
   },
   winners: {
     title: "Productos ganadores",

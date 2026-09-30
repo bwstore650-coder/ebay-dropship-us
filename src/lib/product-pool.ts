@@ -49,6 +49,7 @@ export interface Analysis {
 
 export interface AnalyzeOptions {
   minMarginPct: number;
+  minProfit?: number | null;
   priceMin?: number | null;
   priceMax?: number | null;
 }
@@ -124,7 +125,7 @@ export async function analyzeCatalogProduct(
   }
   const offers = await toMarket(await cjOffersFor(token, product, m.country));
   const e = evaluateProduct(prices, offers, o.minMarginPct, { market: m });
-  const k = classify(e, { unitsSold: market.unitsSold, priceMin: o.priceMin, priceMax: o.priceMax, title });
+  const k = classify(e, { unitsSold: market.unitsSold, priceMin: o.priceMin, priceMax: o.priceMax, title, minProfit: o.minProfit });
   return {
     ...base,
     status: k.status,
@@ -212,6 +213,7 @@ export interface PoolQuery {
   userId: string;
   marketId: MarketplaceId;
   minMarginPct: number;
+  minProfit?: number | null;
   priceMin?: number | null;
   priceMax?: number | null;
   themes?: string[];       // thèmes choisis par le vendeur (filtre sur le titre / la recherche)
@@ -228,6 +230,7 @@ export async function pickFromPool(q: PoolQuery): Promise<ProductInsight[]> {
       supplier: "CJ",
       reason: null,
       marginPct: { gte: q.minMarginPct },
+      ...(q.minProfit != null ? { profit: { gte: q.minProfit } } : {}),
       unitsSold: { gte: MIN_UNITS_SOLD },
       analyzedAt: { gt: new Date(Date.now() - POOL_FRESH_MS) },
       ...(q.priceMin != null || q.priceMax != null ? { marketPrice: { ...(q.priceMin != null ? { gte: q.priceMin } : {}), ...(q.priceMax != null ? { lte: q.priceMax } : {}) } } : {}),
@@ -283,7 +286,12 @@ const MAX_ROUNDS = 30;
  * Un passage du scanner : parcourt le catalogue (thème par thème, page par page) et analyse les produits
  * pas encore connus ou périmés, jusqu'à `deadline`. Réanalyse ensuite les produits rentables les plus anciens.
  */
-export async function scanTick(marketId: MarketplaceId, deadline: number): Promise<{ analyzed: number; refreshed: number; skipped?: string }> {
+export async function scanTick(
+  marketId: MarketplaceId,
+  deadline: number,
+  opts: { seeds?: string[]; cursorKey?: string; refresh?: boolean } = {},
+): Promise<{ analyzed: number; refreshed: number; skipped?: string }> {
+  const seeds = opts.seeds?.length ? opts.seeds : DEFAULT_SEEDS;
   const token = await scannerToken();
   if (!token) return { analyzed: 0, refreshed: 0, skipped: "NO_CJ_ACCOUNT" };
   const m = marketplace(marketId);
@@ -306,14 +314,15 @@ export async function scanTick(marketId: MarketplaceId, deadline: number): Promi
 
   // 1) Nouveaux produits du catalogue.
   while (Date.now() < deadline - 20_000 && errors < 5) {
-    const cur = (await db.scanCursor.findUnique({ where: { marketplace: m.id } })) ?? { seed: 0, round: 1 };
-    const seed = DEFAULT_SEEDS[cur.seed % DEFAULT_SEEDS.length];
+    const key = opts.cursorKey ?? m.id;
+    const cur = (await db.scanCursor.findUnique({ where: { marketplace: key } })) ?? { seed: 0, round: 1 };
+    const seed = seeds[cur.seed % seeds.length];
     const data = (await cj.searchProducts(token, seed, cur.round, 20, m.country)) as { content?: { productList?: CjListItem[] }[]; list?: CjListItem[] };
     const items = (data.content?.[0]?.productList ?? data.list ?? []).filter((it) => it.id ?? it.pid);
     // Thème suivant ; après le dernier thème, page suivante de chacun (on recommence au début après MAX_ROUNDS pages).
-    const last = cur.seed + 1 >= DEFAULT_SEEDS.length;
+    const last = cur.seed + 1 >= seeds.length;
     const next = { seed: last ? 0 : cur.seed + 1, round: last ? (cur.round >= MAX_ROUNDS ? 1 : cur.round + 1) : cur.round };
-    await db.scanCursor.upsert({ where: { marketplace: m.id }, create: { marketplace: m.id, ...next }, update: next });
+    await db.scanCursor.upsert({ where: { marketplace: key }, create: { marketplace: key, ...next }, update: next });
 
     const ids = items.map((it) => String(it.id ?? it.pid));
     const known = await db.productInsight.findMany({
@@ -333,6 +342,7 @@ export async function scanTick(marketId: MarketplaceId, deadline: number): Promi
     if (!items.length && cur.round > 1) continue; // page vide : on passe au thème suivant
   }
 
+  if (opts.refresh === false) return { analyzed, refreshed };
   // 2) Produits rentables dont l'analyse vieillit : réanalysés en priorité (ce sont ceux qu'on propose).
   const stale = await db.productInsight.findMany({
     where: { marketplace: m.id, supplier: "CJ", reason: null, analyzedAt: { lt: new Date(Date.now() - POOL_REFRESH_MS) } },
@@ -348,9 +358,9 @@ export async function scanTick(marketId: MarketplaceId, deadline: number): Promi
 }
 
 /** Meilleurs produits de la base pour la page « Produits gagnants » (avec la même limite de vendeurs). */
-export async function poolWinners(userId: string, marketId: MarketplaceId, minMarginPct: number, limit = 24) {
+export async function poolWinners(userId: string, marketId: MarketplaceId, minMarginPct: number, limit = 24, minProfit?: number | null) {
   const listed = await db.listing.findMany({ where: { userId, supplier: "CJ", status: { in: ["ACTIVE", "PAUSED", "DRAFT"] } }, select: { supplierProductId: true } });
-  return pickFromPool({ userId, marketId, minMarginPct, exclude: listed.map((l) => l.supplierProductId), limit });
+  return pickFromPool({ userId, marketId, minMarginPct, minProfit, exclude: listed.map((l) => l.supplierProductId), limit });
 }
 
 /** Statistiques de la base (admin et page gagnants). */

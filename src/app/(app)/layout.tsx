@@ -33,6 +33,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       title: n.sectionResearch,
       items: [
         { href: "/best-sellers", label: n.bestSellers, icon: "fire" },
+        { href: "/high-ticket", label: n.highTicket, icon: "star" },
         { href: "/competitors", label: n.competitors, icon: "eye" },
         { href: "/title-builder", label: n.titleBuilder, icon: "type" },
       ],

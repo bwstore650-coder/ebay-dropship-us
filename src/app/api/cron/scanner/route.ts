@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { scanTick } from "@/lib/product-pool";
 import { trendMarkets } from "@/lib/research-service";
+import { HIGH_TICKET_SEEDS } from "@/lib/sniper";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -21,7 +22,11 @@ export async function GET(req: Request) {
     if (left < 30_000) break;
     // Les États-Unis ont la plus grande part du temps ; les autres pays se partagent le reste.
     const share = i === 0 ? (markets.length === 1 ? left : left * 0.6) : left / (markets.length - i);
-    result[m] = await scanTick(m, Date.now() + share);
+    // Un tiers du temps pour les produits chers (« High ticket »), le reste pour le catalogue courant.
+    const until = Date.now() + share;
+    const ht = await scanTick(m, Date.now() + share / 3, { seeds: HIGH_TICKET_SEEDS, cursorKey: `${m}:HT`, refresh: false });
+    const main = await scanTick(m, until);
+    result[m] = { ...main, highTicket: ht.analyzed };
   }
   return NextResponse.json(result);
 }

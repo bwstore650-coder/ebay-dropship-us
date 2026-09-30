@@ -335,6 +335,7 @@ model SnipeRun {
   marketplace   String
   target        Int         // nombre de produits rentables à trouver
   minMarginPct  Float
+  minProfit     Float?      // « High ticket » : profit minimum par vente (devise du pays)
   priceMin      Float?
   priceMax      Float?
   autoList      Boolean     @default(false)

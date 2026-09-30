@@ -8,7 +8,8 @@ import SniperClient from "@/components/SniperClient";
 
 export const dynamic = "force-dynamic";
 
-export default async function SniperPage() {
+export default async function SniperPage({ searchParams }: { searchParams: Promise<{ ht?: string }> }) {
+  const { ht } = await searchParams;
   const user = await requireUser();
   const { t } = await getI18n();
   const last = await db.snipeRun.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, select: { id: true } });
@@ -26,6 +27,7 @@ export default async function SniperPage() {
       accounts={user.ebayAccounts.map((a, i) => ({ id: a.id, label: a.label ?? a.ebayUserId ?? fmt(t.settings.ebayAccountN, { n: i + 1 }) }))}
       hasGpsr={hasGpsr}
       initial={last ? await runState(user.id, last.id) : null}
+      startHighTicket={ht === "1"}
     />
   );
 }

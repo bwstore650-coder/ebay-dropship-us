@@ -31,6 +31,16 @@ export const MAX_VARIANTS = 3;
 /** Une recherche abandonnée par le navigateur est reprise par la tâche planifiée après ce délai. */
 export const RESUME_AFTER_MS = 2 * 60_000;
 
+/** « High ticket » : produits chers à revendre, au moins ce profit par vente (devise du pays). */
+export const HIGH_TICKET_PROFIT = 100;
+/** Thèmes du catalogue où se trouvent les produits chers (entrepôts locaux). */
+export const HIGH_TICKET_SEEDS = [
+  "electric bike", "electric scooter", "portable power station", "massage chair", "treadmill", "exercise bike",
+  "rowing machine", "home gym", "office chair", "gaming chair", "standing desk", "sofa", "bed frame", "mattress",
+  "dining table", "patio furniture", "outdoor furniture", "gazebo", "grill", "pizza oven", "kayak", "golf cart",
+  "hot tub", "sauna", "air conditioner", "generator", "solar panel", "projector", "espresso machine", "robot vacuum",
+];
+
 /** Thèmes utilisés quand le vendeur n'en donne pas : catégories « evergreen » qui se vendent toute l'année. */
 export const DEFAULT_SEEDS = [
   "kitchen gadget", "pet supplies", "car accessories", "home organization", "phone accessories",
@@ -84,7 +94,7 @@ export function keywordFromTitle(title: string, maxWords = 5): string {
   return kept.join(" ");
 }
 
-export type Reason = "LOW_MARGIN" | "NO_DEMAND" | "NO_PRICE" | "NO_SUPPLIER" | "VERO" | "PRICE_RANGE" | "ALREADY_LISTED" | "NO_KEYWORD";
+export type Reason = "LOW_MARGIN" | "LOW_PROFIT" | "NO_DEMAND" | "NO_PRICE" | "NO_SUPPLIER" | "VERO" | "PRICE_RANGE" | "ALREADY_LISTED" | "NO_KEYWORD";
 
 export interface Classification {
   status: "PROFITABLE" | "REJECTED";
@@ -97,7 +107,7 @@ export interface Classification {
  */
 export function classify(
   e: Evaluation,
-  o: { unitsSold: number; priceMin?: number | null; priceMax?: number | null; title?: string | null; minUnits?: number },
+  o: { unitsSold: number; priceMin?: number | null; priceMax?: number | null; title?: string | null; minUnits?: number; minProfit?: number | null },
 ): Classification {
   if (o.title && findVeroBrand(o.title)) return { status: "REJECTED", reason: "VERO" };
   if (e.verdict === "PAS_DE_PRIX") return { status: "REJECTED", reason: "NO_PRICE" };
@@ -107,6 +117,7 @@ export function classify(
     if (o.priceMax != null && e.marketPrice > o.priceMax) return { status: "REJECTED", reason: "PRICE_RANGE" };
   }
   if (e.verdict === "TROP_FAIBLE") return { status: "REJECTED", reason: "LOW_MARGIN" };
+  if (o.minProfit != null && (e.margin?.profit ?? 0) < o.minProfit) return { status: "REJECTED", reason: "LOW_PROFIT" };
   if (o.unitsSold < (o.minUnits ?? MIN_UNITS_SOLD)) return { status: "REJECTED", reason: "NO_DEMAND" };
   return { status: "PROFITABLE" };
 }

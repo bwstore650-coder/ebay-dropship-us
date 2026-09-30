@@ -39,6 +39,7 @@ export const en = {
     competitors: "Competitor spy",
     titleBuilder: "Title Builder",
     bestSellers: "Best sellers",
+    highTicket: "High ticket",
     returns: "Returns",
   },
   markets: {
@@ -527,6 +528,9 @@ export const en = {
     keywordsPlaceholder: "electric can opener\nled closet light\nsilicone stretch lids",
     keywordsHint: "One per line, up to 50.",
     autoList: "List automatically on eBay",
+    highTicket: "High ticket (min. $100 profit per sale)",
+    highTicketHint: "Looks only for expensive products (furniture, e-bikes, fitness machines, power stations…) that leave at least $100 profit after every fee.",
+    highTicketBadge: "High ticket",
     autoListHint: "Each profitable product is written by AI and published with your usual checks (margin, protected brands, daily limit).",
     account: "eBay account",
     launch: "Launch the Sniper",
@@ -602,6 +606,7 @@ export const en = {
     },
     reasons: {
       LOW_MARGIN: "Margin too low",
+      LOW_PROFIT: "Profit under $100",
       NO_DEMAND: "Not enough eBay sales",
       NO_PRICE: "No comparable eBay listings",
       NO_SUPPLIER: "Not in stock locally / delivery too slow",
@@ -612,6 +617,16 @@ export const en = {
       UPSTREAM: "Analysis failed, will not be retried",
       AUTO_LIST: "Not listed automatically: {reason}",
     },
+  },
+  highTicket: {
+    title: "High ticket",
+    subtitle: "Expensive products that leave at least $100 profit per sale after every eBay fee, already analyzed by Sellvela.",
+    cta: "Search high-ticket products with the Sniper",
+    empty: "No high-ticket product ready yet: the catalog is scanned every hour. Come back soon or run a high-ticket search.",
+    tipsTitle: "Before selling high ticket",
+    tip1: "eBay limits how much a new account can sell: start with a few products and raise your limits over time.",
+    tip2: "Returns cost more on big items: check the supplier's return and warranty terms before listing.",
+    tip3: "Keep your CJ balance high enough to pay the supplier for each order.",
   },
   winners: {
     title: "Winning products",

@@ -15,6 +15,7 @@ const body = z.object({
   seeds: z.string().max(10000).default(""), // un mot-clé par ligne
   autoList: z.boolean().default(false),
   ebayAccountId: z.string().max(64).nullable().optional(),
+  highTicket: z.boolean().default(false),
 });
 
 /** Lance une recherche Sniper. Elle avance ensuite par étapes (/api/sniper/[id]/step). */

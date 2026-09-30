@@ -40,6 +40,7 @@ export const it: Dict = {
     competitors: "Concorrenti",
     titleBuilder: "Title Builder",
     bestSellers: "Più venduti",
+    highTicket: "High ticket",
     returns: "Resi",
   },
   markets: {
@@ -528,6 +529,9 @@ export const it: Dict = {
     keywordsPlaceholder: "electric can opener\nled closet light\nsilicone stretch lids",
     keywordsHint: "Una per riga, fino a 50.",
     autoList: "Metti in vendita automaticamente su eBay",
+    highTicket: "High ticket (min. 100 $ di profitto per vendita)",
+    highTicketHint: "Cerca solo prodotti costosi (mobili, bici elettriche, attrezzi fitness, power station…) che lasciano almeno 100 $ di profitto dopo tutte le commissioni.",
+    highTicketBadge: "High ticket",
     autoListHint: "Ogni prodotto redditizio viene scritto dall'IA e pubblicato con i tuoi controlli abituali (margine, marchi protetti, limite giornaliero).",
     account: "Account eBay",
     launch: "Avvia lo Sniper",
@@ -603,6 +607,7 @@ export const it: Dict = {
     },
     reasons: {
       LOW_MARGIN: "Margine troppo basso",
+      LOW_PROFIT: "Profitto sotto i 100 $",
       NO_DEMAND: "Vendite eBay insufficienti",
       NO_PRICE: "Nessuna inserzione eBay simile",
       NO_SUPPLIER: "Non disponibile localmente / consegna troppo lenta",
@@ -613,6 +618,16 @@ export const it: Dict = {
       UPSTREAM: "Analisi non riuscita, ignorato",
       AUTO_LIST: "Non messo in vendita automaticamente: {reason}",
     },
+  },
+  highTicket: {
+    title: "High ticket",
+    subtitle: "Prodotti costosi che lasciano almeno 100 $ di profitto per vendita dopo tutte le commissioni eBay, già analizzati da Sellvela.",
+    cta: "Cerca prodotti high ticket con lo Sniper",
+    empty: "Nessun prodotto high ticket pronto per ora: il catalogo viene analizzato ogni ora. Torna presto o avvia una ricerca high ticket.",
+    tipsTitle: "Prima di vendere high ticket",
+    tip1: "eBay limita quanto può vendere un account nuovo: inizia con pochi prodotti e aumenta i limiti col tempo.",
+    tip2: "I resi costano di più sugli articoli grandi: controlla le condizioni di reso e garanzia del fornitore prima di pubblicare.",
+    tip3: "Tieni abbastanza saldo su CJ per pagare il fornitore a ogni ordine.",
   },
   winners: {
     title: "Prodotti vincenti",

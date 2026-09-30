@@ -228,6 +228,21 @@ describe("Sniper", { timeout: 90_000 }, () => {
     expect((await runState("U6", r6.id))!.found).toBe(0);
   });
 
+  it("high ticket : moins de 100 de profit → rejeté, et la base ne propose que les produits à 100+ de profit", async () => {
+    const run = await createRun(mem.users[0] as never, { mode: "CATALOG", marketId: "EBAY_US", target: 1, seeds: ["kitchen"], autoList: false, highTicket: true });
+    expect(mem.runs.find((r) => r.id === run.id)).toMatchObject({ minProfit: 100 });
+    await advanceRun(run.id, Date.now() + 80_000);
+    const s = (await runState("U1", run.id))!;
+    expect(s.minProfit).toBe(100);
+    expect(s.candidates.find((c) => c.productId === "P-GOOD")).toMatchObject({ status: "REJECTED", reason: "LOW_PROFIT" });
+    // Dans la base, le produit reste disponible pour les recherches normales, pas pour le high ticket.
+    mem.users.push(baseUser({ id: "U2", email: "u2@x.io" }));
+    const ht = await createRun(mem.users[1] as never, { mode: "CATALOG", marketId: "EBAY_US", target: 1, seeds: ["kitchen"], autoList: false, highTicket: true });
+    expect(mem.cands.filter((c) => c.runId === ht.id && c.status === "PROFITABLE")).toHaveLength(0);
+    const normal = await createRun(mem.users[1] as never, { mode: "CATALOG", marketId: "EBAY_US", target: 1, seeds: [], autoList: false }).catch(() => null);
+    expect(normal).toBeNull(); // une recherche est déjà en cours pour ce vendeur
+  });
+
   it("un produit déjà en vente n'est pas analysé à nouveau", async () => {
     mem.listings = [{ id: "L0", userId: "U1", supplier: "CJ", supplierProductId: "P-GOOD", status: "ACTIVE" }];
     const run = await createRun(mem.users[0] as never, { mode: "CATALOG", marketId: "EBAY_US", target: 1, seeds: ["kitchen"], autoList: false });

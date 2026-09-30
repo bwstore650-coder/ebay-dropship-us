@@ -17,7 +17,7 @@ import * as cj from "@/lib/suppliers/cj";
 import { analyzeCatalogProduct, minPriceFor, pickFromPool, POOL_FRESH_MS, savePool } from "@/lib/product-pool";
 import {
   type CandidateDetails,
-  classify, DEFAULT_SEEDS, isFinished, keywordFromTitle, MAX_TARGET, maxScan, RESUME_AFTER_MS,
+  classify, DEFAULT_SEEDS, HIGH_TICKET_PROFIT, HIGH_TICKET_SEEDS, isFinished, keywordFromTitle, MAX_TARGET, maxScan, RESUME_AFTER_MS,
 } from "@/lib/sniper";
 
 type UserWithAccounts = User & {
@@ -42,6 +42,7 @@ export interface CreateInput {
   seeds: string[];          // thèmes (CATALOG) ou mots-clés à tester (KEYWORDS)
   autoList: boolean;
   ebayAccountId?: string | null;
+  highTicket?: boolean;     // produits chers : au moins HIGH_TICKET_PROFIT de profit par vente
 }
 
 /** Arrêt de la mise en vente automatique pour toute la recherche (inutile de réessayer à chaque produit). */
@@ -74,6 +75,7 @@ export async function createRun(user: UserWithAccounts, input: CreateInput) {
       target,
       // Jamais sous le seuil de marge du compte.
       minMarginPct: Math.max(user.minMarginPct, input.minMarginPct ?? 0),
+      minProfit: input.highTicket ? HIGH_TICKET_PROFIT : null,
       priceMin: input.priceMin ?? null,
       priceMax: input.priceMax ?? null,
       autoList: Boolean(account),
@@ -107,6 +109,7 @@ async function prefillFromPool(run: SnipeRun): Promise<number> {
       userId: run.userId,
       marketId: run.marketplace as MarketplaceId,
       minMarginPct: run.minMarginPct,
+      minProfit: run.minProfit,
       priceMin: run.priceMin,
       priceMax: run.priceMax,
       themes: custom,
@@ -193,7 +196,7 @@ interface CjListItem { id?: string; pid?: string; nameEn?: string; productNameEn
 async function gather(run: RunRow, token: string): Promise<Cursor> {
   const m = marketplace(run.marketplace);
   const custom = Array.isArray(run.seeds) ? (run.seeds as string[]).filter(Boolean) : [];
-  const seeds = custom.length ? custom : DEFAULT_SEEDS;
+  const seeds = custom.length ? custom : run.minProfit != null ? HIGH_TICKET_SEEDS : DEFAULT_SEEDS;
   const cur: Cursor = { round: 1, seed: 0, exhausted: false, ...((run.cursor as Partial<Cursor> | null) ?? {}) };
   const MAX_ROUNDS = 20;
 
@@ -245,7 +248,7 @@ async function evaluate(run: RunRow, c: SnipeCandidate, token: string): Promise<
   const m = marketplace(run.marketplace);
   if (run.mode === "KEYWORDS") {
     const r = await findProduct(c.keyword, { cjToken: token, minMarginPct: run.minMarginPct, marketId: m.id });
-    const k = classify(r, { unitsSold: r.unitsSold, priceMin: run.priceMin, priceMax: run.priceMax, title: r.best?.title });
+    const k = classify(r, { unitsSold: r.unitsSold, priceMin: run.priceMin, priceMax: run.priceMax, title: r.best?.title, minProfit: run.minProfit });
     return {
       status: k.status,
       reason: k.reason ?? null,
@@ -271,7 +274,7 @@ async function evaluate(run: RunRow, c: SnipeCandidate, token: string): Promise<
   }
 
   // CATALOG : analyse complète, enregistrée aussi dans la base commune (sert aux recherches suivantes).
-  const a = await analyzeCatalogProduct(token, m.id, c.productId!, c.keyword, c.title, { minMarginPct: run.minMarginPct, priceMin: run.priceMin, priceMax: run.priceMax });
+  const a = await analyzeCatalogProduct(token, m.id, c.productId!, c.keyword, c.title, { minMarginPct: run.minMarginPct, minProfit: run.minProfit, priceMin: run.priceMin, priceMax: run.priceMax });
   await savePool(m.id, c.productId!, c.keyword, a).catch((e) => console.error("Pool", e));
   return {
     title: a.title,
@@ -439,6 +442,7 @@ export async function runState(userId: string, runId: string) {
     status: run.status,
     target: run.target,
     minMarginPct: run.minMarginPct,
+    minProfit: run.minProfit,
     scanned: run.scanned,
     found: run.found,
     listed: run.listed,

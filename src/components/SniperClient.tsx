@@ -14,7 +14,7 @@ type Mode = "CATALOG" | "KEYWORDS";
 type Candidate = RunState["candidates"][number];
 
 export default function SniperClient({
-  t, tl, markets, errors, marketIds, defaultMarket, minMargin, cjConnected, accounts, hasGpsr, initial,
+  t, tl, markets, errors, marketIds, defaultMarket, minMargin, cjConnected, accounts, hasGpsr, initial, startHighTicket = false,
 }: {
   t: Dict["sniper"];
   tl: Dict["listing"];
@@ -27,13 +27,15 @@ export default function SniperClient({
   accounts: { id: string; label: string }[];
   hasGpsr: boolean;
   initial: RunState | null;
+  startHighTicket?: boolean;
 }) {
   const [mode, setMode] = useState<Mode>("CATALOG");
   const [run, setRun] = useState<RunState | null>(initial);
-  const [showForm, setShowForm] = useState(!initial || initial.status !== "RUNNING");
+  const [showForm, setShowForm] = useState(startHighTicket || !initial || initial.status !== "RUNNING");
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [autoList, setAutoList] = useState(false);
+  const [highTicket, setHighTicket] = useState(startHighTicket);
   const [tab, setTab] = useState<"good" | "bad">("good");
   const [sort, setSort] = useState<"profit" | "margin" | "monthly" | "price">("profit");
   const [editing, setEditing] = useState<Candidate | null>(null);
@@ -80,6 +82,7 @@ export default function SniperClient({
         seeds: String(f.get("seeds") ?? ""),
         autoList,
         ebayAccountId: f.get("ebayAccountId") || null,
+        highTicket,
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -90,6 +93,7 @@ export default function SniperClient({
     setRun({
       id: data.id, mode, marketId: String(f.get("marketId")) as MarketplaceId, status: "RUNNING", target: Number(f.get("target")),
       minMarginPct: Math.max(minMargin, Number(f.get("minMarginPct")) || 0),
+      minProfit: highTicket ? 100 : null,
       scanned: 0, found: 0, listed: 0, maxScan: 0, exhausted: false, autoList, error: null, createdAt: new Date().toISOString(), candidates: [],
     });
     alive.current = true;
@@ -168,6 +172,23 @@ export default function SniperClient({
                 </button>
               ))}
             </div>
+
+            {/* High ticket : produits chers, au moins 100 de profit par vente */}
+            <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition ${highTicket ? "border-amber-400/60 bg-amber-500/10" : "border-line bg-surface-2 hover:border-line-strong"}`}>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={highTicket}
+                onClick={() => setHighTicket((v) => !v)}
+                className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition ${highTicket ? "bg-amber-500" : "bg-surface-3 ring-1 ring-line-strong"}`}
+              >
+                <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${highTicket ? "left-[22px]" : "left-0.5"}`} />
+              </button>
+              <span>
+                <span className="block text-sm font-semibold text-fg">{t.highTicket}</span>
+                <span className="mt-0.5 block text-xs text-muted">{t.highTicketHint}</span>
+              </span>
+            </label>
 
             <div className="grid gap-4 sm:grid-cols-3">
               <label className="block text-sm font-medium text-fg-2">
@@ -275,7 +296,7 @@ export default function SniperClient({
                 </span>
                 <div>
                   <p className="font-semibold text-fg">{t[`status${run.status}` as "statusRUNNING"]}</p>
-                  <p className="text-xs text-subtle">{markets[run.marketId]} · {run.mode === "CATALOG" ? t.modeCatalog : t.modeKeywords}</p>
+                  <p className="text-xs text-subtle">{markets[run.marketId]} · {run.mode === "CATALOG" ? t.modeCatalog : t.modeKeywords}{run.minProfit != null && <> · <span className="font-medium text-amber-300">{t.highTicketBadge}</span></>}</p>
                 </div>
               </div>
               {running && <button onClick={stop} className="btn-secondary px-4 py-2 text-sm">{t.stop}</button>}

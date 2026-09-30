@@ -40,6 +40,7 @@ export const fr: Dict = {
     competitors: "Concurrents",
     titleBuilder: "Title Builder",
     bestSellers: "Meilleures ventes",
+    highTicket: "High ticket",
     returns: "Retours",
   },
   markets: {
@@ -528,6 +529,9 @@ export const fr: Dict = {
     keywordsPlaceholder: "electric can opener\nled closet light\nsilicone stretch lids",
     keywordsHint: "Une par ligne, jusqu'à 50.",
     autoList: "Mettre en vente automatiquement sur eBay",
+    highTicket: "High ticket (min. 100 $ de profit par vente)",
+    highTicketHint: "Cherche seulement des produits chers (meubles, vélos électriques, machines de sport, stations d'énergie…) qui laissent au moins 100 $ de profit après tous les frais.",
+    highTicketBadge: "High ticket",
     autoListHint: "Chaque produit rentable est rédigé par l'IA et publié avec tes contrôles habituels (marge, marques protégées, limite par jour).",
     account: "Compte eBay",
     launch: "Lancer le Sniper",
@@ -603,6 +607,7 @@ export const fr: Dict = {
     },
     reasons: {
       LOW_MARGIN: "Marge trop faible",
+      LOW_PROFIT: "Profit inférieur à 100 $",
       NO_DEMAND: "Pas assez de ventes sur eBay",
       NO_PRICE: "Aucune annonce eBay comparable",
       NO_SUPPLIER: "Pas en stock localement / livraison trop lente",
@@ -613,6 +618,16 @@ export const fr: Dict = {
       UPSTREAM: "Analyse impossible, produit ignoré",
       AUTO_LIST: "Pas mis en vente automatiquement : {reason}",
     },
+  },
+  highTicket: {
+    title: "High ticket",
+    subtitle: "Produits chers qui laissent au moins 100 $ de profit par vente après tous les frais eBay, déjà analysés par Sellvela.",
+    cta: "Chercher des produits high ticket avec le Sniper",
+    empty: "Aucun produit high ticket prêt pour l'instant : le catalogue est analysé toutes les heures. Reviens bientôt ou lance une recherche high ticket.",
+    tipsTitle: "Avant de vendre du high ticket",
+    tip1: "eBay limite ce qu'un nouveau compte peut vendre : commence avec quelques produits et augmente tes limites avec le temps.",
+    tip2: "Les retours coûtent plus cher sur les gros articles : vérifie les conditions de retour et de garantie du fournisseur avant de mettre en vente.",
+    tip3: "Garde assez d'argent sur ton solde CJ pour payer le fournisseur à chaque commande.",
   },
   winners: {
     title: "Produits gagnants",
