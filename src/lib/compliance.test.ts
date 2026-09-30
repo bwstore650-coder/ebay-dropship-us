@@ -21,6 +21,11 @@ describe("conformité", () => {
     expect(findVeroBrand("Galaxy star projector night light")).toBeNull();
     expect(findVeroBrand("Phone holder for car, 360 rotation")).toBeNull();
     expect(findVeroBrand("Car floor mats for 2021-2023 Ford Bronco")).toBeNull();
+    // Nom de modèle Galaxy sur un téléphone générique.
+    expect(findVeroBrand("A17 Unlocked Phone Ultra 8GB 256GB Smartphone Android 15 Phone,6800mAh Battery 5G Dual SIM")).toBe("samsung");
+    expect(findVeroBrand("M34 android smartphone 128GB")).toBe("samsung");
+    expect(findVeroBrand("A4 paper holder, S10 storage box")).toBeNull();
+    expect(findVeroBrand("Kids smartwatch with SIM, android, 4G")).toBeNull();
   });
   it("limites selon l'âge du compte", () => {
     const now = new Date("2026-09-27");

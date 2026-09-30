@@ -51,7 +51,10 @@ const KNOCKOFFS: { brand: string; test: (t: string) => boolean }[] = [
   // Téléphones qui reprennent un nom de modèle Samsung (S24 Ultra, 24 Ultra…) ou Apple (i15 Pro Max, 16 Pro Max…).
   {
     brand: "samsung",
-    test: (t) => /\b(s|note ?)?\d{2} ?ultra\b/.test(t) && /\b(phone|smartphone|cellphone|cell phone|unlocked|android|5g|4g|dual sim)\b/.test(t),
+    test: (t) =>
+      (/\b(s|note ?)?\d{2} ?ultra\b/.test(t) && /\b(phone|smartphone|cellphone|cell phone|unlocked|android|5g|4g|dual sim)\b/.test(t)) ||
+      // Noms de la gamme Galaxy (A17, S25, M34, Z Fold…) sur un vrai téléphone vendu seul.
+      (/\b(galaxy ?)?[asmfz] ?\d{2,3}\b/.test(t) && /\b(smartphone|cellphone|cell phone|unlocked|android|dual sim)\b/.test(t)),
   },
   {
     brand: "apple",
