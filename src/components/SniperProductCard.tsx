@@ -5,6 +5,8 @@ import { fmt, type Dict } from "@/lib/i18n";
 import type { RunState } from "@/lib/sniper-service";
 import type { CandidateDetails } from "@/lib/sniper";
 import { Icon } from "@/components/icons";
+import { cjProductUrl, ebaySearchUrl } from "@/lib/listing";
+import type { MarketplaceId } from "@/lib/marketplaces";
 
 type Candidate = RunState["candidates"][number];
 
@@ -70,7 +72,7 @@ function PriceChart({ t, prices, market, minPrice, cost, money }: {
   );
 }
 
-export default function SniperProductCard({ c, t, minMargin, money, reason, onCreate, collapsible }: {
+export default function SniperProductCard({ c, t, minMargin, money, reason, onCreate, collapsible, marketId }: {
   c: Candidate;
   t: Dict["sniper"];
   minMargin: number;
@@ -78,6 +80,7 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
   reason: string | null;
   onCreate: (c: Candidate) => void;
   collapsible?: boolean;
+  marketId: MarketplaceId;
 }) {
   const [open, setOpen] = useState(!collapsible);
   const k = t.card;
@@ -124,6 +127,16 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
             <span className={`text-sm font-medium ${marginTone}`}>{c.marginPct !== null ? `${c.marginPct} % ${k.margin}` : ""}</span>
           </p>
           {reason && <p className="mt-1.5 text-xs"><span className="inline-block rounded-md bg-surface-3 px-2 py-0.5 font-medium leading-snug text-muted">{reason}</span></p>}
+          <p className="mt-2 flex flex-wrap gap-2 text-xs">
+            <a href={ebaySearchUrl(marketId, c.keyword)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface-2 px-2.5 py-1 font-medium text-fg-2 hover:border-brand-500/50 hover:text-fg">
+              {k.viewEbay} <span aria-hidden="true">↗</span>
+            </a>
+            {c.supplier === "CJ" && c.productId && (
+              <a href={cjProductUrl(c.productId, c.title)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface-2 px-2.5 py-1 font-medium text-fg-2 hover:border-brand-500/50 hover:text-fg">
+                {k.viewCj} <span aria-hidden="true">↗</span>
+              </a>
+            )}
+          </p>
         </div>
       </div>
 

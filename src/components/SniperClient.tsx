@@ -344,6 +344,7 @@ export default function SniperClient({
                     reason={c.reason ? reasonText(c) : null}
                     onCreate={setEditing}
                     collapsible={tab === "bad"}
+                    marketId={run?.marketId ?? defaultMarket}
                   />
                 ))}
               </div>

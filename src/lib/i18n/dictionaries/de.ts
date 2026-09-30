@@ -566,6 +566,8 @@ export const de: Dict = {
     how4: "Einstellen: mit einem Klick oder automatisch.",
     compliance: "Nur erlaubte Lieferanten (CJ, lokale Lager). Niemals Amazon oder Walmart.",
     card: {
+      viewEbay: "Auf eBay ansehen",
+      viewCj: "Bei CJ ansehen",
       ebayPrice: "eBay-Preis (Markt)",
       fees: "eBay-Gebühren",
       supplierPrice: "Lieferantenpreis",

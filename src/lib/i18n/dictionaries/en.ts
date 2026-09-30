@@ -565,6 +565,8 @@ export const en = {
     how4: "List: in one click, or automatically.",
     compliance: "Allowed suppliers only (CJ, local warehouses). Never Amazon or Walmart.",
     card: {
+      viewEbay: "View on eBay",
+      viewCj: "View on CJ",
       ebayPrice: "eBay price (market)",
       fees: "eBay fees",
       supplierPrice: "Supplier price",

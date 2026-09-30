@@ -22,7 +22,11 @@ export default function TrendCard({ item, t, marketId }: { item: TrendRow; t: Di
         ) : null}
       </div>
       <div className="flex flex-1 flex-col p-3">
-        <p className="line-clamp-2 text-xs font-medium text-fg" title={item.title}>{item.title}</p>
+        {item.url ? (
+          <a href={item.url} target="_blank" rel="noopener noreferrer" className="line-clamp-2 text-xs font-medium text-fg hover:text-brand-200" title={item.title}>{item.title} <span aria-hidden="true">↗</span></a>
+        ) : (
+          <p className="line-clamp-2 text-xs font-medium text-fg" title={item.title}>{item.title}</p>
+        )}
         <p className="mt-1 text-[11px] text-subtle">{(t.niches as Record<string, string>)[item.niche] ?? item.categoryName}</p>
         <div className="mt-auto flex items-end justify-between gap-2 pt-2">
           <div>

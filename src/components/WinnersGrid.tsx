@@ -30,7 +30,7 @@ export default function WinnersGrid({
     <>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {items.map((c) => (
-          <SniperProductCard key={c.id} c={c} t={t} minMargin={minMargin} money={money} reason={null} onCreate={setEditing} collapsible />
+          <SniperProductCard key={c.id} c={c} t={t} minMargin={minMargin} money={money} reason={null} onCreate={setEditing} collapsible marketId={marketId} />
         ))}
       </div>
       {editing && editing.productId && editing.supplier && (

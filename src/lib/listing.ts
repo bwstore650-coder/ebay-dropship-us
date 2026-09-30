@@ -144,3 +144,14 @@ export const isEuMarket = (id: string) => (EU_MARKETS as string[]).includes(id);
 export function startOfUtcDay(now = new Date()): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 }
+
+/** Recherche eBay du produit (annonces en vente, triées par pertinence). */
+export function ebaySearchUrl(marketId: string, keyword: string): string {
+  return `https://${ebayDomain(marketId)}/sch/i.html?${new URLSearchParams({ _nkw: keyword })}`;
+}
+
+/** Fiche du produit sur le site CJdropshipping. */
+export function cjProductUrl(productId: string, title?: string | null): string {
+  const slug = (title ?? "product").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "product";
+  return `https://cjdropshipping.com/product/${slug}-p-${encodeURIComponent(productId)}.html`;
+}
