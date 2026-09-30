@@ -9,7 +9,8 @@ const BASE = "https://developers.cjdropshipping.com/api2.0/v1";
 
 interface CjResponse<T> {
   code: number;
-  result: boolean;
+  result?: boolean;
+  success?: boolean; // certains points d'accès (stock) répondent « success » au lieu de « result »
   message: string;
   data: T;
 }
@@ -34,7 +35,7 @@ async function cjFetch<T>(path: string, init: RequestInit & { token?: string } =
     },
   });
   const json = (await res.json()) as CjResponse<T>;
-  if (!res.ok || !json.result) throw new Error(`CJ ${path} : ${json.message ?? res.status}`);
+  if (!res.ok || !(json.result ?? json.success)) throw new Error(`CJ ${path} : ${json.message ?? res.status}`);
   return json.data;
 }
 
@@ -113,8 +114,27 @@ export function productImages(p: CjProduct, v?: CjVariant): string[] {
   return out;
 }
 
-export function getProduct(token: string, pid: string) {
-  return cjFetch<CjProduct>(`/product/query?${new URLSearchParams({ pid })}`, { token });
+interface CjPidInventory {
+  variantInventories?: { vid: string; inventory?: { countryCode: string; totalInventory: number }[] }[];
+}
+
+/**
+ * Fiche produit avec le stock de chaque variante par pays.
+ * La fiche CJ ne renvoie plus toujours ce stock (« inventories » vide) : il est alors lu à part, en un appel par produit.
+ */
+export async function getProduct(token: string, pid: string): Promise<CjProduct> {
+  const product = await cjFetch<CjProduct>(`/product/query?${new URLSearchParams({ pid })}`, { token });
+  const variants = product.variants ?? [];
+  if (!variants.length || variants.every((v) => Array.isArray(v.inventories))) return { ...product, variants };
+  const stock = await cjFetch<CjPidInventory>(`/product/stock/getInventoryByPid?${new URLSearchParams({ pid })}`, { token });
+  const byVid = new Map((stock.variantInventories ?? []).map((x) => [x.vid, x.inventory ?? []]));
+  return {
+    ...product,
+    variants: variants.map((v) => ({
+      ...v,
+      inventories: Array.isArray(v.inventories) ? v.inventories : (byVid.get(v.vid) ?? []).map((i) => ({ countryCode: i.countryCode, totalInventory: Number(i.totalInventory) || 0 })),
+    })),
+  };
 }
 
 export interface CjFreightOption {
@@ -133,11 +153,17 @@ export function freightCalculate(token: string, vid: string, quantity = 1, count
 }
 
 /** Transforme un produit CJ en offres comparables (une par variante), avec la livraison la moins chère. */
+/** Variantes comparées au plus par produit (les moins chères en stock) : chaque variante coûte un appel CJ (1 par seconde). */
+export const MAX_OFFER_VARIANTS = 6;
+
 export async function toOffers(token: string, product: CjProduct, countryCode = "US"): Promise<SupplierOffer[]> {
   const offers: SupplierOffer[] = [];
-  for (const v of product.variants) {
-    const stockUs = v.inventories?.find((i) => i.countryCode === countryCode)?.totalInventory ?? 0;
-    if (stockUs <= 0) continue;
+  const inStock = product.variants
+    .map((v) => ({ v, stockUs: v.inventories?.find((i) => i.countryCode === countryCode)?.totalInventory ?? 0 }))
+    .filter((x) => x.stockUs > 0)
+    .sort((a, b) => Number(a.v.variantSellPrice) - Number(b.v.variantSellPrice))
+    .slice(0, MAX_OFFER_VARIANTS);
+  for (const { v, stockUs } of inStock) {
     const options = await freightCalculate(token, v.vid, 1, countryCode);
     if (!options.length) continue;
     const cheapest = options.reduce((a, b) => (b.logisticPrice < a.logisticPrice ? b : a));
