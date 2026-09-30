@@ -26,8 +26,18 @@ export async function GET(req: Request) {
         const p = await cj.getProduct(token, String(it.id));
         row.variants = p.variants?.length;
         row.inventories = p.variants?.slice(0, 3).map((v) => v.inventories);
-        const v = p.variants?.find((x) => x.inventories?.some((i) => i.countryCode === "US" && i.totalInventory > 0));
+        const q = new URLSearchParams({ pid: String(it.id), countryCode: "US" });
+        const r1 = await fetch(`https://developers.cjdropshipping.com/api2.0/v1/product/query?${q}`, { headers: { "CJ-Access-Token": token } });
+        const j1 = await r1.json();
+        row.usVariants = j1?.data?.variants?.length;
+        row.usVariantKeys = j1?.data?.variants?.[0] ? Object.keys(j1.data.variants[0]) : null;
+        row.usInv = j1?.data?.variants?.[0]?.inventories ?? null;
+        const v = j1?.data?.variants?.[0];
         if (v) {
+          await new Promise((r) => setTimeout(r, 1200));
+          const r2 = await fetch(`https://developers.cjdropshipping.com/api2.0/v1/product/stock/queryByVid?vid=${encodeURIComponent(v.vid)}`, { headers: { "CJ-Access-Token": token } });
+          row.stock = await r2.json().catch(() => r2.status);
+          await new Promise((r) => setTimeout(r, 1200));
           try {
             const f = await cj.freightCalculate(token, v.vid, 1, "US");
             row.freight = f.slice(0, 3);
