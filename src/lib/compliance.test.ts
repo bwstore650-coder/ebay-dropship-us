@@ -10,6 +10,17 @@ describe("conformité", () => {
   it("détecte une marque VeRO", () => {
     expect(findVeroBrand("Case for Apple iPhone 15")).toBe("apple");
     expect(findVeroBrand("Pineapple slicer")).toBeNull();
+    // Imitations sans la marque dans le titre.
+    expect(findVeroBrand("24 Ultra Cell Phone 8GB-256GB Unlocked Phone 5G Smartphone With Tool Pen Android")).toBe("samsung");
+    expect(findVeroBrand("S25 Ultra 5G smartphone dual SIM")).toBe("samsung");
+    expect(findVeroBrand("i16 Pro Max unlocked cell phone")).toBe("apple");
+    expect(findVeroBrand("Retro Jordan 1 basketball sneakers")).toBe("nike");
+    expect(findVeroBrand("Wireless earbuds compatible AirPods case")).toBe("airpods");
+    // Pas de faux positifs sur des produits génériques.
+    expect(findVeroBrand("Ultra bright 24 LED flashlight")).toBeNull();
+    expect(findVeroBrand("Galaxy star projector night light")).toBeNull();
+    expect(findVeroBrand("Phone holder for car, 360 rotation")).toBeNull();
+    expect(findVeroBrand("Car floor mats for 2021-2023 Ford Bronco")).toBeNull();
   });
   it("limites selon l'âge du compte", () => {
     const now = new Date("2026-09-27");

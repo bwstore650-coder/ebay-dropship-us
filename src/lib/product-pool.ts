@@ -12,6 +12,7 @@ import type { Prisma, ProductInsight } from "@prisma/client";
 import { db } from "@/lib/db";
 import { decrypt } from "@/lib/crypto";
 import { parseAdminEmails } from "@/lib/admin";
+import { findVeroBrand } from "@/lib/compliance";
 import { searchWithDemand } from "@/lib/ebay";
 import { getUsdRates, offersToCurrency } from "@/lib/fx";
 import { DEFAULT_MIN_MARGIN_PCT, evaluateProduct, priceForTargetMargin, weightedMedian, type SupplierOffer } from "@/lib/margin";
@@ -240,6 +241,8 @@ export async function pickFromPool(q: PoolQuery): Promise<ProductInsight[]> {
   const counts = await sellerCounts(rows.map((r) => r.productId), q.userId);
   return rows
     .filter((r) => (counts.get(r.productId) ?? 0) < MAX_SELLERS_PER_PRODUCT)
+    // Règles de marque mises à jour depuis l'analyse : jamais de produit de marque ou d'imitation.
+    .filter((r) => !findVeroBrand(r.title ?? ""))
     // Les plus rentables restent en tête, mais l'ordre varie d'un vendeur à l'autre à rentabilité proche.
     .map((r) => ({ r, score: (r.profit ?? 0) * (0.75 + 0.5 * userOrder(q.userId, r.productId)) }))
     .sort((a, b) => b.score - a.score)

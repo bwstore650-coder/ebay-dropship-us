@@ -36,11 +36,34 @@ export const VERO_BRANDS = [
   "apple", "nike", "adidas", "disney", "marvel", "lego", "sony", "samsung", "bose",
   "dyson", "ugg", "north face", "louis vuitton", "gucci", "chanel", "rolex", "otterbox",
   "yeti", "stanley", "pokemon", "nintendo", "hello kitty", "michael kors", "coach",
+  // Autres marques très surveillées sur eBay (programme VeRO).
+  "iphone", "ipad", "airpods", "macbook", "airtag", "playstation", "xbox", "gopro", "fitbit", "garmin",
+  "jbl", "beats by dre", "ray ban", "oakley", "prada", "hermes", "burberry", "dior", "versace", "fendi",
+  "balenciaga", "cartier", "tiffany", "pandora", "supreme", "lululemon", "crocs", "birkenstock", "timberland",
+  "under armour", "new balance", "yeezy", "harry potter", "star wars", "barbie", "hot wheels", "funko", "owala", "dji",
+];
+
+/**
+ * Imitations de produits de marque qui ne citent pas la marque (ex. « S24 Ultra 5G unlocked smartphone »,
+ * copie d'un Samsung Galaxy) : eBay les traite comme de la contrefaçon.
+ */
+const KNOCKOFFS: { brand: string; test: (t: string) => boolean }[] = [
+  // Téléphones qui reprennent un nom de modèle Samsung (S24 Ultra, 24 Ultra…) ou Apple (i15 Pro Max, 16 Pro Max…).
+  {
+    brand: "samsung",
+    test: (t) => /\b(s|note ?)?\d{2} ?ultra\b/.test(t) && /\b(phone|smartphone|cellphone|cell phone|unlocked|android|5g|4g|dual sim)\b/.test(t),
+  },
+  {
+    brand: "apple",
+    test: (t) => /\b(i ?)?\d{2} ?pro ?max\b/.test(t) && /\b(phone|smartphone|cellphone|cell phone|unlocked|android|5g|4g|dual sim)\b/.test(t),
+  },
+  // Chaussures « Jordan » (Nike).
+  { brand: "nike", test: (t) => /\bjordan\b/.test(t) && /\b(shoe|shoes|sneaker|sneakers|basketball)\b/.test(t) },
 ];
 
 export function findVeroBrand(text: string): string | null {
-  const t = ` ${text.toLowerCase().replace(/[^a-z0-9 ]+/g, " ")} `;
-  return VERO_BRANDS.find((b) => t.includes(` ${b} `)) ?? null;
+  const t = ` ${text.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").replace(/\s+/g, " ")} `;
+  return VERO_BRANDS.find((b) => t.includes(` ${b} `)) ?? KNOCKOFFS.find((k) => k.test(t))?.brand ?? null;
 }
 
 /** Nombre maximum d'annonces par jour selon l'âge du compte eBay. */
