@@ -197,6 +197,9 @@ export async function sellerCounts(productIds: string[], exceptUserId?: string):
   return new Map([...out].map(([k, v]) => [k, v.size]));
 }
 
+const normTitle = (t: string | null) => (t ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const sameTitle = (a: string | null, b: string | null) => Boolean(a && b) && normTitle(a) === normTitle(b);
+
 /** Ordre propre à chaque vendeur (stable) : deux vendeurs ne reçoivent pas les produits dans le même ordre. */
 function userOrder(userId: string, productId: string): number {
   let h = 2166136261;
@@ -240,6 +243,8 @@ export async function pickFromPool(q: PoolQuery): Promise<ProductInsight[]> {
     // Les plus rentables restent en tête, mais l'ordre varie d'un vendeur à l'autre à rentabilité proche.
     .map((r) => ({ r, score: (r.profit ?? 0) * (0.75 + 0.5 * userOrder(q.userId, r.productId)) }))
     .sort((a, b) => b.score - a.score)
+    // Même produit proposé par plusieurs fiches CJ (même titre) : une seule fois.
+    .filter((x, i, all) => all.findIndex((y) => sameTitle(y.r.title, x.r.title)) === i)
     .slice(0, q.limit)
     .map((x) => x.r);
 }
