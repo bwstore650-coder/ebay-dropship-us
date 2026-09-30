@@ -5,6 +5,6 @@
  */
 export const BRAND = {
   name: process.env.NEXT_PUBLIC_BRAND_NAME || "Sellvela",
-  company: "RADIANT VITA DS LLC",
+  company: "Bawa Ecom LLC",
   supportEmail: process.env.NEXT_PUBLIC_SUPPORT_EMAIL || "support@example.com",
 };
