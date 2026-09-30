@@ -107,3 +107,12 @@ L'option eBay « rupture de stock » (annonce masquée à quantité 0 au lieu d'
 Fonctionnement : dans le chercheur, le client colle le lien d'un produit AliExpress ; seules les variantes expédiées depuis un entrepôt du pays (propriété « Ships From ») sont comparées, pour garder une livraison rapide. Publication, commandes automatiques, suivi et surveillance fonctionnent comme pour CJ.
 Paiement : la commande est payée automatiquement si le paiement automatique est activé sur le compte AliExpress ; sinon elle apparaît « à payer » dans la page Commandes.
 Méthodes API : aliexpress.ds.product.get, aliexpress.logistics.buyer.freight.calculate, aliexpress.ds.order.create, aliexpress.trade.ds.order.get (signature vérifiée contre le SDK de référence ae_sdk).
+
+## Sniper (/sniper)
+
+Recherche automatique de produits rentables, 100 % conforme (fournisseurs CJ en entrepôt local, jamais Amazon/Walmart).
+
+- **Catalogue fournisseur** : parcourt les produits CJ stockés dans le pays (par thème ; thèmes « evergreen » par défaut), dérive la recherche eBay du titre, puis vérifie la vraie demande (ventes estimées eBay) et la marge après tous les frais. Écarte : rupture locale / livraison lente, marge trop faible, pas de ventes, hors fourchette de prix, marque protégée (VeRO), produit déjà en vente.
+- **Liste de mots-clés** : teste jusqu'à 50 recherches d'un coup avec le chercheur habituel.
+- **Mise en vente automatique** (option) : brouillon IA puis publication avec les contrôles habituels (marge, VeRO, limite par jour et par mois, réglages eBay, GPSR). S'arrête proprement dès qu'une limite bloque.
+- La recherche avance par étapes de ~40 s (`POST /api/sniper/[id]/step`) tant que la page est ouverte, et la tâche planifiée `/api/cron/sniper` (toutes les 5 min) la reprend quand la page est fermée. Un verrou empêche deux traitements simultanés.

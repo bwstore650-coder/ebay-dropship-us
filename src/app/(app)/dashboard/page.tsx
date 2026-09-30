@@ -201,9 +201,10 @@ export default async function Dashboard() {
             <h2 className="font-semibold text-fg">{D.quickTitle}</h2>
             <ul className="mt-3 space-y-1">
               {([
+                ["/sniper", t.nav.sniper, "zap"],
                 ["/finder", D.quickFind, "search"],
                 ["/listings", D.quickListings, "tag"],
-                ["/settings", D.quickAuto, "zap"],
+                ["/settings", D.quickAuto, "settings"],
               ] as const).map(([href, label, icon]) => (
                 <li key={href}>
                   <Link href={href} className="group flex items-center gap-3 rounded-lg px-2 py-2 text-sm text-fg-2 hover:bg-surface-2 hover:text-fg">

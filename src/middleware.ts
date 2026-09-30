@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE } from "@/lib/session";
 
-const PROTECTED = ["/dashboard", "/finder", "/settings", "/billing", "/affiliate", "/admin", "/review", "/listings", "/orders"];
+const PROTECTED = ["/dashboard", "/finder", "/sniper", "/settings", "/billing", "/affiliate", "/admin", "/review", "/listings", "/orders"];
 const REF_COOKIE = "ref";
 const REF_COOKIE_DAYS = 60;
 const CONSENT_COOKIE = "consent";

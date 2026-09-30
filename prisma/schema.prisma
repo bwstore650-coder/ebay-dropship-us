@@ -84,6 +84,7 @@ model User {
   listings           Listing[]
   orders             Order[]
   review             Review?
+  snipeRuns          SnipeRun[]
 }
 
 model EbayAccount {
@@ -274,4 +275,79 @@ model PasswordResetToken {
   createdAt DateTime  @default(now())
 
   @@index([userId, createdAt])
+}
+
+/* ---------- Sniper : recherche automatique de produits rentables ---------- */
+
+enum SnipeMode {
+  CATALOG   // parcourt le catalogue du fournisseur (entrepôt du pays) et vérifie chaque produit sur eBay
+  KEYWORDS  // teste une liste de mots-clés fournie par le vendeur
+}
+
+enum SnipeStatus {
+  RUNNING
+  DONE
+  STOPPED
+  FAILED
+}
+
+enum SnipeCandidateStatus {
+  PENDING     // pas encore analysé
+  PROFITABLE  // rentable, prêt à mettre en vente
+  REJECTED    // écarté (voir reason)
+  LISTED      // mis en vente automatiquement
+  ERROR       // analyse impossible (panne passagère)
+}
+
+model SnipeRun {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mode          SnipeMode
+  marketplace   String
+  target        Int         // nombre de produits rentables à trouver
+  minMarginPct  Float
+  priceMin      Float?
+  priceMax      Float?
+  autoList      Boolean     @default(false)
+  ebayAccountId String?
+  seeds         Json        // mots-clés (thèmes du catalogue, ou liste à tester)
+  cursor        Json?       // progression dans le catalogue
+  status        SnipeStatus @default(RUNNING)
+  scanned       Int         @default(0)
+  found         Int         @default(0)
+  listed        Int         @default(0)
+  error         String?
+  lockedUntil   DateTime?   // un seul traitement à la fois
+  lastStepAt    DateTime?
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  candidates    SnipeCandidate[]
+
+  @@index([userId, createdAt])
+  @@index([status, lastStepAt])
+}
+
+model SnipeCandidate {
+  id              String               @id @default(cuid())
+  runId           String
+  run             SnipeRun             @relation(fields: [runId], references: [id], onDelete: Cascade)
+  keyword         String               // recherche eBay utilisée
+  supplier        Supplier?
+  productId       String?
+  variantId       String?
+  title           String?
+  image           String?
+  status          SnipeCandidateStatus @default(PENDING)
+  reason          String?              // LOW_MARGIN, NO_DEMAND, NO_PRICE, NO_SUPPLIER, VERO, PRICE_RANGE, ALREADY_LISTED, AUTO_LIST:<code>…
+  marketPrice     Float?
+  cost            Float?
+  profit          Float?
+  marginPct       Float?
+  unitsSold       Int?
+  deliveryDaysMax Int?
+  listingId       String?
+  createdAt       DateTime             @default(now())
+
+  @@index([runId, status])
 }

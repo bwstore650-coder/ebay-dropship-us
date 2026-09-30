@@ -1,0 +1,373 @@
+"use client";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { fmt, type Dict } from "@/lib/i18n";
+import { errorMessage } from "@/lib/i18n/errors";
+import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
+import type { RunState } from "@/lib/sniper-service";
+import ListingEditor from "@/components/ListingEditor";
+import { Icon } from "@/components/icons";
+import { Notice, PageHeader } from "@/components/ui";
+
+type Mode = "CATALOG" | "KEYWORDS";
+type Candidate = RunState["candidates"][number];
+
+export default function SniperClient({
+  t, tl, markets, errors, marketIds, defaultMarket, minMargin, cjConnected, accounts, hasGpsr, initial,
+}: {
+  t: Dict["sniper"];
+  tl: Dict["listing"];
+  markets: Dict["markets"];
+  errors: Dict["errors"];
+  marketIds: MarketplaceId[];
+  defaultMarket: MarketplaceId;
+  minMargin: number;
+  cjConnected: boolean;
+  accounts: { id: string; label: string }[];
+  hasGpsr: boolean;
+  initial: RunState | null;
+}) {
+  const [mode, setMode] = useState<Mode>("CATALOG");
+  const [run, setRun] = useState<RunState | null>(initial);
+  const [showForm, setShowForm] = useState(!initial || initial.status !== "RUNNING");
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [autoList, setAutoList] = useState(false);
+  const [tab, setTab] = useState<"good" | "bad">("good");
+  const [editing, setEditing] = useState<Candidate | null>(null);
+  const alive = useRef(true);
+
+  const running = run?.status === "RUNNING";
+
+  // Tant que la recherche tourne et que la page est ouverte, on la fait avancer étape par étape.
+  const loop = useCallback(async (id: string) => {
+    while (alive.current) {
+      const res = await fetch(`/api/sniper/${id}/step`, { method: "POST" }).catch(() => null);
+      const data = res?.ok ? ((await res.json()) as RunState) : null;
+      if (!alive.current) return;
+      if (data) setRun(data);
+      if (!data || data.status !== "RUNNING") return;
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }, []);
+
+  useEffect(() => {
+    alive.current = true;
+    if (initial?.status === "RUNNING") loop(initial.id);
+    return () => {
+      alive.current = false;
+    };
+  }, [initial, loop]);
+
+  async function start(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setStarting(true);
+    setError(null);
+    const f = new FormData(e.currentTarget);
+    const num = (k: string) => (f.get(k) ? Number(f.get(k)) : null);
+    const res = await fetch("/api/sniper", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode,
+        marketId: f.get("marketId"),
+        target: Number(f.get("target")),
+        minMarginPct: Number(f.get("minMarginPct")),
+        priceMin: num("priceMin"),
+        priceMax: num("priceMax"),
+        seeds: String(f.get("seeds") ?? ""),
+        autoList,
+        ebayAccountId: f.get("ebayAccountId") || null,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setStarting(false);
+    if (!res.ok) return setError(errorMessage(errors, data.error));
+    setShowForm(false);
+    setTab("good");
+    setRun({
+      id: data.id, mode, marketId: String(f.get("marketId")) as MarketplaceId, status: "RUNNING", target: Number(f.get("target")),
+      scanned: 0, found: 0, listed: 0, maxScan: 0, autoList, error: null, createdAt: new Date().toISOString(), candidates: [],
+    });
+    alive.current = true;
+    loop(data.id);
+  }
+
+  async function stop() {
+    if (!run) return;
+    const res = await fetch(`/api/sniper/${run.id}/stop`, { method: "POST" });
+    if (res.ok) setRun(await res.json());
+  }
+
+  const good = run?.candidates.filter((c) => c.status === "PROFITABLE" || c.status === "LISTED") ?? [];
+  const bad = run?.candidates.filter((c) => c.status === "REJECTED" || c.status === "ERROR") ?? [];
+  const sym = run ? marketplace(run.marketId).symbol : "";
+  const money = (v: number | null) => (v === null ? "—" : `${v.toFixed(2)} ${sym}`);
+  const reasonText = (c: Candidate) => {
+    const r = c.reason ?? (c.status === "ERROR" ? "UPSTREAM" : "");
+    if (r.startsWith("AUTO_LIST:")) return fmt(t.reasons.AUTO_LIST, { reason: fmt(errorMessage(errors, r.slice(10)), { detail: "" }) });
+    return (t.reasons as Record<string, string>)[r] ?? r;
+  };
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        title={<span className="inline-flex items-center gap-3">{t.title}<span className="badge bg-gradient-to-r from-brand-500/25 to-fuchsia-500/25 text-brand-200">Beta</span></span>}
+        subtitle={t.subtitle}
+        actions={!showForm && !running ? <button onClick={() => setShowForm(true)} className="btn-primary px-4 py-2 text-sm"><Icon name="zap" className="h-4 w-4" />{t.newSearch}</button> : null}
+      />
+
+      {!cjConnected && (
+        <Notice tone="brand">
+          {t.cjRequired} <Link href="/settings" className="font-semibold underline underline-offset-2">{t.cjRequiredLink}</Link>
+        </Notice>
+      )}
+
+      {showForm && (
+        <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
+          <form onSubmit={start} className="card space-y-5 lg:col-span-2">
+            {/* Mode */}
+            <div className="grid gap-2 sm:grid-cols-2" role="radiogroup">
+              {([["CATALOG", t.modeCatalog, t.modeCatalogHint, "search"], ["KEYWORDS", t.modeKeywords, t.modeKeywordsHint, "file"]] as const).map(([id, label, hint, icon]) => (
+                <button
+                  type="button"
+                  key={id}
+                  role="radio"
+                  aria-checked={mode === id}
+                  onClick={() => setMode(id)}
+                  className={`flex items-start gap-3 rounded-xl border p-4 text-left transition ${mode === id ? "border-brand-500/60 bg-brand-500/10" : "border-line bg-surface-2 hover:border-line-strong"}`}
+                >
+                  <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-lg ${mode === id ? "bg-brand-500/20 text-brand-200" : "bg-surface-3 text-subtle"}`}><Icon name={icon} className="h-4 w-4" /></span>
+                  <span>
+                    <span className="block text-sm font-semibold text-fg">{label}</span>
+                    <span className="mt-0.5 block text-xs text-muted">{hint}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              <label className="block text-sm font-medium text-fg-2">
+                {t.target}
+                <input name="target" type="number" min={1} max={50} defaultValue={10} required className="input mt-1.5 py-2" />
+              </label>
+              <label className="block text-sm font-medium text-fg-2">
+                {t.margin}
+                <input name="minMarginPct" type="number" min={minMargin} max={90} defaultValue={minMargin} required className="input mt-1.5 py-2" />
+              </label>
+              <label className="block text-sm font-medium text-fg-2">
+                {t.market}
+                <select name="marketId" defaultValue={defaultMarket} className="input mt-1.5 py-2">
+                  {marketIds.map((id) => <option key={id} value={id}>{markets[id]}</option>)}
+                </select>
+              </label>
+            </div>
+            <p className="-mt-2 text-xs text-subtle">{fmt(t.marginHint, { min: minMargin })}</p>
+
+            <fieldset>
+              <legend className="text-sm font-medium text-fg-2">{t.priceRange}</legend>
+              <div className="mt-1.5 flex items-center gap-2">
+                <input name="priceMin" type="number" min={0} step="0.01" placeholder={t.priceMin} aria-label={t.priceMin} className="input py-2" />
+                <span className="text-subtle">–</span>
+                <input name="priceMax" type="number" min={0} step="0.01" placeholder={t.priceMax} aria-label={t.priceMax} className="input py-2" />
+              </div>
+            </fieldset>
+
+            <label className="block text-sm font-medium text-fg-2">
+              {mode === "CATALOG" ? t.themes : t.keywords}
+              <textarea
+                key={mode}
+                name="seeds"
+                rows={4}
+                required={mode === "KEYWORDS"}
+                placeholder={mode === "CATALOG" ? t.themesPlaceholder : t.keywordsPlaceholder}
+                className="input mt-1.5 py-2 font-normal"
+              />
+              <span className="mt-1.5 block text-xs font-normal text-subtle">{mode === "CATALOG" ? t.themesHint : t.keywordsHint}</span>
+            </label>
+
+            {/* Mise en vente automatique */}
+            <div className="rounded-xl border border-line bg-surface-2 p-4">
+              <label className="flex cursor-pointer items-start gap-3">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={autoList}
+                  onClick={() => setAutoList((v) => !v)}
+                  disabled={accounts.length === 0}
+                  className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full transition disabled:opacity-40 ${autoList ? "bg-brand-500" : "bg-surface-3 ring-1 ring-line-strong"}`}
+                >
+                  <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition ${autoList ? "left-[22px]" : "left-0.5"}`} />
+                </button>
+                <span>
+                  <span className="block text-sm font-semibold text-fg">{t.autoList}</span>
+                  <span className="mt-0.5 block text-xs text-muted">{accounts.length ? t.autoListHint : errors.EBAY_NOT_CONNECTED}</span>
+                </span>
+              </label>
+              {autoList && accounts.length > 1 && (
+                <label className="mt-3 block text-sm font-medium text-fg-2">
+                  {t.account}
+                  <select name="ebayAccountId" className="input mt-1.5 py-2">
+                    {accounts.map((a) => <option key={a.id} value={a.id}>{a.label}</option>)}
+                  </select>
+                </label>
+              )}
+            </div>
+
+            {error && <Notice tone="red">{error}</Notice>}
+            <button disabled={starting || !cjConnected} className="btn-primary w-full sm:w-auto">
+              <Icon name="zap" className="h-4 w-4" />
+              {starting ? t.launching : t.launch}
+            </button>
+          </form>
+
+          {/* Explication */}
+          <aside className="card space-y-4">
+            <h2 className="font-semibold text-fg">{t.howTitle}</h2>
+            <ol className="space-y-3">
+              {[t.how1, t.how2, t.how3, t.how4].map((s, i) => (
+                <li key={i} className="flex gap-3 text-sm text-muted">
+                  <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-500/15 text-xs font-semibold text-brand-200">{i + 1}</span>
+                  {s}
+                </li>
+              ))}
+            </ol>
+            <p className="flex items-start gap-2 rounded-lg bg-emerald-500/10 p-3 text-xs text-emerald-200">
+              <Icon name="shield" className="mt-0.5 h-4 w-4 shrink-0" />
+              {t.compliance}
+            </p>
+          </aside>
+        </div>
+      )}
+
+      {run && (
+        <>
+          {/* Progression */}
+          <section className="card relative overflow-hidden">
+            {running && <div className="pointer-events-none absolute -top-20 right-10 h-40 w-72 rounded-full bg-brand-500/15 blur-3xl" aria-hidden="true" />}
+            <div className="relative flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <span className={`grid h-10 w-10 place-items-center rounded-xl ${running ? "bg-brand-500/15 text-brand-200" : run.status === "DONE" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"}`}>
+                  {running ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" /> : <Icon name={run.status === "DONE" ? "check" : "pause"} className="h-5 w-5" />}
+                </span>
+                <div>
+                  <p className="font-semibold text-fg">{t[`status${run.status}` as "statusRUNNING"]}</p>
+                  <p className="text-xs text-subtle">{markets[run.marketId]} · {run.mode === "CATALOG" ? t.modeCatalog : t.modeKeywords}</p>
+                </div>
+              </div>
+              {running && <button onClick={stop} className="btn-secondary px-4 py-2 text-sm">{t.stop}</button>}
+            </div>
+            <div className="relative mt-5">
+              <div className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+                <span className="font-semibold text-fg">{fmt(t.progress, { found: run.found, target: run.target })}</span>
+                <span className="text-muted">
+                  {fmt(t.scanned, { scanned: run.scanned })}
+                  {run.listed > 0 && <> · <span className="text-emerald-300">{fmt(t.listedCount, { n: run.listed })}</span></>}
+                </span>
+              </div>
+              <div className="mt-2 h-2 overflow-hidden rounded-full bg-surface-3">
+                <div className="h-full rounded-full bg-gradient-to-r from-brand-500 to-fuchsia-500 transition-all duration-700" style={{ width: `${Math.min(100, (run.found / Math.max(1, run.target)) * 100)}%` }} />
+              </div>
+              {running && <p className="mt-3 text-xs text-subtle">{t.background}</p>}
+              {run.error && run.status !== "FAILED" && <p className="mt-3 text-xs text-amber-300">{fmt(t.autoListStopped, { reason: fmt(errorMessage(errors, run.error), { detail: "" }) })}</p>}
+              {run.status === "FAILED" && <p className="mt-3 text-xs text-red-300">{errorMessage(errors, run.error)}</p>}
+            </div>
+          </section>
+
+          {/* Résultats */}
+          <section className="space-y-4">
+            <div className="inline-flex rounded-xl border border-line bg-surface p-1 text-sm">
+              {([["good", t.tabProfitable, good.length], ["bad", t.tabRejected, bad.length]] as const).map(([id, label, n]) => (
+                <button key={id} onClick={() => setTab(id)} className={`rounded-lg px-3 py-1.5 font-medium transition ${tab === id ? "bg-surface-3 text-fg" : "text-muted hover:text-fg"}`}>
+                  {label} <span className={`ml-1 tabular-nums ${tab === id ? "text-brand-300" : "text-subtle"}`}>{n}</span>
+                </button>
+              ))}
+            </div>
+
+            {tab === "good" &&
+              (good.length === 0 ? (
+                <p className="rounded-2xl border border-dashed border-line-strong bg-surface/50 p-10 text-center text-sm text-muted">{t.noResults}</p>
+              ) : (
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {good.map((c) => (
+                    <article key={c.id} className="card flex min-w-0 flex-col p-0">
+                      <div className="flex gap-4 p-5">
+                        {c.image ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={c.image} alt="" className="h-20 w-20 shrink-0 rounded-xl bg-white object-contain" loading="lazy" />
+                        ) : (
+                          <span className="grid h-20 w-20 shrink-0 place-items-center rounded-xl bg-surface-2 text-subtle"><Icon name="box" /></span>
+                        )}
+                        <div className="min-w-0">
+                          <p className="line-clamp-2 text-sm font-medium text-fg">{c.title ?? c.keyword}</p>
+                          <p className="mt-1 truncate text-xs text-subtle">{fmt(t.search, { keyword: c.keyword })}</p>
+                          <p className="mt-2 text-xl font-semibold text-emerald-300 tabular-nums">
+                            +{money(c.profit)} <span className="text-sm text-muted">· {c.marginPct ?? "—"} %</span>
+                          </p>
+                        </div>
+                      </div>
+                      <dl className="grid grid-cols-2 gap-px border-y border-line bg-line text-xs">
+                        {([[t.colMarket, money(c.marketPrice)], [t.colCost, money(c.cost)], [t.colSold, c.unitsSold ?? "—"], [t.colDelivery, c.deliveryDaysMax ? fmt(t.days, { days: c.deliveryDaysMax }) : "—"]] as const).map(([k, v]) => (
+                          <div key={k} className="bg-surface px-5 py-2.5">
+                            <dt className="text-subtle">{k}</dt>
+                            <dd className="mt-0.5 font-medium text-fg-2 tabular-nums">{v}</dd>
+                          </div>
+                        ))}
+                      </dl>
+                      <div className="mt-auto flex items-center justify-between gap-3 p-4">
+                        {c.status === "LISTED" ? (
+                          <>
+                            <span className="badge bg-emerald-500/15 text-emerald-300"><Icon name="check" className="h-3 w-3" strokeWidth={3} />{t.listed}</span>
+                            <Link href="/listings" className="text-sm font-medium text-brand-300 hover:text-brand-200">{t.viewListings}</Link>
+                          </>
+                        ) : (
+                          <>
+                            {c.reason ? <span className="line-clamp-2 text-xs text-amber-300">{reasonText(c)}</span> : <span />}
+                            <button onClick={() => setEditing(c)} disabled={!c.productId || !c.supplier} className="btn-primary shrink-0 px-4 py-2 text-sm">{t.create}</button>
+                          </>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ))}
+
+            {tab === "bad" && bad.length > 0 && (
+              <div className="overflow-hidden rounded-2xl border border-line bg-surface">
+                <ul className="divide-y divide-line">
+                  {bad.map((c) => (
+                    <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm">
+                      <span className="min-w-0 flex-1 truncate text-fg-2" title={c.title ?? c.keyword}>{c.title ?? c.keyword}</span>
+                      <span className="flex items-center gap-3">
+                        {c.marginPct !== null && <span className="text-xs text-subtle tabular-nums">{c.marginPct} %</span>}
+                        <span className="badge bg-surface-3 text-muted">{reasonText(c)}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </section>
+        </>
+      )}
+
+      {editing && editing.productId && editing.supplier && run && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/70 p-4 backdrop-blur-sm sm:p-8" role="dialog" aria-modal="true">
+          <div className="mx-auto max-w-4xl">
+            <ListingEditor
+              t={tl}
+              errors={errors}
+              markets={markets}
+              accounts={accounts}
+              hasGpsr={hasGpsr}
+              keyword={editing.keyword}
+              marketId={run.marketId}
+              supplierRef={{ supplier: editing.supplier, productId: editing.productId, variantId: editing.variantId ?? undefined }}
+              onClose={() => setEditing(null)}
+            />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
