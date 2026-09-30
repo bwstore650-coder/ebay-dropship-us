@@ -24,19 +24,30 @@ async function throttle(key: string) {
   if (next > now) await new Promise((r) => setTimeout(r, next - now));
 }
 
+/** Réponse « trop de requêtes » : un autre traitement utilise le même compte CJ au même moment. */
+const isRateLimited = (status: number, message: string | undefined) => status === 429 || /too many requests|qps limit/i.test(message ?? "");
+export const CJ_RATE_RETRIES = 3;
+
 async function cjFetch<T>(path: string, init: RequestInit & { token?: string } = {}): Promise<T> {
-  await throttle(init.token ?? "public");
-  const res = await fetch(`${BASE}${path}`, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init.token ? { "CJ-Access-Token": init.token } : {}),
-      ...init.headers,
-    },
-  });
-  const json = (await res.json()) as CjResponse<T>;
-  if (!res.ok || !(json.result ?? json.success)) throw new Error(`CJ ${path} : ${json.message ?? res.status}`);
-  return json.data;
+  for (let attempt = 0; ; attempt++) {
+    await throttle(init.token ?? "public");
+    const res = await fetch(`${BASE}${path}`, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(init.token ? { "CJ-Access-Token": init.token } : {}),
+        ...init.headers,
+      },
+    });
+    const json = (await res.json().catch(() => ({}))) as Partial<CjResponse<T>>;
+    if (res.ok && (json.result ?? json.success)) return json.data as T;
+    // Limite d'un appel par seconde atteinte : on patiente un peu plus à chaque essai.
+    if (attempt < CJ_RATE_RETRIES && isRateLimited(res.status, json.message)) {
+      await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+      continue;
+    }
+    throw new Error(`CJ ${path} : ${json.message ?? res.status}`);
+  }
 }
 
 export interface CjTokens {

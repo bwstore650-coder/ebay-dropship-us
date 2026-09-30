@@ -76,3 +76,20 @@ describe("fiche produit CJ : stock par pays", () => {
     expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("limite CJ d'un appel par seconde", () => {
+  it("réessaie après « Too Many Requests », puis abandonne", async () => {
+    let n = 0;
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      n++;
+      if (n === 1) return json({ code: 1600200, result: false, message: "Too Many Requests, QPS limit is 1 time/1second", data: null });
+      return json({ code: 200, result: true, message: "Success", data: { pid: "P3", productNameEn: "X", sellPrice: 1, variants: [] } });
+    }));
+    expect((await getProduct("T3", "P3")).pid).toBe("P3");
+    expect(n).toBe(2);
+
+    vi.stubGlobal("fetch", vi.fn(async () => json({ code: 1600200, result: false, message: "Too Many Requests", data: null })));
+    await expect(getProduct("T4", "P4")).rejects.toThrow(/Too Many Requests/);
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(4);
+  }, 30000);
+});
