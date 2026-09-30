@@ -86,6 +86,8 @@ async function api<T>(token: string, path: string, init: RequestInit = {}, marke
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
       "Content-Language": m.language,
+      // Sinon fetch (Node) envoie « Accept-Language: * », que l'API Inventory d'eBay refuse.
+      "Accept-Language": m.language,
       "X-EBAY-C-MARKETPLACE-ID": m.id,
       ...init.headers,
     },
@@ -780,6 +782,7 @@ async function postOrder<T>(token: string, path: string, init: RequestInit = {},
       Authorization: `IAF ${token}`,
       "Content-Type": "application/json",
       Accept: "application/json",
+      "Accept-Language": marketplace(marketId).language,
       "X-EBAY-C-MARKETPLACE-ID": marketplace(marketId).id,
       ...init.headers,
     },
@@ -857,7 +860,7 @@ export async function ensureCampaign(token: string, marketId: MarketplaceId, nam
   if (live) return live.campaignId;
   const res = await fetch(`${host().api}/sell/marketing/v1/ad_campaign`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "X-EBAY-C-MARKETPLACE-ID": m.id },
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "Accept-Language": m.language, "X-EBAY-C-MARKETPLACE-ID": m.id },
     body: JSON.stringify({
       campaignName: name,
       marketplaceId: m.id,

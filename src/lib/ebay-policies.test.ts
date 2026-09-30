@@ -69,3 +69,20 @@ describe("création des politiques manquantes", () => {
     expect(posts[1].body).toMatchObject({ name: DEFAULT_POLICY_NAMES.payment, immediatePay: true, marketplaceId: "EBAY_GB" });
   });
 });
+
+describe("en-têtes envoyés à eBay", () => {
+  it("langue explicite (fetch enverrait « * », refusé par l'API Inventory)", async () => {
+    vi.stubEnv("DATABASE_URL", "postgresql://x");
+    vi.stubEnv("SESSION_SECRET", "x".repeat(32));
+    vi.stubEnv("ENCRYPTION_KEY", "0".repeat(64));
+    const seen: Record<string, string>[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      seen.push(init?.headers as Record<string, string>);
+      if (url.endsWith("/ws/api.dll")) return new Response(XML, { status: 200 });
+      return new Response(JSON.stringify({}), { status: 201 });
+    }));
+    await createDefaultPolicies("TOKEN", "EBAY_DE", { fulfillment: false, payment: true, returns: false });
+    expect(seen[0]["Accept-Language"]).toBe("de-DE");
+    expect(seen[0]["Content-Language"]).toBe("de-DE");
+  });
+});
