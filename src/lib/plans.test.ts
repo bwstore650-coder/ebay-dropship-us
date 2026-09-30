@@ -10,14 +10,14 @@ const table: PriceTable = {
 };
 
 describe("formules", () => {
-  it("prix annuels à −25 %", () => {
-    expect(PLANS.map((p) => p.yearlyUsd)).toEqual([261, 531, 891, 2241]);
+  it("prix annuels à −20 %", () => {
+    expect(PLANS.map((p) => p.yearlyUsd)).toEqual([374, 758, 1430, 2870]);
   });
   it("comptes eBay par formule", () => {
     expect(maxEbayAccounts("NONE")).toBe(1);
-    expect(maxEbayAccounts("PRO")).toBe(1);
-    expect(maxEbayAccounts("BUSINESS")).toBe(3);
-    expect(maxEbayAccounts("AGENCY")).toBe(10);
+    expect(maxEbayAccounts("PRO")).toBe(2);
+    expect(maxEbayAccounts("BUSINESS")).toBe(5);
+    expect(maxEbayAccounts("AGENCY")).toBe(15);
   });
   it("retrouve la formule depuis un prix mensuel ou annuel", () => {
     expect(planForPrice("p_a_y", table)).toBe("AGENCY");

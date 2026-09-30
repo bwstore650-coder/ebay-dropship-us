@@ -1,16 +1,16 @@
 import type { landingEn } from "./en";
 
 export const landingFr: typeof landingEn = {
-  nav: { features: "Fonctionnalités", how: "Comment ça marche", pricing: "Tarifs", faq: "FAQ", login: "Se connecter", cta: "Essai gratuit" },
+  nav: { features: "Fonctionnalités", how: "Comment ça marche", pricing: "Tarifs", faq: "FAQ", login: "Se connecter", cta: "Commencer l'essai" },
   hero: {
     badge: "Conçu pour les règles eBay 2026 sur le dropshipping",
     title1: "Arrête de mettre en vente",
     title2: "des produits qui te font perdre de l'argent.",
     subtitle:
       "{brand} vérifie chaque produit face à la vraie demande eBay et au coût livré chez AliExpress et CJ, puis ne te laisse lister que ceux qui gardent 30 % de marge après les frais. Il les met en vente et passe les commandes fournisseur pour toi.",
-    cta: "Commencer l'essai gratuit de 7 jours",
+    cta: "Commencer l'essai de 3 jours à 0,99 $",
     secondary: "Essayer le calculateur de profit gratuit",
-    reassurance: "Compte gratuit · Essai de 7 jours · Annulable à tout moment · Jamais de produits Amazon ou Walmart",
+    reassurance: "Compte gratuit · Essai de 3 jours à 0,99 $ · Annulable à tout moment · Jamais de produits Amazon ou Walmart",
   },
   mock: {
     title: "Analyse du produit",
@@ -74,11 +74,11 @@ export const landingFr: typeof landingEn = {
     ],
   },
   pricing: {
-    title: "Des tarifs simples. Gratuit pendant 7 jours.",
-    subtitle: "Paie à l'année et économise 25 %. Annulable à tout moment depuis ton compte.",
+    title: "Des tarifs simples. 3 jours d'essai pour 0,99 $.",
+    subtitle: "Paie à l'année et économise 20 %. Annulable à tout moment depuis ton compte.",
     popular: "Le plus choisi",
-    taglines: { STARTER: "Pour tester vos premiers produits", PRO: "Pour les vendeurs en croissance", BUSINESS: "Plusieurs boutiques, sans limite", AGENCY: "Pour les agences et les équipes" },
-    cta: "Commencer l'essai gratuit",
+    taglines: { STARTER: "Pour tester vos premiers produits", PRO: "Pour les vendeurs en croissance", BUSINESS: "Plusieurs boutiques, gros volume", AGENCY: "Illimité, pour les agences et les équipes" },
+    cta: "Commencer l'essai",
   },
   faq: {
     title: "Questions fréquentes",
@@ -87,7 +87,7 @@ export const landingFr: typeof landingEn = {
       { q: "Quels fournisseurs sont pris en charge ?", a: "CJDropshipping et AliExpress, avec des produits stockés en entrepôt local pour une livraison rapide. L'outil choisit toujours le coût livré le plus bas qui respecte ta marge." },
       { q: "D'où viennent vos chiffres de prix ?", a: "De l'API officielle d'eBay : prix des annonces actives neuves, pondérés par le nombre estimé d'unités vendues par chacune. Nous ne faisons pas de scraping d'eBay." },
       { q: "Faut-il une entreprise ?", a: "Il te faut un compte vendeur eBay et un compte fournisseur. En Europe, ce sont les frais eBay des vendeurs professionnels qui s'appliquent, et une entreprise enregistrée est généralement nécessaire." },
-      { q: "Puis-je annuler à tout moment ?", a: "Oui. Tu gères ton abonnement toi-même depuis ton compte, en deux clics. L'essai de 7 jours est gratuit." },
+      { q: "Puis-je annuler à tout moment ?", a: "Oui. Tu gères ton abonnement toi-même depuis ton compte, en deux clics. L'essai de 3 jours coûte 0,99 $." },
       { q: "Le profit est-il garanti ?", a: "Aucun outil ne peut garantir un profit. {brand} te montre les vrais chiffres avant de lister et retire les produits qui ne sont plus rentables, pour que tu décides sur des faits." },
     ],
   },
@@ -100,7 +100,7 @@ export const landingFr: typeof landingEn = {
   finalCta: {
     title: "Ton prochain produit rentable est à une recherche.",
     text: "Inscris-toi maintenant et obtiens ta première analyse en moins de cinq minutes.",
-    cta: "Commencer l'essai gratuit de 7 jours",
+    cta: "Commencer l'essai de 3 jours à 0,99 $",
   },
   footer: {
     product: "Produit",

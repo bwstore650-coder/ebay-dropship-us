@@ -1,16 +1,16 @@
 import type { landingEn } from "./en";
 
 export const landingDe: typeof landingEn = {
-  nav: { features: "Funktionen", how: "So funktioniert's", pricing: "Preise", faq: "FAQ", login: "Anmelden", cta: "Kostenlos testen" },
+  nav: { features: "Funktionen", how: "So funktioniert's", pricing: "Preise", faq: "FAQ", login: "Anmelden", cta: "Jetzt testen" },
   hero: {
     badge: "Entwickelt für die eBay-Dropshipping-Regeln 2026",
     title1: "Schluss mit Produkten,",
     title2: "die Geld verlieren.",
     subtitle:
       "{brand} prüft jedes Produkt anhand der echten eBay-Nachfrage und der Lieferkosten bei AliExpress und CJ – und lässt dich nur Produkte mit über 30 % Marge nach Gebühren einstellen. Das Einstellen und die Lieferantenbestellungen übernimmt das Tool für dich.",
-    cta: "7 Tage kostenlos testen",
+    cta: "3 Tage für 0,99 $ testen",
     secondary: "Kostenlosen Gewinnrechner ausprobieren",
-    reassurance: "Kostenloses Konto · 7 Tage gratis testen · Jederzeit kündbar · Nie Ware von Amazon oder Walmart",
+    reassurance: "Kostenloses Konto · 3 Tage Test für 0,99 $ · Jederzeit kündbar · Nie Ware von Amazon oder Walmart",
   },
   mock: {
     title: "Produktanalyse",
@@ -74,11 +74,11 @@ export const landingDe: typeof landingEn = {
     ],
   },
   pricing: {
-    title: "Einfache Preise. 7 Tage kostenlos starten.",
-    subtitle: "Jährlich zahlen und 25 % sparen. Jederzeit in deinem Konto kündbar.",
+    title: "Einfache Preise. 3 Tage für 0,99 $ testen.",
+    subtitle: "Jährlich zahlen und 20 % sparen. Jederzeit in deinem Konto kündbar.",
     popular: "Am beliebtesten",
-    taglines: { STARTER: "Erste Produkte testen", PRO: "Für wachsende Verkäufer", BUSINESS: "Mehrere Shops, ohne Limits", AGENCY: "Für Agenturen und Teams" },
-    cta: "Kostenlos testen",
+    taglines: { STARTER: "Erste Produkte testen", PRO: "Für wachsende Verkäufer", BUSINESS: "Mehrere Shops, hohes Volumen", AGENCY: "Unbegrenzt, für Agenturen und Teams" },
+    cta: "Jetzt testen",
   },
   faq: {
     title: "Häufige Fragen",
@@ -87,7 +87,7 @@ export const landingDe: typeof landingEn = {
       { q: "Welche Lieferanten werden unterstützt?", a: "CJDropshipping und AliExpress, mit Produkten aus lokalen Lagern für schnelle Lieferung. Das Tool wählt immer die günstigsten Lieferkosten, die deine Marge noch einhalten." },
       { q: "Woher stammen die Preisangaben?", a: "Aus der offiziellen eBay-API: Preise aktiver Neuware-Angebote, gewichtet nach der geschätzten Zahl verkaufter Einheiten. Wir scrapen eBay nicht." },
       { q: "Brauche ich ein angemeldetes Gewerbe?", a: "Du brauchst ein eBay-Verkäuferkonto und ein Lieferantenkonto. In Europa gelten die Gebühren für gewerbliche Verkäufer, und ein Gewerbe ist in der Regel erforderlich." },
-      { q: "Kann ich jederzeit kündigen?", a: "Ja. Du verwaltest dein Abo selbst in deinem Konto, mit zwei Klicks. Die 7-tägige Testphase ist kostenlos." },
+      { q: "Kann ich jederzeit kündigen?", a: "Ja. Du verwaltest dein Abo selbst in deinem Konto, mit zwei Klicks. Die 3-tägige Testphase kostet 0,99 $." },
       { q: "Ist Gewinn garantiert?", a: "Kein Tool kann Gewinn garantieren. {brand} zeigt dir die echten Zahlen vor dem Einstellen und entfernt Produkte, die nicht mehr profitabel sind – so entscheidest du auf Basis von Fakten." },
     ],
   },
@@ -100,7 +100,7 @@ export const landingDe: typeof landingEn = {
   finalCta: {
     title: "Dein nächstes profitables Produkt ist nur eine Suche entfernt.",
     text: "Jetzt registrieren und die erste Analyse in unter fünf Minuten erhalten.",
-    cta: "7 Tage kostenlos testen",
+    cta: "3 Tage für 0,99 $ testen",
   },
   footer: {
     product: "Produkt",

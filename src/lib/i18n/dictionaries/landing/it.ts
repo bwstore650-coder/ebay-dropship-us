@@ -1,16 +1,16 @@
 import type { landingEn } from "./en";
 
 export const landingIt: typeof landingEn = {
-  nav: { features: "Funzionalità", how: "Come funziona", pricing: "Prezzi", faq: "FAQ", login: "Accedi", cta: "Prova gratis" },
+  nav: { features: "Funzionalità", how: "Come funziona", pricing: "Prezzi", faq: "FAQ", login: "Accedi", cta: "Inizia la prova" },
   hero: {
     badge: "Pensato per le regole eBay 2026 sul dropshipping",
     title1: "Smetti di mettere in vendita prodotti",
     title2: "che ti fanno perdere soldi.",
     subtitle:
       "{brand} confronta ogni prodotto con la domanda reale su eBay e con il costo consegnato su AliExpress e CJ, e ti lascia pubblicare solo quelli con oltre il 30% di margine dopo le commissioni. Pubblica le inserzioni ed effettua gli ordini ai fornitori al posto tuo.",
-    cta: "Inizia la prova gratuita di 7 giorni",
+    cta: "Inizia la prova di 3 giorni a 0,99 $",
     secondary: "Prova il calcolatore di profitto gratuito",
-    reassurance: "Account gratuito · 7 giorni di prova gratis · Disdici quando vuoi · Mai prodotti da Amazon o Walmart",
+    reassurance: "Account gratuito · Prova di 3 giorni a 0,99 $ · Disdici quando vuoi · Mai prodotti da Amazon o Walmart",
   },
   mock: {
     title: "Analisi del prodotto",
@@ -74,11 +74,11 @@ export const landingIt: typeof landingEn = {
     ],
   },
   pricing: {
-    title: "Prezzi semplici. Inizia gratis per 7 giorni.",
-    subtitle: "Paga annualmente e risparmia il 25%. Disdici quando vuoi dal tuo account.",
+    title: "Prezzi semplici. Provalo 3 giorni a 0,99 $.",
+    subtitle: "Paga annualmente e risparmia il 20%. Disdici quando vuoi dal tuo account.",
     popular: "Il più scelto",
-    taglines: { STARTER: "Testa i tuoi primi prodotti", PRO: "Per venditori in crescita", BUSINESS: "Più negozi, senza limiti", AGENCY: "Per agenzie e team" },
-    cta: "Prova gratis",
+    taglines: { STARTER: "Testa i tuoi primi prodotti", PRO: "Per venditori in crescita", BUSINESS: "Più negozi, alto volume", AGENCY: "Illimitato, per agenzie e team" },
+    cta: "Inizia la prova",
   },
   faq: {
     title: "Domande frequenti",
@@ -87,7 +87,7 @@ export const landingIt: typeof landingEn = {
       { q: "Quali fornitori supportate?", a: "CJDropshipping e AliExpress, con prodotti in magazzini locali per una consegna rapida. Lo strumento sceglie sempre il costo consegnato più basso che rispetta il tuo margine." },
       { q: "Da dove vengono i prezzi?", a: "Dall'API ufficiale di eBay: prezzi delle inserzioni attive di prodotti nuovi, ponderati per il numero stimato di unità vendute. Non facciamo scraping di eBay." },
       { q: "Serve una partita IVA?", a: "Ti servono un account venditore eBay e un account fornitore. In Europa si applicano le commissioni per venditori professionali e di solito è richiesta un'attività registrata." },
-      { q: "Posso disdire quando voglio?", a: "Sì. Gestisci tu l'abbonamento dal tuo account, in due clic. La prova di 7 giorni è gratuita." },
+      { q: "Posso disdire quando voglio?", a: "Sì. Gestisci tu l'abbonamento dal tuo account, in due clic. La prova di 3 giorni costa 0,99 $." },
       { q: "Il profitto è garantito?", a: "Nessuno strumento può garantire un profitto. {brand} ti mostra i numeri reali prima di pubblicare e rimuove i prodotti che smettono di essere redditizi, così decidi sulla base dei fatti." },
     ],
   },
@@ -100,7 +100,7 @@ export const landingIt: typeof landingEn = {
   finalCta: {
     title: "Il tuo prossimo prodotto redditizio è a una ricerca di distanza.",
     text: "Iscriviti ora e ottieni la tua prima analisi in meno di cinque minuti.",
-    cta: "Inizia la prova gratuita di 7 giorni",
+    cta: "Inizia la prova di 3 giorni a 0,99 $",
   },
   footer: {
     product: "Prodotto",

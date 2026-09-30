@@ -3,7 +3,7 @@ import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { env } from "@/lib/env";
-import { TRIAL_DAYS } from "@/lib/plans";
+import { TRIAL_DAYS, TRIAL_FEE_CENTS } from "@/lib/plans";
 import { priceIdFor, stripe } from "@/lib/stripe";
 
 const body = z.object({
@@ -11,7 +11,7 @@ const body = z.object({
   interval: z.enum(["month", "year"]).default("month"),
 });
 
-/** Crée une session Stripe Checkout (abonnement avec essai gratuit). */
+/** Crée une session Stripe Checkout (abonnement, avec un essai de 3 jours à 0,99 $ pour un nouveau client). */
 export async function POST(req: Request) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
@@ -33,12 +33,18 @@ export async function POST(req: Request) {
     await db.user.update({ where: { id: user.id }, data: { stripeCustomerId: customerId } });
   }
 
+  // Un seul essai par client (jamais après un premier abonnement) : 0,99 $ payés tout de suite, puis la formule à la fin de l'essai.
+  const trial = !user.trialEndsAt && !user.stripeSubscriptionId;
   const session = await stripe().checkout.sessions.create({
     mode: "subscription",
     customer: customerId,
-    line_items: [{ price: priceId, quantity: 1 }],
-    // Un seul essai gratuit par client (jamais après un premier abonnement).
-    subscription_data: !user.trialEndsAt && !user.stripeSubscriptionId ? { trial_period_days: TRIAL_DAYS } : undefined,
+    line_items: [
+      { price: priceId, quantity: 1 },
+      ...(trial
+        ? [{ quantity: 1, price_data: { currency: "usd", unit_amount: TRIAL_FEE_CENTS, product_data: { name: `Sellvela – ${TRIAL_DAYS}-day trial` } } }]
+        : []),
+    ],
+    subscription_data: trial ? { trial_period_days: TRIAL_DAYS } : undefined,
     allow_promotion_codes: true,
     success_url: `${env().APP_URL}/dashboard?billing=success`,
     cancel_url: `${env().APP_URL}/billing?billing=cancel`,

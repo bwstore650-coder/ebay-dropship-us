@@ -1,14 +1,14 @@
 export const landingEn = {
-  nav: { features: "Features", how: "How it works", pricing: "Pricing", faq: "FAQ", login: "Log in", cta: "Start free trial" },
+  nav: { features: "Features", how: "How it works", pricing: "Pricing", faq: "FAQ", login: "Log in", cta: "Start trial" },
   hero: {
     badge: "Built for eBay's 2026 dropshipping rules",
     title1: "Stop listing products",
     title2: "that lose money.",
     subtitle:
       "{brand} checks every product against real eBay demand and the delivered cost at AliExpress and CJ, then only lets you list the ones with a 30%+ margin after fees. It lists them and places the supplier orders for you.",
-    cta: "Start your 7-day free trial",
+    cta: "Start your 3-day trial for $0.99",
     secondary: "Try the free profit calculator",
-    reassurance: "Free account · 7-day free trial · Cancel anytime · Never sources from Amazon or Walmart",
+    reassurance: "Free account · 3-day trial for $0.99 · Cancel anytime · Never sources from Amazon or Walmart",
   },
   mock: {
     title: "Product analysis",
@@ -72,11 +72,11 @@ export const landingEn = {
     ],
   },
   pricing: {
-    title: "Simple pricing. Start free for 7 days.",
-    subtitle: "Pay yearly and save 25%. Cancel anytime from your account.",
+    title: "Simple pricing. Try it 3 days for $0.99.",
+    subtitle: "Pay yearly and save 20%. Cancel anytime from your account.",
     popular: "Most popular",
-    taglines: { STARTER: "Test your first products", PRO: "For growing sellers", BUSINESS: "Multiple stores, no limits", AGENCY: "For agencies and teams" },
-    cta: "Start free trial",
+    taglines: { STARTER: "Test your first products", PRO: "For growing sellers", BUSINESS: "Multiple stores, high volume", AGENCY: "Unlimited, for agencies and teams" },
+    cta: "Start trial",
   },
   faq: {
     title: "Frequently asked questions",
@@ -85,7 +85,7 @@ export const landingEn = {
       { q: "Which suppliers do you support?", a: "CJDropshipping and AliExpress, using products stocked in local warehouses for fast delivery. The tool always picks the cheapest delivered cost that still meets your margin." },
       { q: "Where do your price numbers come from?", a: "From eBay's official API: prices of new active listings, weighted by the estimated number of units each one has sold. We don't scrape eBay." },
       { q: "Do I need a registered business?", a: "You need an eBay seller account and a supplier account. In Europe, eBay's business-seller fees apply, and a registered business is usually required." },
-      { q: "Can I cancel anytime?", a: "Yes. You manage your subscription yourself from your account, in two clicks. The 7-day trial is free." },
+      { q: "Can I cancel anytime?", a: "Yes. You manage your subscription yourself from your account, in two clicks. The 3-day trial costs $0.99." },
       { q: "Is profit guaranteed?", a: "No tool can guarantee profit. {brand} shows you the real numbers before you list and removes products that stop being profitable, so you can decide with facts." },
     ],
   },
@@ -98,7 +98,7 @@ export const landingEn = {
   finalCta: {
     title: "Your next profitable product is one search away.",
     text: "Join now and get your first analysis in under five minutes.",
-    cta: "Start your 7-day free trial",
+    cta: "Start your 3-day trial for $0.99",
   },
   footer: {
     product: "Product",

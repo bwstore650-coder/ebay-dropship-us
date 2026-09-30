@@ -14,14 +14,14 @@ describe("admin", () => {
   });
   it("MRR : mensuel, annuel / 12, essais et sans formule exclus", () => {
     const mrr = mrrCents([
-      { plan: "PRO", billingInterval: "month", trialEndsAt: null },                       // 59 $
-      { plan: "AGENCY", billingInterval: "year", trialEndsAt: null },                     // 2241 / 12 = 186,75 $
+      { plan: "PRO", billingInterval: "month", trialEndsAt: null },                       // 79 $
+      { plan: "AGENCY", billingInterval: "year", trialEndsAt: null },                     // 2870 / 12 = 239,17 $
       { plan: "STARTER", billingInterval: "month", trialEndsAt: new Date("2026-10-01") }, // essai : exclu
       { plan: "NONE", billingInterval: null, trialEndsAt: null },                         // exclu
       { plan: "AGENCY", billingInterval: "comp", trialEndsAt: null },                     // accès admin offert : exclu
-      { plan: "BUSINESS", billingInterval: "month", trialEndsAt: new Date("2026-09-01") },// essai fini : 99 $
+      { plan: "BUSINESS", billingInterval: "month", trialEndsAt: new Date("2026-09-01") },// essai fini : 149 $
     ], now);
-    expect(mrr).toBe(5900 + 18675 + 9900);
+    expect(mrr).toBe(7900 + 23917 + 14900);
   });
   it("inscriptions par jour", () => {
     const c = dailyCounts([new Date("2026-09-27T01:00:00Z"), new Date("2026-09-27T20:00:00Z"), new Date("2026-09-25T10:00:00Z"), new Date("2026-08-01")], 3, now);

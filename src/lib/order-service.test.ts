@@ -68,6 +68,7 @@ vi.mock("@/lib/db", () => ({
 vi.mock("@/lib/crypto", () => ({ decrypt: (s: string) => s, encrypt: (s: string) => s }));
 
 import { importOrders, placeOrder, runForUser, syncTracking } from "./order-service";
+import { planInfo } from "./plans";
 
 type Call = { method: string; url: string; body: unknown };
 let calls: Call[] = [];
@@ -201,7 +202,7 @@ describe("commandes automatiques", { timeout: 60_000 }, () => {
 
   it("quota mensuel de la formule", async () => {
     await importOrders(user(), account);
-    for (let i = 0; i < 300; i++) mem.orders.push({ id: `X${i}`, userId: "U1", status: "SHIPPED", orderedAt: new Date() });
+    for (let i = 0; i < planInfo("PRO")!.autoOrdersPerMonth!; i++) mem.orders.push({ id: `X${i}`, userId: "U1", status: "SHIPPED", orderedAt: new Date() });
     const id = mem.orders.find((o) => o.ebayOrderId === "A-1")!.id as string;
     expect(await placeOrder(user(), id)).toBe("PLAN_LIMIT_ORDERS");
   });
