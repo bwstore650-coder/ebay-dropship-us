@@ -8,7 +8,7 @@ export const it: Dict = {
     description: "Trova, metti in vendita e ordina automaticamente prodotti con almeno il 30% di margine su eBay, senza rischiare il tuo account.",
   },
   common: {
-    appName: "ProfitLister",
+    appName: "Sellvela",
     loading: "…",
     perMonth: "/mese",
     perYear: "/anno",

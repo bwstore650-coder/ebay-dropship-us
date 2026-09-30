@@ -8,7 +8,7 @@ export const es: Dict = {
     description: "Encuentra, publica y pide automáticamente productos con al menos un 30 % de margen en eBay, sin poner en riesgo tu cuenta.",
   },
   common: {
-    appName: "ProfitLister",
+    appName: "Sellvela",
     loading: "…",
     perMonth: "/mes",
     perYear: "/año",

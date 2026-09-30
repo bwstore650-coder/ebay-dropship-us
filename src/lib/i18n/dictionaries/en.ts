@@ -7,7 +7,7 @@ export const en = {
     description: "Find, list and auto-order products with a 30%+ margin on eBay, without putting your account at risk.",
   },
   common: {
-    appName: "ProfitLister",
+    appName: "Sellvela",
     loading: "…",
     perMonth: "/mo",
     perYear: "/yr",

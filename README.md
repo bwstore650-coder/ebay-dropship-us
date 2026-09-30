@@ -78,7 +78,7 @@ Pour tout autre compte, /admin répond « page introuvable ».
 
 ## Marque
 
-Nom provisoire « ProfitLister » : changer `NEXT_PUBLIC_BRAND_NAME` et `NEXT_PUBLIC_SUPPORT_EMAIL` dans `.env`. Ne pas mettre « eBay » dans le nom (marque déposée).
+Nom : « Sellvela » (sellvela.com) : changer `NEXT_PUBLIC_BRAND_NAME` et `NEXT_PUBLIC_SUPPORT_EMAIL` dans `.env`. Ne pas mettre « eBay » dans le nom (marque déposée).
 
 ## Commandes automatiques
 

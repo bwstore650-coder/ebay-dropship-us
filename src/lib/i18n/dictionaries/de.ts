@@ -8,7 +8,7 @@ export const de: Dict = {
     description: "Finde, liste und bestelle automatisch Produkte mit mindestens 30 % Marge auf eBay, ohne dein Konto zu gefährden.",
   },
   common: {
-    appName: "ProfitLister",
+    appName: "Sellvela",
     loading: "…",
     perMonth: "/Monat",
     perYear: "/Jahr",
