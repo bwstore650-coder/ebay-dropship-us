@@ -31,6 +31,7 @@ const schema = z.object({
 
 let cached: z.infer<typeof schema> | null = null;
 export function env() {
-  if (!cached) cached = schema.parse(process.env);
+  // Espaces ou retours à la ligne collés par erreur avec une clé : on les retire (une clé n'en contient jamais).
+  if (!cached) cached = schema.parse(Object.fromEntries(Object.entries(process.env).map(([k, v]) => [k, typeof v === "string" ? v.trim() : v])));
   return cached;
 }
