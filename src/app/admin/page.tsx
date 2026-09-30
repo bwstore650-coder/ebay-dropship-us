@@ -31,8 +31,8 @@ export default async function AdminHome() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold">Vue d&apos;ensemble</h1>
-        <p className="text-sm text-slate-500">Chiffres en direct depuis la base (abonnements synchronisés par le webhook Stripe).</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-fg sm:text-[28px]">Vue d&apos;ensemble</h1>
+        <p className="text-sm text-muted">Chiffres en direct depuis la base (abonnements synchronisés par le webhook Stripe).</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -53,12 +53,12 @@ export default async function AdminHome() {
       <div className="grid gap-6 lg:grid-cols-2">
         <Card title="Clients par formule">
           <table className="w-full text-sm">
-            <thead className="text-left text-slate-500">
+            <thead className="text-left text-muted">
               <tr><th className="pb-2">Formule</th><th className="pb-2 text-right">Mensuel</th><th className="pb-2 text-right">Annuel</th></tr>
             </thead>
             <tbody>
               {byPlan.map((r) => (
-                <tr key={r.plan} className="border-t border-slate-100">
+                <tr key={r.plan} className="border-t border-line">
                   <td className="py-2 font-medium">{r.plan}</td>
                   <td className="py-2 text-right">{r.monthly}</td>
                   <td className="py-2 text-right">{r.yearly}</td>
@@ -67,12 +67,12 @@ export default async function AdminHome() {
             </tbody>
           </table>
         </Card>
-        <Card title="Emails par source" action={<a className="text-sm text-brand-600" href="/api/admin/leads">Exporter CSV</a>}>
+        <Card title="Emails par source" action={<a className="text-sm text-brand-400" href="/api/admin/leads">Exporter CSV</a>}>
           <table className="w-full text-sm">
             <tbody>
-              {leadsBySource.length === 0 && <tr><td className="text-slate-500">Aucun email pour l&apos;instant.</td></tr>}
+              {leadsBySource.length === 0 && <tr><td className="text-muted">Aucun email pour l&apos;instant.</td></tr>}
               {leadsBySource.map((l) => (
-                <tr key={l.source} className="border-t border-slate-100">
+                <tr key={l.source} className="border-t border-line">
                   <td className="py-2">{l.source}</td>
                   <td className="py-2 text-right font-medium">{l._count._all}</td>
                 </tr>

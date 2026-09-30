@@ -25,8 +25,8 @@ export default async function AdminAffiliates() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Affiliés</h1>
-        <p className="text-sm text-slate-500">
+        <h1 className="text-2xl font-semibold tracking-tight text-fg sm:text-[28px]">Affiliés</h1>
+        <p className="text-sm text-muted">
           Verse les commissions « à verser » par PayPal ou virement (minimum {money(MIN_PAYOUT_CENTS)}), puis clique sur « Marquer payé ».
         </p>
       </div>
@@ -34,7 +34,7 @@ export default async function AdminAffiliates() {
       <Card title={`${rows.length} affiliés`}>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[760px] text-sm">
-            <thead className="text-left text-slate-500">
+            <thead className="text-left text-muted">
               <tr>
                 <th className="pb-2">Affilié</th><th className="pb-2">Code</th><th className="pb-2 text-right">Inscrits</th>
                 <th className="pb-2 text-right">Payants</th><th className="pb-2 text-right">En garantie</th>
@@ -42,11 +42,11 @@ export default async function AdminAffiliates() {
               </tr>
             </thead>
             <tbody>
-              {rows.length === 0 && <tr><td colSpan={8} className="py-4 text-slate-500">Aucun affilié pour l&apos;instant.</td></tr>}
+              {rows.length === 0 && <tr><td colSpan={8} className="py-4 text-muted">Aucun affilié pour l&apos;instant.</td></tr>}
               {rows.map((a) => (
-                <tr key={a.id} className="border-t border-slate-100">
+                <tr key={a.id} className="border-t border-line">
                   <td className="py-2 font-medium">{a.email}</td>
-                  <td className="py-2 font-mono text-slate-500">{a.referralCode}</td>
+                  <td className="py-2 font-mono text-muted">{a.referralCode}</td>
                   <td className="py-2 text-right">{a._count.referrals}</td>
                   <td className="py-2 text-right">{a.referrals.length}</td>
                   <td className="py-2 text-right">{money(a.sum.pendingCents)}</td>
@@ -70,21 +70,21 @@ export default async function AdminAffiliates() {
       <Card title="Commissions ouvertes">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-sm">
-            <thead className="text-left text-slate-500">
+            <thead className="text-left text-muted">
               <tr><th className="pb-2">Affilié</th><th className="pb-2">Client</th><th className="pb-2 text-right">Montant</th><th className="pb-2">Disponible le</th><th className="pb-2" /></tr>
             </thead>
             <tbody>
-              {open.length === 0 && <tr><td colSpan={5} className="py-4 text-slate-500">Aucune commission ouverte.</td></tr>}
+              {open.length === 0 && <tr><td colSpan={5} className="py-4 text-muted">Aucune commission ouverte.</td></tr>}
               {open.map((c) => (
-                <tr key={c.id} className="border-t border-slate-100">
+                <tr key={c.id} className="border-t border-line">
                   <td className="py-2">{c.affiliate}</td>
-                  <td className="py-2 text-slate-500">{c.referredUser.email}</td>
+                  <td className="py-2 text-muted">{c.referredUser.email}</td>
                   <td className="py-2 text-right font-medium">{money(c.amountCents)}</td>
-                  <td className="py-2">{c.availableAt <= now ? <span className="text-green-700">Disponible</span> : c.availableAt.toLocaleDateString("fr-FR")}</td>
+                  <td className="py-2">{c.availableAt <= now ? <span className="text-green-300">Disponible</span> : c.availableAt.toLocaleDateString("fr-FR")}</td>
                   <td className="py-2 text-right">
                     <form action={voidCommission}>
                       <input type="hidden" name="commissionId" value={c.id} />
-                      <button className="text-xs text-red-600 hover:underline">Annuler (remboursement)</button>
+                      <button className="text-xs text-red-400 hover:underline">Annuler (remboursement)</button>
                     </form>
                   </td>
                 </tr>

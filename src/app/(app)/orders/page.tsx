@@ -6,18 +6,12 @@ import { getI18n } from "@/lib/i18n/server";
 import { marketplace } from "@/lib/marketplaces";
 import type { OrderLine } from "@/lib/orders";
 import { forceOrder, markHandled, syncNow } from "./actions";
+import { Icon } from "@/components/icons";
+import { Notice, PageHeader, StatusBadge } from "@/components/ui";
+import { ORDER_TONE } from "@/lib/status-tones";
 
 export const dynamic = "force-dynamic";
 
-const BADGE = {
-  PENDING: "bg-slate-100 text-slate-700",
-  ORDERING: "bg-sky-100 text-sky-800",
-  ORDERED: "bg-brand-100 text-brand-800",
-  SHIPPED: "bg-emerald-100 text-emerald-800",
-  NEEDS_REVIEW: "bg-amber-100 text-amber-800",
-  FAILED: "bg-red-100 text-red-700",
-  CANCELLED: "bg-slate-200 text-slate-600",
-} as const;
 
 export default async function OrdersPage() {
   const user = await requireUser();
@@ -30,22 +24,24 @@ export default async function OrdersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">{O.title}</h1>
-          <p className="mt-1 text-sm text-slate-600">{user.autoOrder ? O.introAuto : O.introManual}</p>
-        </div>
-        <form action={syncNow}>
-          <button className="btn-secondary px-4 py-2 text-sm">{O.sync}</button>
-        </form>
-      </div>
+      <PageHeader
+        title={O.title}
+        subtitle={user.autoOrder ? O.introAuto : O.introManual}
+        actions={
+          <form action={syncNow}>
+            <button className="btn-secondary px-4 py-2 text-sm"><Icon name="refresh" className="h-4 w-4" />{O.sync}</button>
+          </form>
+        }
+      />
 
-      {attention > 0 && <p className="rounded-lg bg-amber-50 p-3 text-sm font-medium text-amber-800">{fmt(O.attention, { n: attention })}</p>}
+      {attention > 0 && <Notice>{fmt(O.attention, { n: attention })}</Notice>}
 
       {orders.length === 0 ? (
-        <p className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center text-slate-500">
-          {O.empty} <Link href="/finder" className="font-medium text-brand-600 hover:underline">{t.nav.finder}</Link>
-        </p>
+        <div className="rounded-2xl border border-dashed border-line-strong bg-surface/50 p-12 text-center">
+          <span className="mx-auto grid h-12 w-12 place-items-center rounded-2xl bg-brand-500/12 text-brand-300"><Icon name="box" /></span>
+          <p className="mx-auto mt-4 max-w-md text-sm text-muted">{O.empty}</p>
+          <Link href="/finder" className="btn-primary mt-5 px-4 py-2 text-sm">{t.nav.finder}</Link>
+        </div>
       ) : (
         <div className="space-y-3">
           {orders.map((o) => {
@@ -56,30 +52,30 @@ export default async function OrdersPage() {
             const canForce = o.status === "NEEDS_REVIEW" || o.status === "FAILED" || (o.status === "PENDING" && !user.autoOrder);
             const canHandle = o.status === "NEEDS_REVIEW" || o.status === "FAILED" || o.status === "PENDING";
             return (
-              <div key={o.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div key={o.id} className="card p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <p className="text-xs text-slate-500">
+                    <p className="text-xs text-subtle">
                       {O.colOrder} {o.ebayOrderId} · {(o.ebayCreatedAt ?? o.createdAt).toLocaleDateString(LOCALE_TAGS[locale])} · {t.markets[m.id]}
                     </p>
                     <ul className="mt-1 space-y-0.5">
                       {lines.map((l) => (
-                        <li key={l.lineItemId} className="font-medium text-slate-900">{l.quantity} × {l.title}</li>
+                        <li key={l.lineItemId} className="font-medium text-fg">{l.quantity} × {l.title}</li>
                       ))}
                     </ul>
                   </div>
-                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${BADGE[o.status]}`}>{O.status[o.status]}</span>
+                  <StatusBadge tone={ORDER_TONE[o.status]}>{O.status[o.status]}</StatusBadge>
                 </div>
-                <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
-                  <div><dt className="text-slate-500">{O.colSale}</dt><dd className="font-medium tabular-nums">{money(o.saleTotal)}</dd></div>
-                  <div><dt className="text-slate-500">{O.colCost}</dt><dd className="font-medium tabular-nums">{money(o.supplierCost)}</dd></div>
-                  <div>
-                    <dt className="text-slate-500">{O.colProfit}</dt>
-                    <dd className={`font-semibold tabular-nums ${o.profit !== null && o.profit < 0 ? "text-red-600" : "text-emerald-700"}`}>{money(o.profit)}</dd>
+                <dl className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-xl bg-line text-sm ring-1 ring-line sm:grid-cols-4">
+                  <div className="bg-surface-2 px-3 py-2.5"><dt className="text-xs text-subtle">{O.colSale}</dt><dd className="font-medium tabular-nums">{money(o.saleTotal)}</dd></div>
+                  <div className="bg-surface-2 px-3 py-2.5"><dt className="text-xs text-subtle">{O.colCost}</dt><dd className="font-medium tabular-nums">{money(o.supplierCost)}</dd></div>
+                  <div className="bg-surface-2 px-3 py-2.5">
+                    <dt className="text-xs text-subtle">{O.colProfit}</dt>
+                    <dd className={`font-semibold tabular-nums ${o.profit !== null && o.profit < 0 ? "text-red-300" : "text-emerald-300"}`}>{money(o.profit)}</dd>
                   </div>
-                  <div><dt className="text-slate-500">{O.colTracking}</dt><dd className="font-medium">{o.trackingNumber ? `${o.carrier ?? ""} ${o.trackingNumber}` : "—"}</dd></div>
+                  <div className="bg-surface-2 px-3 py-2.5"><dt className="text-xs text-subtle">{O.colTracking}</dt><dd className="truncate font-medium text-fg">{o.trackingNumber ? `${o.carrier ?? ""} ${o.trackingNumber}` : "—"}</dd></div>
                 </dl>
-                {why && <p className={`mt-3 rounded-lg p-2 text-sm ${o.status === "CANCELLED" ? "bg-slate-50 text-slate-600" : "bg-amber-50 text-amber-800"}`}>{why}</p>}
+                {why && <p className={`mt-3 rounded-lg px-3 py-2 text-sm ${o.status === "CANCELLED" ? "bg-surface-2 text-muted" : "bg-amber-500/10 text-amber-200"}`}>{why}</p>}
                 {(canForce || canHandle) && (
                   <div className="mt-4 flex flex-wrap gap-2">
                     {canForce && (

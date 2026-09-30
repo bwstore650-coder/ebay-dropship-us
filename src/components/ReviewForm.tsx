@@ -37,11 +37,11 @@ export default function ReviewForm({ t, errors, initial }: { t: Dict["review"]; 
     router.refresh();
   }
 
-  if (state === "done") return <p className="rounded-2xl bg-emerald-50 p-6 text-emerald-800">{t.thanks}</p>;
+  if (state === "done") return <p className="rounded-2xl bg-emerald-500/10 p-6 text-emerald-300">{t.thanks}</p>;
 
-  const field = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none";
+  const field = "mt-1 w-full input py-2";
   return (
-    <form onSubmit={onSubmit} className="space-y-5 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <form onSubmit={onSubmit} className="space-y-5 card">
       <fieldset>
         <legend className="text-sm font-medium">{t.rating}</legend>
         <div className="mt-2 flex gap-1">
@@ -52,7 +52,7 @@ export default function ReviewForm({ t, errors, initial }: { t: Dict["review"]; 
               onClick={() => setRating(n)}
               aria-label={fmt(t.star, { n })}
               aria-pressed={rating === n}
-              className={`text-3xl leading-none transition ${n <= rating ? "text-amber-400" : "text-slate-300 hover:text-amber-200"}`}
+              className={`text-3xl leading-none transition ${n <= rating ? "text-amber-400" : "text-line-strong hover:text-amber-300"}`}
             >
               ★
             </button>
@@ -73,11 +73,11 @@ export default function ReviewForm({ t, errors, initial }: { t: Dict["review"]; 
           <input name="authorInfo" maxLength={60} defaultValue={initial?.authorInfo} placeholder={t.infoPlaceholder} className={field} />
         </label>
       </div>
-      <label className="flex items-start gap-2 text-sm text-slate-600">
+      <label className="flex items-start gap-2 text-sm text-muted">
         <input name="consent" type="checkbox" required className="mt-1" />
         {t.consent}
       </label>
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {error && <p className="text-sm text-red-400">{error}</p>}
       <button disabled={state === "sending"} className="btn-primary">{state === "sending" ? t.sending : t.submit}</button>
     </form>
   );

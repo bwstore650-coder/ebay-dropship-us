@@ -1,9 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { fmt, type Dict } from "@/lib/i18n";
 import { errorMessage } from "@/lib/i18n/errors";
 import type { MarketplaceId } from "@/lib/marketplaces";
 import ListingEditor from "@/components/ListingEditor";
+import { Icon } from "@/components/icons";
+import { PageHeader } from "@/components/ui";
 
 interface Result {
   marketId: MarketplaceId;
@@ -23,9 +25,10 @@ interface Result {
 }
 
 export default function FinderClient({
-  t, tl, markets, errors, marketIds, defaultMarket, accounts, hasGpsr, aeConnected,
+  t, tl, markets, errors, marketIds, defaultMarket, accounts, hasGpsr, aeConnected, initialKeyword,
 }: {
   aeConnected: boolean;
+  initialKeyword?: string;
   t: Dict["finder"];
   tl: Dict["listing"];
   accounts: { id: string; label: string }[];
@@ -40,12 +43,24 @@ export default function FinderClient({
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
 
-  async function search(e: React.FormEvent<HTMLFormElement>) {
+  const formRef = useRef<HTMLFormElement>(null);
+  // Lien AliExpress collé dans la recherche du tableau de bord : il va dans le champ dédié.
+  const initialIsLink = Boolean(initialKeyword && /^https?:\/\//i.test(initialKeyword));
+
+  useEffect(() => {
+    if (initialKeyword && !initialIsLink && formRef.current) run(new FormData(formRef.current));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function search(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    run(new FormData(e.currentTarget));
+  }
+
+  async function run(form: FormData) {
     setLoading(true);
     setError(null);
     setEditing(false);
-    const form = new FormData(e.currentTarget);
     const res = await fetch("/api/finder", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -61,28 +76,58 @@ export default function FinderClient({
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">{t.title}</h1>
-      <form onSubmit={search} className="flex flex-wrap gap-2">
-        <input name="keyword" required minLength={2} placeholder={t.placeholder} className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none" />
-        <select name="marketId" defaultValue={defaultMarket} className="rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none">
-          {marketIds.map((id) => <option key={id} value={id}>{markets[id]}</option>)}
-        </select>
-        <button disabled={loading} className="rounded-lg bg-brand-600 px-4 shadow-sm transition hover:bg-brand-700 py-2 font-semibold text-white disabled:opacity-60">
-          {loading ? t.analyzing : t.analyze}
-        </button>
+      <PageHeader title={t.title} subtitle={t.subtitle} />
+      <form ref={formRef} onSubmit={search} className="card space-y-4">
+        <div className="flex flex-col gap-2 lg:flex-row">
+          <div className="relative flex-1">
+            <Icon name="search" className="pointer-events-none absolute top-1/2 left-4 h-5 w-5 -translate-y-1/2 text-subtle" />
+            <input name="keyword" required minLength={2} defaultValue={initialIsLink ? "" : initialKeyword} autoFocus={initialIsLink} placeholder={t.placeholder} className="input h-12 pl-12 text-[15px]" />
+          </div>
+          <select name="marketId" defaultValue={defaultMarket} className="input h-12 lg:w-56">
+            {marketIds.map((id) => <option key={id} value={id}>{markets[id]}</option>)}
+          </select>
+          <button disabled={loading} className="btn-primary h-12 px-6">
+            {loading ? t.analyzing : t.analyze}
+            {!loading && <Icon name="arrowRight" className="h-4 w-4" />}
+          </button>
+        </div>
         {aeConnected && (
-          <label className="w-full text-sm">
-            <span className="font-medium">{t.aeLabel}</span>
-            <input name="aeProduct" type="text" inputMode="url" placeholder={t.aePlaceholder} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none" />
-            <span className="mt-1 block text-xs text-slate-500">{t.aeHint}</span>
+          <label className="block text-sm">
+            <span className="font-medium text-fg-2">{t.aeLabel}</span>
+            <input name="aeProduct" type="text" inputMode="url" defaultValue={initialIsLink ? initialKeyword : undefined} placeholder={t.aePlaceholder} className="input mt-1.5 py-2" />
+            <span className="mt-1.5 block text-xs text-subtle">{t.aeHint}</span>
           </label>
         )}
       </form>
-      {error && <p className="text-red-600">{error}</p>}
-      {r && (
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
-          <p className={`text-lg font-semibold ${r.verdict === "RENTABLE" ? "text-emerald-600" : "text-amber-600"}`}>{t.verdict[r.verdict]}</p>
-          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+      {loading && (
+        <div className="card flex items-center gap-3 text-sm text-muted">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-brand-400 border-t-transparent" aria-hidden="true" />
+          {t.analyzing}
+        </div>
+      )}
+      {error && <p className="rounded-xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p>}
+      {r && !loading && (
+        <div className="card overflow-hidden p-0">
+          <div className={`flex flex-wrap items-center justify-between gap-4 border-b border-line px-6 py-5 ${r.verdict === "RENTABLE" ? "bg-emerald-500/[0.06]" : "bg-amber-500/[0.06]"}`}>
+            <div className="flex items-center gap-3">
+              <span className={`grid h-10 w-10 place-items-center rounded-xl ${r.verdict === "RENTABLE" ? "bg-emerald-500/15 text-emerald-300" : "bg-amber-500/15 text-amber-300"}`}>
+                <Icon name={r.verdict === "RENTABLE" ? "check" : "alert"} className="h-5 w-5" />
+              </span>
+              <div>
+                <p className={`text-lg font-semibold ${r.verdict === "RENTABLE" ? "text-emerald-300" : "text-amber-300"}`}>{t.verdict[r.verdict]}</p>
+                <p className="text-xs text-subtle">{r.keyword} · {markets[r.marketId]}</p>
+              </div>
+            </div>
+            {r.margin && (
+              <div className="text-right">
+                <p className="eyebrow">{t.profit}</p>
+                <p className={`text-2xl font-semibold tabular-nums ${r.margin.profit < 0 ? "text-red-300" : "text-emerald-300"}`}>
+                  {money(r.margin.profit)} <span className="text-base text-muted">· {r.margin.marginPct} %</span>
+                </p>
+              </div>
+            )}
+          </div>
+          <dl className="grid gap-px bg-line text-sm sm:grid-cols-2 lg:grid-cols-3">
             <Row k={r.priceSource === "SOLD_WEIGHTED" ? t.marketPriceSold : t.marketPriceActive} v={r.marketPrice !== null ? money(r.marketPrice) : "—"} />
             <Row k={t.listingsFound} v={r.ebayListingsCount} />
             <Row k={t.unitsSold} v={r.unitsSold} />
@@ -91,14 +136,15 @@ export default function FinderClient({
             {r.best && <Row k={t.deliveryLabel} v={fmt(t.delivery, { days: r.best.deliveryDaysMax, stock: r.best.stockUs })} />}
             {r.margin && <Row k={t.landedCost} v={money(r.margin.landedCost)} />}
             {r.margin && <Row k={t.fees} v={money(r.margin.fees)} />}
-            {r.margin && <Row k={t.profit} v={`${money(r.margin.profit)} (${r.margin.marginPct} %)`} />}
             {r.minPriceForTarget !== null && <Row k={t.minPrice} v={money(r.minPriceForTarget)} />}
           </dl>
-          {!r.feesVerified && <p className="mt-4 rounded-lg bg-amber-50 p-2 text-xs text-amber-700">{t.feesUnverified}</p>}
-          <p className="mt-4 text-xs text-slate-500">{t.sourceNote}</p>
-          {r.verdict === "RENTABLE" && r.best && !editing && (
-            <button type="button" onClick={() => setEditing(true)} className="btn-primary mt-5">{tl.create}</button>
-          )}
+          <div className="space-y-3 px-6 py-5">
+            {!r.feesVerified && <p className="rounded-lg bg-amber-500/10 p-2.5 text-xs text-amber-200">{t.feesUnverified}</p>}
+            <p className="text-xs text-subtle">{t.sourceNote}</p>
+            {r.verdict === "RENTABLE" && r.best && !editing && (
+              <button type="button" onClick={() => setEditing(true)} className="btn-primary">{tl.create}</button>
+            )}
+          </div>
         </div>
       )}
       {r && editing && r.best && (
@@ -119,5 +165,5 @@ export default function FinderClient({
 }
 
 function Row({ k, v }: { k: string; v: string | number }) {
-  return (<div><dt className="text-slate-500">{k}</dt><dd className="font-medium">{v}</dd></div>);
+  return (<div className="bg-surface px-6 py-4"><dt className="text-xs text-subtle">{k}</dt><dd className="mt-1 font-medium text-fg">{v}</dd></div>);
 }

@@ -23,14 +23,14 @@ export default async function LegalPage({ doc }: { doc: LegalDoc }) {
       <SiteHeader locale={locale} t={t} />
       <main className="mx-auto max-w-3xl px-4 py-12" lang={lang}>
         <h1 className="text-3xl font-bold tracking-tight">{t.legal[doc]}</h1>
-        <p className="mt-2 text-sm text-slate-500">{fmt(t.legal.updated, { date })}</p>
-        {locale !== "en" && <p className="mt-4 rounded-lg bg-slate-100 p-3 text-sm text-slate-600">{t.legal.englishPrevails}</p>}
+        <p className="mt-2 text-sm text-muted">{fmt(t.legal.updated, { date })}</p>
+        {locale !== "en" && <p className="mt-4 rounded-lg bg-surface-2 p-3 text-sm text-muted">{t.legal.englishPrevails}</p>}
         <div className="mt-8 space-y-8">
           {sections.map((s) => (
             <section key={s.h}>
               <h2 className="text-lg font-semibold">{s.h}</h2>
               {s.p.map((para) => (
-                <p key={para.slice(0, 40)} className="mt-2 leading-relaxed text-slate-700">{fmt(para, vars)}</p>
+                <p key={para.slice(0, 40)} className="mt-2 leading-relaxed text-fg-2">{fmt(para, vars)}</p>
               ))}
             </section>
           ))}

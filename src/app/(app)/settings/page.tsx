@@ -8,6 +8,8 @@ import { EU_COUNTRIES } from "@/lib/eu";
 import { aeConfig } from "@/lib/suppliers";
 import { LOCALE_TAGS } from "@/lib/i18n";
 import { saveGpsr, setAutoOrder } from "./actions";
+import { Icon, type IconName } from "@/components/icons";
+import { Notice } from "@/components/ui";
 
 export default async function Settings({ searchParams }: { searchParams: Promise<{ ebay?: string; gpsr?: string; ae?: string }> }) {
   const user = await requireUser();
@@ -17,50 +19,50 @@ export default async function Settings({ searchParams }: { searchParams: Promise
   const aeAccount = user.supplierAccounts.find((a: { supplier: string }) => a.supplier === "ALIEXPRESS");
   const aeAvailable = Boolean(aeConfig());
   const countryName = new Intl.DisplayNames([LOCALE_TAGS[locale]], { type: "region" });
-  const input = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none";
+  const input = "mt-1 w-full input py-2 text-sm";
   const cj = user.supplierAccounts.find((a: { supplier: string }) => a.supplier === "CJ");
   const max = maxEbayAccounts(user.plan);
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">{s.title}</h1>
-      {ebay === "connected" && <p className="rounded-lg bg-green-50 p-3 text-emerald-700">{s.ebayConnected}</p>}
-      {ebay === "error" && <p className="rounded-lg bg-red-50 p-3 text-red-700">{s.ebayError}</p>}
-      {ebay === "limit" && <p className="rounded-lg bg-amber-50 p-3 text-amber-700">{s.ebayLimit}</p>}
+    <div className="max-w-3xl space-y-6">
+      <h1 className="text-2xl font-semibold tracking-tight text-fg sm:text-[28px]">{s.title}</h1>
+      {ebay === "connected" && <Notice tone="emerald">{s.ebayConnected}</Notice>}
+      {ebay === "error" && <Notice tone="red">{s.ebayError}</Notice>}
+      {ebay === "limit" && <Notice>{s.ebayLimit}</Notice>}
 
-      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
-        <h2 className="font-semibold">{fmt(s.ebayAccounts, { count: user.ebayAccounts.length, max })}</h2>
-        <p className="mt-1 text-sm text-slate-600">{fmt(s.ebayHelp, { limit: dailyListingLimit(user.ebayAccountOpenedAt) })}</p>
+      <section className="card">
+        <h2 className="flex items-center gap-2.5 font-semibold text-fg"><SectionIcon name="globe" />{fmt(s.ebayAccounts, { count: user.ebayAccounts.length, max })}</h2>
+        <p className="mt-2 text-sm text-muted">{fmt(s.ebayHelp, { limit: dailyListingLimit(user.ebayAccountOpenedAt) })}</p>
         <ul className="mt-3 space-y-2">
           {user.ebayAccounts.map((a: { id: string; label: string | null; ebayUserId: string | null }, i: number) => (
-            <li key={a.id} className="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm">
-              <span>{a.label ?? a.ebayUserId ?? fmt(s.ebayAccountN, { n: i + 1 })}</span>
-              <a href={`/api/ebay/connect?account=${a.id}`} className="text-brand-600">{s.reconnect}</a>
+            <li key={a.id} className="flex items-center justify-between rounded-xl border border-line bg-surface-2 px-4 py-2.5 text-sm">
+              <span className="flex items-center gap-2 font-medium text-fg"><span className="h-2 w-2 rounded-full bg-emerald-400" aria-hidden="true" />{a.label ?? a.ebayUserId ?? fmt(s.ebayAccountN, { n: i + 1 })}</span>
+              <a href={`/api/ebay/connect?account=${a.id}`} className="font-medium text-brand-300 hover:text-brand-200">{s.reconnect}</a>
             </li>
           ))}
         </ul>
         {user.ebayAccounts.length < max && (
-          <a href="/api/ebay/connect" className="mt-3 inline-block rounded-lg bg-brand-600 px-4 shadow-sm transition hover:bg-brand-700 py-2 text-sm font-semibold text-white">
+          <a href="/api/ebay/connect" className="btn-primary mt-4 px-4 py-2 text-sm">
             {user.ebayAccounts.length ? s.addEbay : s.connectEbay}
           </a>
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
-        <h2 className="font-semibold">{s.cjTitle}</h2>
-        <p className="mt-1 text-sm text-slate-600">{cj ? s.cjConnected : s.cjHelp}</p>
+      <section className="card">
+        <h2 className="flex items-center gap-2.5 font-semibold text-fg"><SectionIcon name="box" />{s.cjTitle}</h2>
+        <p className="mt-2 text-sm text-muted">{cj ? s.cjConnected : s.cjHelp}</p>
         <CjConnectForm t={s} errors={t.errors} />
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
+      <section className="card">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-semibold">{s.aeTitle}</h2>
-          {aeAccount && <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-800">{s.cjConnected}</span>}
+          <h2 className="flex items-center gap-2.5 font-semibold text-fg"><SectionIcon name="cart" />{s.aeTitle}</h2>
+          {aeAccount && <span className="rounded-full bg-emerald-500/15 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">{s.cjConnected}</span>}
         </div>
-        {ae === "connected" && <p className="mt-3 rounded-lg bg-emerald-50 p-2 text-sm text-emerald-700">{s.aeConnectedMsg}</p>}
-        {ae === "error" && <p className="mt-3 rounded-lg bg-red-50 p-2 text-sm text-red-700">{s.aeError}</p>}
-        {ae === "unavailable" && <p className="mt-3 rounded-lg bg-amber-50 p-2 text-sm text-amber-700">{s.aeUnavailable}</p>}
-        <p className="mt-1 text-sm text-slate-600">{aeAvailable ? s.aeHelp : s.aeUnavailable}</p>
-        {aeAvailable && <p className="mt-1 text-xs text-slate-500">{s.aePayNote}</p>}
+        {ae === "connected" && <Notice tone="emerald" className="mt-3">{s.aeConnectedMsg}</Notice>}
+        {ae === "error" && <Notice tone="red" className="mt-3">{s.aeError}</Notice>}
+        {ae === "unavailable" && <Notice tone="amber" className="mt-3">{s.aeUnavailable}</Notice>}
+        <p className="mt-2 text-sm text-muted">{aeAvailable ? s.aeHelp : s.aeUnavailable}</p>
+        {aeAvailable && <p className="mt-1 text-xs text-muted">{s.aePayNote}</p>}
         {aeAvailable && (
           <a href="/api/suppliers/aliexpress/connect" className={`mt-3 ${aeAccount ? "btn-secondary" : "btn-primary"} px-4 py-2 text-sm`}>
             {aeAccount ? s.aeReconnect : s.aeConnect}
@@ -68,14 +70,14 @@ export default async function Settings({ searchParams }: { searchParams: Promise
         )}
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
+      <section className="card">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="font-semibold">{s.autoOrderTitle}</h2>
-          <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${user.autoOrder ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
+          <h2 className="flex items-center gap-2.5 font-semibold text-fg"><SectionIcon name="zap" />{s.autoOrderTitle}</h2>
+          <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${user.autoOrder ? "bg-emerald-500/15 text-emerald-300" : "bg-surface-3 text-muted"}`}>
             {user.autoOrder ? s.autoOrderOn : s.autoOrderOff}
           </span>
         </div>
-        <p className="mt-1 text-sm text-slate-600">{s.autoOrderHelp}</p>
+        <p className="mt-2 text-sm text-muted">{s.autoOrderHelp}</p>
         <form action={setAutoOrder} className="mt-3">
           <input type="hidden" name="autoOrder" value={user.autoOrder ? "off" : "on"} />
           <button className={user.autoOrder ? "btn-secondary px-4 py-2 text-sm" : "btn-primary px-4 py-2 text-sm"}>
@@ -84,11 +86,11 @@ export default async function Settings({ searchParams }: { searchParams: Promise
         </form>
       </section>
 
-      <section id="gpsr" className="scroll-mt-24 rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
-        <h2 className="font-semibold">{s.gpsrTitle}</h2>
-        <p className="mt-1 text-sm text-slate-600">{s.gpsrHelp}</p>
-        {gpsr === "saved" && <p className="mt-3 rounded-lg bg-emerald-50 p-2 text-sm text-emerald-700">{s.gpsrSaved}</p>}
-        {gpsr === "invalid" && <p className="mt-3 rounded-lg bg-red-50 p-2 text-sm text-red-700">{t.errors.INVALID_INPUT}</p>}
+      <section id="gpsr" className="scroll-mt-24 card">
+        <h2 className="flex items-center gap-2.5 font-semibold text-fg"><SectionIcon name="shield" />{s.gpsrTitle}</h2>
+        <p className="mt-2 text-sm text-muted">{s.gpsrHelp}</p>
+        {gpsr === "saved" && <Notice tone="emerald" className="mt-3">{s.gpsrSaved}</Notice>}
+        {gpsr === "invalid" && <Notice tone="red" className="mt-3">{t.errors.INVALID_INPUT}</Notice>}
         <form action={saveGpsr} className="mt-4 grid gap-3 sm:grid-cols-2">
           <label className="block text-sm font-medium">{s.gpsrCompany}<input name="euRpCompany" required maxLength={100} defaultValue={user.euRpCompany ?? ""} className={input} /></label>
           <label className="block text-sm font-medium">{s.gpsrEmail}<input name="euRpEmail" type="email" required maxLength={120} defaultValue={user.euRpEmail ?? ""} className={input} /></label>
@@ -110,10 +112,18 @@ export default async function Settings({ searchParams }: { searchParams: Promise
         </form>
       </section>
 
-      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
-        <h2 className="font-semibold">{s.marginTitle}</h2>
-        <p className="mt-1 text-sm text-slate-600">{fmt(s.marginHelp, { pct: user.minMarginPct })}</p>
+      <section className="card">
+        <h2 className="flex items-center gap-2.5 font-semibold text-fg"><SectionIcon name="percent" />{s.marginTitle}</h2>
+        <p className="mt-2 text-sm text-muted">{fmt(s.marginHelp, { pct: user.minMarginPct })}</p>
       </section>
     </div>
+  );
+}
+
+function SectionIcon({ name }: { name: IconName }) {
+  return (
+    <span className="grid h-8 w-8 place-items-center rounded-lg bg-brand-500/12 text-brand-300 ring-1 ring-brand-500/20">
+      <Icon name={name} className="h-4 w-4" />
+    </span>
   );
 }

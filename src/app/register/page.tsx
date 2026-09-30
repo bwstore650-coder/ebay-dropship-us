@@ -7,7 +7,7 @@ export default async function Page() {
   return (
     <>
       <SiteHeader locale={locale} t={t} />
-      <main className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-brand-50/60 to-slate-50">
+      <main className="min-h-[calc(100vh-4rem)] bg-gradient-to-b from-brand-500/10 to-canvas">
         <AuthForm mode="register" t={t.auth} errors={t.errors} />
       </main>
     </>

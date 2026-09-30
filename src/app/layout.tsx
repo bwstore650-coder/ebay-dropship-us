@@ -14,7 +14,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const hasConsent = Boolean((await cookies()).get("consent")?.value);
   return (
     <html lang={locale}>
-      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
+      <body className="min-h-screen bg-surface-2 text-fg antialiased">
         {children}
         <CookieBanner t={t.cookies} initiallyVisible={!hasConsent} />
       </body>

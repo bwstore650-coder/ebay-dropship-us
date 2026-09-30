@@ -26,8 +26,8 @@ export default async function Reviews({ t }: { t: Dict["landing"]["reviews"] }) 
     <section id="reviews" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-20">
       <div className="mx-auto max-w-2xl text-center">
         <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">{t.title}</h2>
-        <p className="mt-3 text-slate-600">{t.subtitle}</p>
-        <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-amber-50 px-4 py-1.5 text-sm font-semibold text-amber-800">
+        <p className="mt-3 text-muted">{t.subtitle}</p>
+        <p className="mt-4 inline-flex items-center gap-2 rounded-full bg-amber-500/10 px-4 py-1.5 text-sm font-semibold text-amber-300">
           <span className="text-amber-500" aria-hidden="true">★</span>
           {fmt(t.summary, summary)}
         </p>
@@ -37,18 +37,18 @@ export default async function Reviews({ t }: { t: Dict["landing"]["reviews"] }) 
           <figure key={r.id} className="card flex flex-col">
             <div className="text-lg text-amber-400" aria-label={`${r.rating}/5`}>
               {"★".repeat(r.rating)}
-              <span className="text-slate-200">{"★".repeat(5 - r.rating)}</span>
+              <span className="text-line-strong">{"★".repeat(5 - r.rating)}</span>
             </div>
-            <blockquote className="mt-3 flex-1 whitespace-pre-line text-slate-700">“{r.text}”</blockquote>
-            <figcaption className="mt-5 flex items-center gap-3 border-t border-slate-100 pt-4">
-              <span className="grid h-9 w-9 place-items-center rounded-full bg-brand-100 text-sm font-bold text-brand-700" aria-hidden="true">
+            <blockquote className="mt-3 flex-1 whitespace-pre-line text-fg-2">“{r.text}”</blockquote>
+            <figcaption className="mt-5 flex items-center gap-3 border-t border-line pt-4">
+              <span className="grid h-9 w-9 place-items-center rounded-full bg-brand-500/15 text-sm font-bold text-brand-300" aria-hidden="true">
                 {r.authorName.trim().charAt(0).toUpperCase()}
               </span>
               <span className="text-sm">
-                <span className="block font-semibold text-slate-900">{r.authorName}</span>
-                <span className="block text-slate-500">
+                <span className="block font-semibold text-fg">{r.authorName}</span>
+                <span className="block text-muted">
                   {r.authorInfo ? `${r.authorInfo} · ` : ""}
-                  <span className="text-emerald-700">✓ {t.verified}</span>
+                  <span className="text-emerald-300">✓ {t.verified}</span>
                 </span>
               </span>
             </figcaption>

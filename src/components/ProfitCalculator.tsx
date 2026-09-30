@@ -48,9 +48,9 @@ export default function ProfitCalculator({
 
   return (
     <div className="mt-8 space-y-8">
-      <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white shadow-sm p-6 sm:grid-cols-2">
+      <div className="grid gap-4 card sm:grid-cols-2">
         <label className="block text-sm sm:col-span-2">
-          <span className="text-slate-600">{t.site}</span>
+          <span className="text-muted">{t.site}</span>
           <select
             value={site}
             onChange={(e) => {
@@ -58,7 +58,7 @@ export default function ProfitCalculator({
               setSite(id);
               setFvf(pct(MARKETPLACES[id].fvfRate));
             }}
-            className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none"
+            className="mt-1 w-full input py-2"
           >
             {marketIds.map((id) => <option key={id} value={id}>{markets[id]}</option>)}
           </select>
@@ -89,17 +89,17 @@ export default function ProfitCalculator({
 function Field({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
     <label className="block text-sm">
-      <span className="text-slate-600">{label}</span>
-      <input inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none" />
+      <span className="text-muted">{label}</span>
+      <input inputMode="decimal" value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full input py-2" />
     </label>
   );
 }
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: "good" | "warn" | "bad" }) {
-  const color = tone === "good" ? "text-green-600" : tone === "warn" ? "text-amber-600" : tone === "bad" ? "text-red-600" : "text-slate-900";
+  const color = tone === "good" ? "text-green-400" : tone === "warn" ? "text-amber-400" : tone === "bad" ? "text-red-400" : "text-fg";
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-4">
-      <p className="text-sm text-slate-500">{label}</p>
+    <div className="rounded-2xl border border-line bg-surface shadow-sm p-4">
+      <p className="text-sm text-muted">{label}</p>
       <p className={`mt-1 text-2xl font-bold ${color}`}>{value}</p>
     </div>
   );
@@ -116,18 +116,18 @@ function LeadForm({ t, errors }: { t: Dict["calculator"]; errors: Dict["errors"]
     if (res.ok) setState("done");
     else { setState("error"); setMsg(errorMessage(errors, (await res.json().catch(() => ({}))).error)); }
   }
-  if (state === "done") return <p className="rounded-2xl bg-emerald-50 p-6 text-emerald-700">{t.leadDone}</p>;
+  if (state === "done") return <p className="rounded-2xl bg-emerald-500/10 p-6 text-emerald-300">{t.leadDone}</p>;
   return (
-    <form onSubmit={submit} className="rounded-2xl border border-brand-200 bg-brand-50 p-6">
+    <form onSubmit={submit} className="rounded-2xl border border-brand-500/30 bg-brand-500/10 p-6">
       <h2 className="text-lg font-semibold">{t.leadTitle}</h2>
-      <p className="mt-1 text-sm text-slate-600">{t.leadText}</p>
+      <p className="mt-1 text-sm text-muted">{t.leadText}</p>
       <div className="mt-4 flex flex-wrap gap-2">
-        <input name="email" type="email" required placeholder={t.leadPlaceholder} className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none" />
-        <button disabled={state === "sending"} className="rounded-lg bg-brand-600 px-5 shadow-sm transition hover:bg-brand-700 py-2 font-semibold text-white disabled:opacity-60">
+        <input name="email" type="email" required placeholder={t.leadPlaceholder} className="flex-1 input py-2" />
+        <button disabled={state === "sending"} className="rounded-lg bg-brand-600 px-5 shadow-sm transition hover:bg-brand-500 py-2 font-semibold text-white disabled:opacity-60">
           {state === "sending" ? "…" : t.leadButton}
         </button>
       </div>
-      {state === "error" && <p className="mt-2 text-sm text-red-600">{msg}</p>}
+      {state === "error" && <p className="mt-2 text-sm text-red-400">{msg}</p>}
     </form>
   );
 }

@@ -10,8 +10,8 @@ export default async function Billing() {
   const planName = user.plan === "NONE" ? t.plans.none : t.plans[user.plan];
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">{t.billing.title}</h1>
-      <p className="text-slate-600">
+      <h1 className="text-2xl font-semibold tracking-tight text-fg sm:text-[28px]">{t.billing.title}</h1>
+      <p className="text-muted">
         {t.billing.current} <strong>{planName}</strong>
         {user.trialEndsAt && ` · ${fmt(t.billing.trialUntil, { date: user.trialEndsAt.toLocaleDateString(LOCALE_TAGS[locale]) })}`}
       </p>
@@ -26,7 +26,7 @@ export default async function Billing() {
       />
       {user.stripeCustomerId && (
         <form action="/api/stripe/portal" method="post">
-          <button className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold">{t.billing.manage}</button>
+          <button className="rounded-lg border border-line-strong px-4 py-2 text-sm font-semibold">{t.billing.manage}</button>
         </form>
       )}
     </div>

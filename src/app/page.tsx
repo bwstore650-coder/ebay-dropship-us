@@ -55,53 +55,53 @@ export default async function Home() {
                   {L.hero.secondary}
                 </Link>
               </div>
-              <p className="mt-5 text-sm text-slate-400">{L.hero.reassurance}</p>
+              <p className="mt-5 text-sm text-subtle">{L.hero.reassurance}</p>
             </div>
 
             {/* Carte d'analyse (chiffres réels de notre test) */}
             <div className="relative">
-              <div className="rounded-2xl border border-white/10 bg-white p-6 text-slate-900 shadow-2xl shadow-brand-900/40">
+              <div className="rounded-2xl border border-white/10 bg-surface p-6 text-fg shadow-2xl shadow-brand-900/40">
                 <div className="flex items-center justify-between">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">{L.mock.title}</p>
-                  <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">48%</span>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted">{L.mock.title}</p>
+                  <span className="rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300">48%</span>
                 </div>
                 <p className="mt-2 text-xl font-semibold">{L.mock.product}</p>
                 <dl className="mt-5 space-y-3 text-sm">
                   {[
                     [L.mock.market, "$30.75", ""],
-                    [L.mock.cost, "− $11.45", "text-slate-600"],
-                    [L.mock.fees, "− $4.58", "text-slate-600"],
+                    [L.mock.cost, "− $11.45", "text-muted"],
+                    [L.mock.fees, "− $4.58", "text-muted"],
                   ].map(([label, value, cls]) => (
                     <div key={label} className="flex justify-between">
-                      <dt className="text-slate-500">{label}</dt>
+                      <dt className="text-muted">{label}</dt>
                       <dd className={`font-medium tabular-nums ${cls}`}>{value}</dd>
                     </div>
                   ))}
-                  <div className="flex justify-between border-t border-slate-100 pt-3">
+                  <div className="flex justify-between border-t border-line pt-3">
                     <dt className="font-semibold">{L.mock.profit}</dt>
-                    <dd className="text-lg font-bold tabular-nums text-emerald-600">+ $14.72</dd>
+                    <dd className="text-lg font-bold tabular-nums text-emerald-400">+ $14.72</dd>
                   </div>
                 </dl>
-                <p className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-800">✓ {L.mock.verdict}</p>
-                <div className="mt-3 flex items-center justify-between rounded-lg bg-red-50 px-3 py-2 text-sm">
-                  <span className="font-medium text-red-800">{L.mock.rejected}</span>
-                  <span className="text-red-700">{L.mock.rejectedNote}</span>
+                <p className="mt-4 rounded-lg bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-300">✓ {L.mock.verdict}</p>
+                <div className="mt-3 flex items-center justify-between rounded-lg bg-red-500/10 px-3 py-2 text-sm">
+                  <span className="font-medium text-red-300">{L.mock.rejected}</span>
+                  <span className="text-red-300">{L.mock.rejectedNote}</span>
                 </div>
               </div>
-              <p className="mt-3 text-center text-xs text-slate-400">{L.mock.caption}</p>
+              <p className="mt-3 text-center text-xs text-subtle">{L.mock.caption}</p>
             </div>
           </div>
         </section>
 
         {/* PREUVES */}
-        <section className="border-b border-slate-200 bg-white">
+        <section className="border-b border-line bg-surface">
           <div className="mx-auto max-w-6xl px-4 py-14">
-            <p className="text-center text-sm font-semibold uppercase tracking-wide text-slate-500">{L.proof.title}</p>
+            <p className="text-center text-sm font-semibold uppercase tracking-wide text-muted">{L.proof.title}</p>
             <div className="mt-8 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
               {L.proof.items.map((it) => (
                 <div key={it.value} className="text-center">
-                  <p className="text-3xl font-bold tracking-tight text-brand-600">{it.value}</p>
-                  <p className="mt-2 text-sm text-slate-600">{it.label}</p>
+                  <p className="text-3xl font-bold tracking-tight text-brand-400">{it.value}</p>
+                  <p className="mt-2 text-sm text-muted">{it.label}</p>
                 </div>
               ))}
             </div>
@@ -114,26 +114,26 @@ export default async function Home() {
           <div className="mt-12 grid gap-6 md:grid-cols-3">
             {L.problem.items.map((it) => (
               <div key={it.title} className="card">
-                <span className="grid h-10 w-10 place-items-center rounded-lg bg-red-50 text-red-600">
+                <span className="grid h-10 w-10 place-items-center rounded-lg bg-red-500/10 text-red-400">
                   <Icon d="M12 9v4m0 4h.01M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z" />
                 </span>
                 <h3 className="mt-4 text-lg font-semibold">{it.title}</h3>
-                <p className="mt-2 text-slate-600">{it.text}</p>
+                <p className="mt-2 text-muted">{it.text}</p>
               </div>
             ))}
           </div>
         </section>
 
         {/* COMMENT ÇA MARCHE */}
-        <section id="how" className="scroll-mt-20 bg-white py-20">
+        <section id="how" className="scroll-mt-20 bg-surface py-20">
           <div className="mx-auto max-w-6xl px-4">
             <h2 className="mx-auto max-w-2xl text-center text-3xl font-bold tracking-tight sm:text-4xl">{L.how.title}</h2>
             <ol className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
               {L.how.steps.map((s, i) => (
-                <li key={s.title} className="relative rounded-2xl border border-slate-200 p-6">
+                <li key={s.title} className="relative rounded-2xl border border-line p-6">
                   <span className="grid h-9 w-9 place-items-center rounded-full bg-brand-600 text-sm font-bold text-white">{i + 1}</span>
                   <h3 className="mt-4 font-semibold">{s.title}</h3>
-                  <p className="mt-2 text-sm text-slate-600">{s.text}</p>
+                  <p className="mt-2 text-sm text-muted">{s.text}</p>
                 </li>
               ))}
             </ol>
@@ -146,35 +146,35 @@ export default async function Home() {
           <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
             {L.features.items.map((f, i) => (
               <div key={f.title} className="card">
-                <span className="grid h-10 w-10 place-items-center rounded-lg bg-brand-50 text-brand-600">
+                <span className="grid h-10 w-10 place-items-center rounded-lg bg-brand-500/10 text-brand-400">
                   <Icon d={FEATURE_ICONS[i] ?? FEATURE_ICONS[0]} />
                 </span>
                 <h3 className="mt-4 font-semibold">{f.title}</h3>
-                <p className="mt-2 text-sm text-slate-600">{f.text}</p>
+                <p className="mt-2 text-sm text-muted">{f.text}</p>
               </div>
             ))}
           </div>
         </section>
 
         {/* COMPARAISON */}
-        <section className="bg-white py-20">
+        <section className="bg-surface py-20">
           <div className="mx-auto max-w-4xl px-4">
             <h2 className="text-center text-3xl font-bold tracking-tight sm:text-4xl">{L.compare.title}</h2>
-            <div className="mt-10 overflow-x-auto rounded-2xl border border-slate-200">
+            <div className="mt-10 overflow-x-auto rounded-2xl border border-line">
               <table className="w-full min-w-[520px] text-left text-sm">
-                <thead className="bg-slate-50 text-slate-600">
+                <thead className="bg-surface-2 text-muted">
                   <tr>
                     <th className="px-5 py-3 font-medium"><span className="sr-only">—</span></th>
                     <th className="px-5 py-3 font-medium">{L.compare.colTypical}</th>
-                    <th className="px-5 py-3 font-semibold text-brand-700">{fmt(L.compare.colUs, b)}</th>
+                    <th className="px-5 py-3 font-semibold text-brand-300">{fmt(L.compare.colUs, b)}</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100">
+                <tbody className="divide-y divide-line">
                   {L.compare.rows.map((r) => (
                     <tr key={r.label}>
-                      <th scope="row" className="px-5 py-4 font-medium text-slate-900">{r.label}</th>
-                      <td className="px-5 py-4 text-slate-500">{r.typical}</td>
-                      <td className="px-5 py-4 font-semibold text-emerald-700">✓ {r.us}</td>
+                      <th scope="row" className="px-5 py-4 font-medium text-fg">{r.label}</th>
+                      <td className="px-5 py-4 text-muted">{r.typical}</td>
+                      <td className="px-5 py-4 font-semibold text-emerald-300">✓ {r.us}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -190,7 +190,7 @@ export default async function Home() {
         <section id="pricing" className="mx-auto max-w-6xl scroll-mt-20 px-4 py-20">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">{L.pricing.title}</h2>
-            <p className="mt-3 text-slate-600">{L.pricing.subtitle}</p>
+            <p className="mt-3 text-muted">{L.pricing.subtitle}</p>
           </div>
           <div className="mt-10">
             <Pricing plans={PLANS} t={L.pricing} tb={t.billing} tp={t.plans} perMonth={t.common.perMonth} />
@@ -198,17 +198,17 @@ export default async function Home() {
         </section>
 
         {/* FAQ */}
-        <section id="faq" className="scroll-mt-20 bg-white py-20">
+        <section id="faq" className="scroll-mt-20 bg-surface py-20">
           <div className="mx-auto max-w-3xl px-4">
             <h2 className="text-center text-3xl font-bold tracking-tight sm:text-4xl">{L.faq.title}</h2>
-            <div className="mt-10 divide-y divide-slate-200 rounded-2xl border border-slate-200">
+            <div className="mt-10 divide-y divide-line rounded-2xl border border-line">
               {L.faq.items.map((f) => (
                 <details key={f.q} className="group px-6 py-5">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold [&::-webkit-details-marker]:hidden">
                     {f.q}
-                    <span className="text-slate-400 transition group-open:rotate-45" aria-hidden="true">+</span>
+                    <span className="text-subtle transition group-open:rotate-45" aria-hidden="true">+</span>
                   </summary>
-                  <p className="mt-3 text-slate-600">{fmt(f.a, b)}</p>
+                  <p className="mt-3 text-muted">{fmt(f.a, b)}</p>
                 </details>
               ))}
             </div>
@@ -221,7 +221,7 @@ export default async function Home() {
             <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">{L.finalCta.title}</h2>
             <p className="mx-auto mt-4 max-w-xl text-slate-300">{L.finalCta.text}</p>
             <Link href="/register" className="btn-primary mt-8 text-base">{L.finalCta.cta}</Link>
-            <p className="mt-4 text-sm text-slate-400">{L.hero.reassurance}</p>
+            <p className="mt-4 text-sm text-subtle">{L.hero.reassurance}</p>
           </div>
         </section>
       </main>

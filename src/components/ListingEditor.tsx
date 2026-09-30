@@ -19,7 +19,7 @@ const POLICIES_URL: Partial<Record<MarketplaceId, string>> = {
   EBAY_IT: "https://www.ebay.it/bp/manage", EBAY_ES: "https://www.ebay.es/bp/manage", EBAY_IE: "https://www.ebay.ie/bp/manage",
 };
 
-const field = "mt-1 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 focus:outline-none";
+const field = "mt-1 w-full input py-2 text-sm";
 
 export default function ListingEditor({
   t, errors, markets, accounts, hasGpsr, keyword, marketId, supplierRef, onClose,
@@ -125,8 +125,8 @@ export default function ListingEditor({
 
   if (done)
     return (
-      <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-6">
-        <p className="text-lg font-semibold text-emerald-800">✓ {t.published}</p>
+      <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-6">
+        <p className="text-lg font-semibold text-emerald-300">✓ {t.published}</p>
         <div className="mt-4 flex flex-wrap gap-3">
           <a href={done.url} target="_blank" rel="noopener noreferrer" className="btn-primary">{t.view}</a>
           <button type="button" onClick={onClose} className="btn-secondary">{t.another}</button>
@@ -136,8 +136,8 @@ export default function ListingEditor({
 
   if (!draft)
     return (
-      <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-        {error ? <p className="text-red-600">{error}</p> : <p className="animate-pulse text-slate-600">{t.preparing}</p>}
+      <div className="card">
+        {error ? <p className="text-red-400">{error}</p> : <p className="animate-pulse text-muted">{t.preparing}</p>}
       </div>
     );
 
@@ -145,18 +145,18 @@ export default function ListingEditor({
   const extraAspectNames = Object.keys(aspects).filter((n) => !draft.aspectDefs.some((d) => d.name === n));
 
   return (
-    <div className="space-y-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="space-y-6 card">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-xl font-bold">{t.draftTitle}</h2>
-        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">{markets[marketId]}</span>
+        <span className="rounded-full bg-surface-2 px-3 py-1 text-xs font-medium text-muted">{markets[marketId]}</span>
       </div>
 
-      {draft.copySource === "supplier" && <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">{t.aiFallback}</p>}
-      {draft.vero && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{fmt(t.veroWarning, { brand: draft.vero })}</p>}
+      {draft.copySource === "supplier" && <p className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-300">{t.aiFallback}</p>}
+      {draft.vero && <p className="rounded-lg bg-red-500/10 p-3 text-sm text-red-300">{fmt(t.veroWarning, { brand: draft.vero })}</p>}
 
       {/* Compte et réglages eBay */}
       {accounts.length === 0 ? (
-        <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+        <p className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-300">
           {t.connectFirst} <Link href="/settings" className="font-semibold underline">{t.settingsLink}</Link>
         </p>
       ) : (
@@ -169,16 +169,16 @@ export default function ListingEditor({
           </label>
           <div className="text-sm">
             <p className="font-medium">{t.category}</p>
-            <p className="mt-2 text-slate-600">{draft.categoryName ?? draft.categoryId} <span className="text-slate-400">#{draft.categoryId}</span></p>
+            <p className="mt-2 text-muted">{draft.categoryName ?? draft.categoryId} <span className="text-subtle">#{draft.categoryId}</span></p>
           </div>
         </div>
       )}
-      {accounts.length > 0 && setupLoading && !setup && <p className="text-sm text-slate-500">{t.loadingSetup}</p>}
+      {accounts.length > 0 && setupLoading && !setup && <p className="text-sm text-muted">{t.loadingSetup}</p>}
       {setup && !setup.existing && (
         <SetupForm t={t} market={markets[marketId]} marketId={marketId} accountId={accountId} policies={setup.policies} onSaved={loadSetup} onError={showError} onRefresh={loadSetup} />
       )}
       {needsGpsr && (
-        <p className="rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
+        <p className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-300">
           {t.gpsrMissing} <Link href="/settings#gpsr" className="font-semibold underline">{t.settingsLink}</Link>
         </p>
       )}
@@ -187,7 +187,7 @@ export default function ListingEditor({
       <label className="block text-sm font-medium">
         {t.titleLabel}
         <input value={title} maxLength={TITLE_MAX} onChange={(e) => setTitle(e.target.value)} onBlur={() => setTitle(cleanTitle(title))} className={field} />
-        <span className={`mt-1 block text-xs ${title.length > TITLE_MAX ? "text-red-600" : "text-slate-500"}`}>{fmt(t.titleCount, { n: title.length })}</span>
+        <span className={`mt-1 block text-xs ${title.length > TITLE_MAX ? "text-red-400" : "text-muted"}`}>{fmt(t.titleCount, { n: title.length })}</span>
       </label>
 
       {/* Prix, quantité, marge */}
@@ -195,13 +195,13 @@ export default function ListingEditor({
         <label className="block text-sm font-medium">
           {fmt(t.price, { currency: draft.currency })}
           <input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} className={field} />
-          <span className="mt-1 block text-xs text-slate-500">{fmt(t.priceHelp, { pct: draft.minMarginPct, min: money(draft.minPrice) })}</span>
+          <span className="mt-1 block text-xs text-muted">{fmt(t.priceHelp, { pct: draft.minMarginPct, min: money(draft.minPrice) })}</span>
         </label>
         <label className="block text-sm font-medium">
           {t.quantity}
           <input type="number" min={1} max={draft.maxQuantity} value={quantity} onChange={(e) => setQuantity(Math.max(1, Math.min(draft.maxQuantity, Number(e.target.value) || 1)))} className={field} />
         </label>
-        <div className={`rounded-xl p-4 text-sm ${tooLow ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-800"}`}>
+        <div className={`rounded-xl p-4 text-sm ${tooLow ? "bg-red-500/10 text-red-300" : "bg-emerald-500/10 text-emerald-300"}`}>
           {margin && <p className="font-semibold">{fmt(t.profit, { profit: money(margin.profit), pct: margin.marginPct })}</p>}
           {tooLow && <p className="mt-1">{fmt(t.tooLow, { pct: draft.minMarginPct, min: money(draft.minPrice) })}</p>}
         </div>
@@ -214,9 +214,9 @@ export default function ListingEditor({
           {[...draft.aspectDefs].sort((a, b) => Number(b.required) - Number(a.required)).map((d) => (
             <label key={d.name} className="block text-sm">
               <span className="font-medium">{d.name}</span>
-              {d.required && <span className="ml-1 text-xs text-red-600">({t.required})</span>}
+              {d.required && <span className="ml-1 text-xs text-red-400">({t.required})</span>}
               {brandish(d.name) ? (
-                <input value={aspects[d.name]?.join(", ") ?? ""} readOnly className={`${field} bg-slate-50 text-slate-500`} />
+                <input value={aspects[d.name]?.join(", ") ?? ""} readOnly className={`${field} bg-surface-2 text-muted`} />
               ) : d.mode === "SELECTION_ONLY" && d.values.length ? (
                 <select
                   value={aspects[d.name]?.[0] ?? ""}
@@ -246,21 +246,21 @@ export default function ListingEditor({
             </label>
           ))}
         </div>
-        {missing.length > 0 && <p className="mt-2 text-sm text-red-600">{fmt(t.missing, { names: missing.join(", ") })}</p>}
+        {missing.length > 0 && <p className="mt-2 text-sm text-red-400">{fmt(t.missing, { names: missing.join(", ") })}</p>}
       </div>
 
       {/* Description */}
       <div>
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold">{t.description}</h3>
-          <button type="button" onClick={() => setEditHtml(!editHtml)} className="text-sm font-medium text-brand-600 hover:underline">
+          <button type="button" onClick={() => setEditHtml(!editHtml)} className="text-sm font-medium text-brand-400 hover:underline">
             {editHtml ? t.preview : t.edit}
           </button>
         </div>
         {editHtml ? (
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={12} className={`${field} font-mono text-xs`} />
         ) : (
-          <iframe title={t.preview} sandbox="" srcDoc={`<meta charset="utf-8"><style>body{font-family:system-ui,sans-serif;font-size:14px;color:#0f172a;margin:12px;line-height:1.5}</style>${description}`} className="mt-2 h-72 w-full rounded-lg border border-slate-200" />
+          <iframe title={t.preview} sandbox="" srcDoc={`<meta charset="utf-8"><style>body{font-family:system-ui,sans-serif;font-size:14px;color:#0f172a;margin:12px;line-height:1.5}</style>${description}`} className="mt-2 h-72 w-full rounded-lg border border-line" />
         )}
       </div>
 
@@ -270,12 +270,12 @@ export default function ListingEditor({
         <div className="mt-2 flex gap-2 overflow-x-auto pb-2">
           {draft.images.map((src) => (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={src} src={src} alt="" loading="lazy" className="h-20 w-20 flex-none rounded-lg border border-slate-200 object-cover" />
+            <img key={src} src={src} alt="" loading="lazy" className="h-20 w-20 flex-none rounded-lg border border-line object-cover" />
           ))}
         </div>
       </div>
 
-      {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+      {error && <p className="rounded-lg bg-red-500/10 p-3 text-sm text-red-300">{error}</p>}
       <div className="flex flex-wrap gap-3">
         <button type="button" onClick={publish} disabled={!ready || publishing} className="btn-primary">
           {publishing ? t.publishing : t.publish}
@@ -333,17 +333,17 @@ function SetupForm({
           {policies[name].map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
         </select>
       ) : (
-        <span className="mt-1 block text-xs font-normal text-red-600">{t.noPolicies}</span>
+        <span className="mt-1 block text-xs font-normal text-red-400">{t.noPolicies}</span>
       )}
     </label>
   );
 
   return (
-    <form onSubmit={submit} className="space-y-4 rounded-xl border border-brand-200 bg-brand-50 p-5">
+    <form onSubmit={submit} className="space-y-4 rounded-xl border border-brand-500/30 bg-brand-500/10 p-5">
       <div>
         <h3 className="font-semibold">{fmt(t.setupTitle, { market })}</h3>
-        <p className="mt-1 text-sm text-slate-600">{t.setupHelp}</p>
-        <a href={POLICIES_URL[marketId]} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-sm font-medium text-brand-700 underline">{t.policiesLink}</a>
+        <p className="mt-1 text-sm text-muted">{t.setupHelp}</p>
+        <a href={POLICIES_URL[marketId]} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-sm font-medium text-brand-300 underline">{t.policiesLink}</a>
       </div>
       <div className="grid gap-3 sm:grid-cols-3">
         {select("fulfillment", t.fulfillment)}
@@ -352,7 +352,7 @@ function SetupForm({
       </div>
       <div>
         <p className="text-sm font-medium">{t.location}</p>
-        <p className="text-xs text-slate-600">{t.locationHelp}</p>
+        <p className="text-xs text-muted">{t.locationHelp}</p>
         <div className="mt-2 grid gap-3 sm:grid-cols-3">
           <input name="postalCode" required minLength={2} maxLength={12} placeholder={t.postalCode} aria-label={t.postalCode} className={field} />
           <input name="city" maxLength={60} placeholder={t.city} aria-label={t.city} className={field} />

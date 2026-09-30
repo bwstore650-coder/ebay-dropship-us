@@ -4,6 +4,7 @@ import { env } from "@/lib/env";
 import { COMMISSION_RATE, HOLD_DAYS, MIN_PAYOUT_CENTS, newReferralCode, totals } from "@/lib/affiliate";
 import { fmt } from "@/lib/i18n";
 import { getI18n } from "@/lib/i18n/server";
+import { StatCard } from "@/components/ui";
 
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
@@ -23,28 +24,19 @@ export default async function Affiliate() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold">{a.title}</h1>
-      <p className="text-slate-600">{fmt(a.intro, { rate: COMMISSION_RATE * 100, days: HOLD_DAYS, min: usd(MIN_PAYOUT_CENTS) })}</p>
-      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm p-6">
-        <p className="text-sm text-slate-500">{a.yourLink}</p>
-        <p className="mt-1 break-all font-mono text-brand-700">{link}</p>
+      <h1 className="text-2xl font-semibold tracking-tight text-fg sm:text-[28px]">{a.title}</h1>
+      <p className="max-w-3xl text-sm text-muted">{fmt(a.intro, { rate: COMMISSION_RATE * 100, days: HOLD_DAYS, min: usd(MIN_PAYOUT_CENTS) })}</p>
+      <section className="card border-brand-500/30 bg-gradient-to-br from-brand-500/10 to-transparent">
+        <p className="eyebrow">{a.yourLink}</p>
+        <p className="mt-2 break-all font-mono text-[15px] text-brand-200">{link}</p>
       </section>
-      <section className="grid gap-4 sm:grid-cols-3">
-        <Stat label={a.signups} value={String(referrals)} />
-        <Stat label={a.paying} value={String(paying)} />
-        <Stat label={a.pending} value={usd(sum.pendingCents)} />
-        <Stat label={a.payable} value={usd(sum.payableCents)} />
-        <Stat label={a.paid} value={usd(sum.paidCents)} />
+      <section className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3">
+        <StatCard label={a.signups} value={String(referrals)} icon="users" tone="sky" />
+        <StatCard label={a.paying} value={String(paying)} icon="card" tone="brand" />
+        <StatCard label={a.pending} value={usd(sum.pendingCents)} icon="refresh" tone="amber" />
+        <StatCard label={a.payable} value={usd(sum.payableCents)} icon="dollar" tone="emerald" />
+        <StatCard label={a.paid} value={usd(sum.paidCents)} icon="check" tone="fuchsia" />
       </section>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm p-5">
-      <p className="text-sm text-slate-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold">{value}</p>
     </div>
   );
 }

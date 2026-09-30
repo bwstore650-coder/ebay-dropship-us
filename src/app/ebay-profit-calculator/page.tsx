@@ -19,9 +19,9 @@ export default async function Page() {
     <>
     <SiteHeader locale={locale} t={t} />
     <main className="mx-auto max-w-3xl px-4 py-12">
-      <p className="text-sm font-semibold uppercase tracking-wide text-brand-600">{c.kicker}</p>
+      <p className="text-sm font-semibold uppercase tracking-wide text-brand-400">{c.kicker}</p>
       <h1 className="mt-2 text-3xl font-bold sm:text-4xl">{c.title}</h1>
-      <p className="mt-3 text-slate-600">{c.intro}</p>
+      <p className="mt-3 text-muted">{c.intro}</p>
       <ProfitCalculator t={c} markets={t.markets} errors={t.errors} marketIds={MARKETPLACE_IDS} defaultMarket={DEFAULT_SITE[locale]} />
     </main>
     <SiteFooter locale={locale} t={t} />
