@@ -351,6 +351,7 @@ export const de: Dict = {
     ending: "Wird beendet…",
     lastError: "Letzter eBay-Fehler: {message}",
     statusDRAFT: "Nicht veröffentlicht",
+    removeDraft: "Löschen",
     statusACTIVE: "Online",
     statusPAUSED: "Pausiert",
     statusENDED: "Beendet",

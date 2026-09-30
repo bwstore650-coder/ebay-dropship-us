@@ -5,7 +5,7 @@ import { fmt, LOCALE_TAGS } from "@/lib/i18n";
 import { getI18n } from "@/lib/i18n/server";
 import { ebayItemUrl } from "@/lib/listing";
 import { marketplace } from "@/lib/marketplaces";
-import { checkNowAction, endListingAction } from "./actions";
+import { checkNowAction, deleteDraftAction, endListingAction } from "./actions";
 import { Icon } from "@/components/icons";
 import { PageHeader, StatusBadge } from "@/components/ui";
 import { LISTING_TONE } from "@/lib/status-tones";
@@ -94,6 +94,12 @@ export default async function ListingsPage() {
                       <div className="flex justify-end gap-3 whitespace-nowrap">
                         {l.ebayListingId && l.status === "ACTIVE" && (
                           <a href={ebayItemUrl(m.id, l.ebayListingId)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-medium text-brand-300 hover:text-brand-200">{L.view}<Icon name="external" className="h-3.5 w-3.5" /></a>
+                        )}
+                        {l.status === "DRAFT" && !l.ebayListingId && (
+                          <form action={deleteDraftAction}>
+                            <input type="hidden" name="listingId" value={l.id} />
+                            <button className="font-medium text-muted hover:text-red-300">{L.removeDraft}</button>
+                          </form>
                         )}
                         {(l.status === "ACTIVE" || l.status === "PAUSED") && (
                           <form action={endListingAction}>

@@ -350,6 +350,7 @@ export const en = {
     ending: "Ending…",
     lastError: "Last eBay error: {message}",
     statusDRAFT: "Not published",
+    removeDraft: "Delete",
     statusACTIVE: "Live",
     statusPAUSED: "Paused",
     statusENDED: "Ended",

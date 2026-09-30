@@ -361,6 +361,12 @@ export async function saveSetup(
 }
 
 /** Retire une annonce publiée (le client peut la republier plus tard). */
+/** Supprime un brouillon jamais publié (échec de publication) : rien n'existe en vente sur eBay. */
+export async function deleteDraft(user: { id: string }, listingId: string): Promise<boolean> {
+  const r = await db.listing.deleteMany({ where: { id: listingId, userId: user.id, status: "DRAFT", ebayListingId: null } });
+  return r.count > 0;
+}
+
 export async function endListing(user: UserWithAccounts, listingId: string) {
   const listing = await db.listing.findFirst({ where: { id: listingId, userId: user.id } });
   if (!listing) throw new ListingError("INVALID_INPUT");

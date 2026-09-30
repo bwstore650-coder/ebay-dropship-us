@@ -2,7 +2,7 @@ import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { fmt, LOCALE_TAGS } from "@/lib/i18n";
 import { getI18n } from "@/lib/i18n/server";
-import { EBAY_DOMAINS } from "@/lib/listing";
+import { ebayDomain } from "@/lib/listing";
 import { marketplace } from "@/lib/marketplaces";
 import { actionsFor } from "@/lib/aftersale";
 import { ORDER_TONE } from "@/lib/status-tones";
@@ -33,7 +33,7 @@ export default async function ReturnsPage({ searchParams }: { searchParams: Prom
     const order = a.orderId ? byId.get(a.orderId) ?? null : null;
     const can = actionsFor(a, order);
     const m = marketplace(a.marketplace);
-    const domain = EBAY_DOMAINS[m.id];
+    const domain = ebayDomain(m.id);
     const ebayUrl = a.type === "RETURN" ? `https://${domain}/rt/ReturnDetails?returnId=${encodeURIComponent(a.ebayId)}` : `https://${domain}/sh/ord/details?orderid=${encodeURIComponent(a.ebayOrderId)}`;
     const lines = (order?.lines as unknown as { title?: string }[] | undefined) ?? [];
     const title = a.itemTitle ?? lines[0]?.title ?? a.ebayOrderId;

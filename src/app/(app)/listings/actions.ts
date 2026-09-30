@@ -1,7 +1,7 @@
 "use server";
 import { revalidatePath } from "next/cache";
 import { requireUser } from "@/lib/auth";
-import { endListing } from "@/lib/listing-service";
+import { deleteDraft, endListing } from "@/lib/listing-service";
 import { monitorUser } from "@/lib/monitor-service";
 
 export async function endListingAction(formData: FormData) {
@@ -13,6 +13,14 @@ export async function endListingAction(formData: FormData) {
   } catch (e) {
     console.error("Retrait annonce", e);
   }
+  revalidatePath("/listings");
+}
+
+export async function deleteDraftAction(formData: FormData) {
+  const user = await requireUser();
+  const id = String(formData.get("listingId") ?? "");
+  if (!id) return;
+  await deleteDraft(user, id);
   revalidatePath("/listings");
 }
 

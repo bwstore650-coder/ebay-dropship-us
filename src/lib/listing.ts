@@ -127,8 +127,13 @@ export const EBAY_DOMAINS: Record<MarketplaceId, string> = {
   EBAY_DE: "www.ebay.de", EBAY_FR: "www.ebay.fr", EBAY_IT: "www.ebay.it", EBAY_ES: "www.ebay.es", EBAY_IE: "www.ebay.ie",
 };
 
+/** Site eBay du pays (le site de test d'eBay quand l'app tourne en Sandbox). */
+export function ebayDomain(marketId: string): string {
+  return process.env.EBAY_ENV === "sandbox" ? "sandbox.ebay.com" : EBAY_DOMAINS[marketplace(marketId).id];
+}
+
 export function ebayItemUrl(marketId: string, listingId: string): string {
-  return `https://${EBAY_DOMAINS[marketplace(marketId).id]}/itm/${encodeURIComponent(listingId)}`;
+  return `https://${ebayDomain(marketId)}/itm/${encodeURIComponent(listingId)}`;
 }
 
 /** Pays de l'UE : une personne responsable (GPSR) est obligatoire. */

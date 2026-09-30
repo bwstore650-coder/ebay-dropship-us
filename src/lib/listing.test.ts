@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AspectDef } from "./ebay";
 import { buildAspects, cleanImages, cleanTitle, ebayItemUrl, makeSku, mostCommon, sanitizeDescription, veroIn } from "./listing";
 
@@ -77,5 +77,8 @@ describe("annonce : divers", () => {
   it("lien eBay du bon pays", () => {
     expect(ebayItemUrl("EBAY_DE", "123")).toBe("https://www.ebay.de/itm/123");
     expect(ebayItemUrl("EBAY_GB", "9")).toBe("https://www.ebay.co.uk/itm/9");
+    vi.stubEnv("EBAY_ENV", "sandbox");
+    expect(ebayItemUrl("EBAY_US", "110590823028")).toBe("https://sandbox.ebay.com/itm/110590823028");
+    vi.unstubAllEnvs();
   });
 });
