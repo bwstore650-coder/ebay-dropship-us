@@ -152,6 +152,6 @@ export function ebaySearchUrl(marketId: string, keyword: string): string {
 
 /** Fiche du produit sur le site CJdropshipping. */
 export function cjProductUrl(productId: string, title?: string | null): string {
-  const slug = (title ?? "product").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "product";
+  const slug = (title ?? "product").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 80).replace(/^-+|-+$/g, "") || "product";
   return `https://cjdropshipping.com/product/${slug}-p-${encodeURIComponent(productId)}.html`;
 }
