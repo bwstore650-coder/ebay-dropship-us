@@ -17,7 +17,9 @@ import { ListingError, prepareListing, publishListing } from "@/lib/listing-serv
 import { evaluateProduct, weightedMedian, type SupplierOffer } from "@/lib/margin";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import * as cj from "@/lib/suppliers/cj";
+import { marketInsights } from "@/lib/market-insights";
 import {
+  type CandidateDetails,
   classify, DEFAULT_SEEDS, isFinished, keywordFromTitle, MAX_TARGET, MAX_VARIANTS, maxScan, MIN_UNITS_SOLD, RESUME_AFTER_MS,
 } from "@/lib/sniper";
 
@@ -169,6 +171,8 @@ async function cjOffersFor(token: string, product: cj.CjProduct, country: string
 
 type RunRow = SnipeRun;
 
+const toJson = (d: CandidateDetails) => d as unknown as Prisma.InputJsonValue;
+
 /** Analyse d'un produit ou d'un mot-clé → données à enregistrer sur le candidat. */
 async function evaluate(run: RunRow, c: SnipeCandidate, token: string): Promise<Prisma.SnipeCandidateUpdateInput> {
   const m = marketplace(run.marketplace);
@@ -190,6 +194,14 @@ async function evaluate(run: RunRow, c: SnipeCandidate, token: string): Promise<
       marginPct: r.margin?.marginPct ?? null,
       unitsSold: r.unitsSold,
       deliveryDaysMax: r.best?.deliveryDaysMax ?? null,
+      details: toJson({
+        market: r.insights,
+        supplierPrice: r.best?.price ?? null,
+        shipping: r.best?.shipping ?? null,
+        fees: r.margin?.fees ?? null,
+        stock: r.best?.stockUs ?? null,
+        minPrice: r.minPriceForTarget,
+      }),
     };
   }
 
@@ -198,16 +210,27 @@ async function evaluate(run: RunRow, c: SnipeCandidate, token: string): Promise<
   const image = cj.productImages(product)[0] ?? null;
   const title = product.productNameEn || c.title;
   const base = { title: title?.slice(0, 300) ?? null, image };
-  const hasStock = product.variants.some((v) => (v.inventories?.find((i) => i.countryCode === m.country)?.totalInventory ?? 0) > 0);
-  if (!hasStock) return { ...base, status: "REJECTED", reason: "NO_SUPPLIER" };
+  const stocked = product.variants
+    .map((v) => ({ v, stock: v.inventories?.find((i) => i.countryCode === m.country)?.totalInventory ?? 0 }))
+    .filter((x) => x.stock > 0)
+    .sort((a, b) => Number(a.v.variantSellPrice) - Number(b.v.variantSellPrice));
+  if (!stocked.length) return { ...base, status: "REJECTED", reason: "NO_SUPPLIER" };
+  // Prix fournisseur (sans la livraison) dans la devise du pays, connu même quand le produit est rejeté plus loin.
+  const [cheapest] = await toMarket([{ supplier: "CJ", productId: product.pid, variantId: stocked[0].v.vid, title: title ?? "", price: Number(stocked[0].v.variantSellPrice), shipping: 0, stockUs: stocked[0].stock, deliveryDaysMax: 0 }]);
+  const supplierInfo: CandidateDetails = { supplierPrice: cheapest.price, stock: stocked[0].stock };
 
   const market = await searchWithDemand(c.keyword, 10, m.id);
+  const insights = marketInsights(market);
   const sold = weightedMedian(market.soldWeighted);
   const prices = sold !== null ? [sold] : market.prices;
   // Pas d'annonce comparable ou pas de ventes : inutile d'interroger les frais de port.
-  if (!prices.length) return { ...base, status: "REJECTED", reason: "NO_PRICE", unitsSold: market.unitsSold };
+  if (!prices.length) return { ...base, status: "REJECTED", reason: "NO_PRICE", unitsSold: market.unitsSold, details: toJson({ ...supplierInfo, market: insights }) };
   if (market.unitsSold < MIN_UNITS_SOLD) {
-    return { ...base, status: "REJECTED", reason: "NO_DEMAND", marketPrice: evaluateProduct(prices, [], run.minMarginPct, { market: m }).marketPrice, unitsSold: market.unitsSold };
+    const e = evaluateProduct(prices, [cheapest], run.minMarginPct, { market: m });
+    return {
+      ...base, status: "REJECTED", reason: "NO_DEMAND", marketPrice: e.marketPrice, unitsSold: market.unitsSold,
+      details: toJson({ ...supplierInfo, market: insights, fees: e.margin?.fees ?? null }),
+    };
   }
   const offers = await toMarket(await cjOffersFor(token, product, m.country));
   const e = evaluateProduct(prices, offers, run.minMarginPct, { market: m });
@@ -223,6 +246,14 @@ async function evaluate(run: RunRow, c: SnipeCandidate, token: string): Promise<
     marginPct: e.margin?.marginPct ?? null,
     unitsSold: market.unitsSold,
     deliveryDaysMax: e.best?.deliveryDaysMax ?? null,
+    details: toJson({
+      market: insights,
+      supplierPrice: e.best?.price ?? supplierInfo.supplierPrice,
+      shipping: e.best?.shipping ?? null,
+      fees: e.margin?.fees ?? null,
+      stock: e.best?.stockUs ?? supplierInfo.stock,
+      minPrice: e.minPriceForTarget,
+    }),
   };
 }
 
@@ -375,6 +406,7 @@ export async function runState(userId: string, runId: string) {
     marketId: run.marketplace as MarketplaceId,
     status: run.status,
     target: run.target,
+    minMarginPct: run.minMarginPct,
     scanned: run.scanned,
     found: run.found,
     listed: run.listed,
@@ -398,6 +430,7 @@ export async function runState(userId: string, runId: string) {
       marginPct: c.marginPct,
       unitsSold: c.unitsSold,
       deliveryDaysMax: c.deliveryDaysMax,
+      details: (c.details ?? null) as CandidateDetails | null,
       listingId: c.listingId,
     })),
   };

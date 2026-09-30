@@ -135,12 +135,13 @@ interface ItemSummary {
   itemWebUrl?: string;
   image?: { imageUrl: string };
   leafCategoryIds?: string[];
+  itemCreationDate?: string;
 }
 
 export interface MarketSnapshot {
   total: number;
   prices: number[]; // prix total acheteur (produit + livraison)
-  items: { id: string; title: string; price: number; url?: string; image?: string; categoryId?: string }[];
+  items: { id: string; title: string; price: number; url?: string; image?: string; categoryId?: string; createdAt?: string }[];
 }
 
 export async function searchActive(q: string, limit = 50, marketId: MarketplaceId = "EBAY_US"): Promise<MarketSnapshot> {
@@ -161,6 +162,7 @@ export async function searchActive(q: string, limit = 50, marketId: MarketplaceI
       url: i.itemWebUrl,
       image: i.image?.imageUrl,
       categoryId: i.leafCategoryIds?.[0],
+      createdAt: i.itemCreationDate,
     };
   });
   return { total: data.total, prices: items.map((i) => i.price).filter((p) => p > 0), items };
@@ -270,6 +272,7 @@ export async function soldQuantities(ids: string[], marketId: MarketplaceId = "E
 export interface DemandSnapshot extends MarketSnapshot {
   unitsSold: number;                                  // total estimé sur les annonces analysées
   soldWeighted: { price: number; weight: number }[]; // prix × unités vendues
+  analyzed: (MarketSnapshot["items"][number] & { sold: number })[]; // annonces analysées, avec leurs ventes
 }
 
 /** Marché + demande : prix des annonces actives, pondérés par ce qu'elles ont réellement vendu. */
@@ -278,8 +281,9 @@ export async function searchWithDemand(q: string, sample = 20, marketId: Marketp
   const sampled = market.items.slice(0, sample);
   const sold = await soldQuantities(sampled.map((i) => i.id), marketId);
   // Annonce retirée entre-temps : absente de la liste, on l'ignore.
-  const soldWeighted = sampled.filter((i) => sold.has(i.id)).map((i) => ({ price: i.price, weight: sold.get(i.id)! }));
-  return { ...market, soldWeighted, unitsSold: soldWeighted.reduce((s, p) => s + p.weight, 0) };
+  const analyzed = sampled.filter((i) => sold.has(i.id)).map((i) => ({ ...i, sold: sold.get(i.id)! }));
+  const soldWeighted = analyzed.map((i) => ({ price: i.price, weight: i.sold }));
+  return { ...market, soldWeighted, analyzed, unitsSold: soldWeighted.reduce((s, p) => s + p.weight, 0) };
 }
 
 /* ---------- Mise en vente (API Inventory) ---------- */

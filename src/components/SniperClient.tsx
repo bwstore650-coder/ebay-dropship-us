@@ -6,6 +6,7 @@ import { errorMessage } from "@/lib/i18n/errors";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import type { RunState } from "@/lib/sniper-service";
 import ListingEditor from "@/components/ListingEditor";
+import SniperProductCard from "@/components/SniperProductCard";
 import { Icon } from "@/components/icons";
 import { Notice, PageHeader } from "@/components/ui";
 
@@ -34,6 +35,7 @@ export default function SniperClient({
   const [error, setError] = useState<string | null>(null);
   const [autoList, setAutoList] = useState(false);
   const [tab, setTab] = useState<"good" | "bad">("good");
+  const [sort, setSort] = useState<"profit" | "margin" | "monthly" | "price">("profit");
   const [editing, setEditing] = useState<Candidate | null>(null);
   const alive = useRef(true);
 
@@ -103,6 +105,12 @@ export default function SniperClient({
   const bad = run?.candidates.filter((c) => c.status === "REJECTED" || c.status === "ERROR") ?? [];
   const sym = run ? marketplace(run.marketId).symbol : "";
   const money = (v: number | null) => (v === null ? "—" : `${v.toFixed(2)} ${sym}`);
+  const sortValue = (c: Candidate) =>
+    sort === "margin" ? c.marginPct ?? -1e9
+    : sort === "monthly" ? c.details?.market?.monthlySales ?? -1
+    : sort === "price" ? c.marketPrice ?? -1
+    : c.profit ?? -1e9;
+  const sorted = (list: Candidate[]) => [...list].sort((a, b) => sortValue(b) - sortValue(a));
   const reasonText = (c: Candidate) => {
     const r = c.reason ?? (c.status === "ERROR" ? "UPSTREAM" : "");
     if (r.startsWith("AUTO_LIST:")) return fmt(t.reasons.AUTO_LIST, { reason: fmt(errorMessage(errors, r.slice(10)), { detail: "" }) });
@@ -284,67 +292,35 @@ export default function SniperClient({
               ))}
             </div>
 
-            {tab === "good" &&
-              (good.length === 0 ? (
-                <p className="rounded-2xl border border-dashed border-line-strong bg-surface/50 p-10 text-center text-sm text-muted">{t.noResults}</p>
-              ) : (
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  {good.map((c) => (
-                    <article key={c.id} className="card flex min-w-0 flex-col p-0">
-                      <div className="flex gap-4 p-5">
-                        {c.image ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={c.image} alt="" className="h-20 w-20 shrink-0 rounded-xl bg-white object-contain" loading="lazy" />
-                        ) : (
-                          <span className="grid h-20 w-20 shrink-0 place-items-center rounded-xl bg-surface-2 text-subtle"><Icon name="box" /></span>
-                        )}
-                        <div className="min-w-0">
-                          <p className="line-clamp-2 text-sm font-medium text-fg">{c.title ?? c.keyword}</p>
-                          <p className="mt-1 truncate text-xs text-subtle">{fmt(t.search, { keyword: c.keyword })}</p>
-                          <p className="mt-2 text-xl font-semibold text-emerald-300 tabular-nums">
-                            +{money(c.profit)} <span className="text-sm text-muted">· {c.marginPct ?? "—"} %</span>
-                          </p>
-                        </div>
-                      </div>
-                      <dl className="grid grid-cols-2 gap-px border-y border-line bg-line text-xs">
-                        {([[t.colMarket, money(c.marketPrice)], [t.colCost, money(c.cost)], [t.colSold, c.unitsSold ?? "—"], [t.colDelivery, c.deliveryDaysMax ? fmt(t.days, { days: c.deliveryDaysMax }) : "—"]] as const).map(([k, v]) => (
-                          <div key={k} className="bg-surface px-5 py-2.5">
-                            <dt className="text-subtle">{k}</dt>
-                            <dd className="mt-0.5 font-medium text-fg-2 tabular-nums">{v}</dd>
-                          </div>
-                        ))}
-                      </dl>
-                      <div className="mt-auto flex items-center justify-between gap-3 p-4">
-                        {c.status === "LISTED" ? (
-                          <>
-                            <span className="badge bg-emerald-500/15 text-emerald-300"><Icon name="check" className="h-3 w-3" strokeWidth={3} />{t.listed}</span>
-                            <Link href="/listings" className="text-sm font-medium text-brand-300 hover:text-brand-200">{t.viewListings}</Link>
-                          </>
-                        ) : (
-                          <>
-                            {c.reason ? <span className="line-clamp-2 text-xs text-amber-300">{reasonText(c)}</span> : <span />}
-                            <button onClick={() => setEditing(c)} disabled={!c.productId || !c.supplier} className="btn-primary shrink-0 px-4 py-2 text-sm">{t.create}</button>
-                          </>
-                        )}
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              ))}
+            {(tab === "good" ? good : bad).length > 1 && (
+              <label className="ml-3 inline-flex items-center gap-2 text-sm text-muted">
+                {t.card.sortBy}
+                <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} className="input w-auto py-1.5 text-sm">
+                  <option value="profit">{t.card.sortProfit}</option>
+                  <option value="margin">{t.card.sortMargin}</option>
+                  <option value="monthly">{t.card.sortMonthly}</option>
+                  <option value="price">{t.card.sortPrice}</option>
+                </select>
+              </label>
+            )}
 
-            {tab === "bad" && bad.length > 0 && (
-              <div className="overflow-hidden rounded-2xl border border-line bg-surface">
-                <ul className="divide-y divide-line">
-                  {bad.map((c) => (
-                    <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 text-sm">
-                      <span className="min-w-0 flex-1 truncate text-fg-2" title={c.title ?? c.keyword}>{c.title ?? c.keyword}</span>
-                      <span className="flex items-center gap-3">
-                        {c.marginPct !== null && <span className="text-xs text-subtle tabular-nums">{c.marginPct} %</span>}
-                        <span className="badge bg-surface-3 text-muted">{reasonText(c)}</span>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+            {tab === "good" && good.length === 0 && (
+              <p className="rounded-2xl border border-dashed border-line-strong bg-surface/50 p-10 text-center text-sm text-muted">{t.noResults}</p>
+            )}
+            {(tab === "good" ? good : bad).length > 0 && (
+              <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {sorted(tab === "good" ? good : bad).map((c) => (
+                  <SniperProductCard
+                    key={c.id}
+                    c={c}
+                    t={t}
+                    minMargin={run?.minMarginPct ?? minMargin}
+                    money={money}
+                    reason={c.reason ? reasonText(c) : null}
+                    onCreate={setEditing}
+                    collapsible={tab === "bad"}
+                  />
+                ))}
               </div>
             )}
           </section>

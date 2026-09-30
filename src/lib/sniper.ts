@@ -5,6 +5,17 @@
  */
 import { findVeroBrand } from "@/lib/compliance";
 import type { Evaluation } from "@/lib/margin";
+import type { MarketInsights } from "@/lib/market-insights";
+
+/** Tout ce que le Sniper a mesuré pour un produit (affiché dans sa fiche). Montants dans la devise du pays. */
+export interface CandidateDetails {
+  market?: MarketInsights;
+  supplierPrice?: number | null;  // prix du fournisseur (variante la moins chère en stock)
+  shipping?: number | null;       // livraison du fournisseur
+  fees?: number | null;           // frais eBay au prix du marché
+  stock?: number | null;          // stock du fournisseur dans le pays
+  minPrice?: number | null;       // prix de vente minimum pour la marge visée
+}
 
 /** Nombre maximum de produits à trouver par recherche. */
 export const MAX_TARGET = 50;

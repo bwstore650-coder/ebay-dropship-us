@@ -10,6 +10,7 @@ import { searchWithDemand } from "@/lib/ebay";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import * as cj from "@/lib/suppliers/cj";
 import { getUsdRates, offersToCurrency } from "@/lib/fx";
+import { marketInsights, type MarketInsights } from "@/lib/market-insights";
 
 export interface FinderResult extends Evaluation {
   keyword: string;
@@ -21,6 +22,7 @@ export interface FinderResult extends Evaluation {
   offersChecked: number;
   unitsSold: number;
   priceSource: "SOLD_WEIGHTED" | "ACTIVE_LISTINGS";
+  insights: MarketInsights; // fourchette de prix, ventes par mois, meilleurs concurrents
 }
 
 interface CjListV2Item { id?: string; pid?: string }
@@ -64,5 +66,6 @@ export async function findProduct(
     offersChecked: offers.length,
     unitsSold: market.unitsSold,
     priceSource: soldPrice !== null ? "SOLD_WEIGHTED" : "ACTIVE_LISTINGS",
+    insights: marketInsights(market),
   };
 }

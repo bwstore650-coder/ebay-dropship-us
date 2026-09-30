@@ -374,6 +374,7 @@ model SnipeCandidate {
   marginPct       Float?
   unitsSold       Int?
   deliveryDaysMax Int?
+  details         Json?                // analyse complète : marché eBay (prix, ventes/mois, concurrents), prix fournisseur, frais eBay…
   listingId       String?
   createdAt       DateTime             @default(now())
 

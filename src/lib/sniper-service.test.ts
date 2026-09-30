@@ -151,6 +151,13 @@ describe("Sniper", { timeout: 90_000 }, () => {
     expect(by["P-LOW"]).toMatchObject({ status: "REJECTED", reason: "LOW_MARGIN" });
     expect(by["P-NIKE"]).toMatchObject({ status: "REJECTED", reason: "VERO" });
     expect(by["P-GOOD"]).toMatchObject({ status: "PROFITABLE", keyword: "electric can opener automatic", variantId: "V-P-GOOD", marketPrice: 29.99, cost: 12, unitsSold: 12, deliveryDaysMax: 5 });
+    // Fiche complète : marché eBay, prix fournisseur, frais eBay, prix minimum.
+    const d = by["P-GOOD"].details as { market: { listings: number; priceMin: number; priceMax: number; soldTotal: number }; fees: number; minPrice: number; supplierPrice: number; stock: number };
+    expect(d.market).toMatchObject({ listings: expect.any(Number), priceMin: 25, priceMax: 31, soldTotal: 12 });
+    expect(d.fees).toBeGreaterThan(0);
+    expect(d.minPrice).toBeGreaterThan(12);
+    expect(d.supplierPrice).toBeGreaterThan(0);
+    expect(by["P-LOW"].details).toBeTruthy(); // un produit rejeté garde aussi son analyse
     expect(by["P-GOOD"].profit).toBeGreaterThan(10);
     expect(s.candidates[0].productId).toBe("P-GOOD"); // les rentables d'abord
     expect(listCalls).toBe(1);
