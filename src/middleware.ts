@@ -1,17 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE, verifySession } from "@/lib/session";
+import { SESSION_COOKIE } from "@/lib/session";
 
 const PROTECTED = ["/dashboard", "/finder", "/settings", "/billing", "/affiliate", "/admin", "/review", "/listings", "/orders"];
 const REF_COOKIE = "ref";
 const REF_COOKIE_DAYS = 60;
 const CONSENT_COOKIE = "consent";
 
-export async function middleware(req: NextRequest) {
+export function middleware(req: NextRequest) {
   const path = req.nextUrl.pathname;
 
   if (PROTECTED.some((p) => path === p || path.startsWith(p + "/"))) {
-    const userId = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
-    if (!userId) return NextResponse.redirect(new URL("/login", req.url));
+    // Filtre rapide : sans cookie de session, direction /login. La vérification complète (signature, compte,
+    // mot de passe changé, droits admin) est faite côté serveur par requireUser / requireAdmin sur chaque page.
+    if (!req.cookies.get(SESSION_COOKIE)?.value) return NextResponse.redirect(new URL("/login", req.url));
   }
 
   const res = NextResponse.next();
