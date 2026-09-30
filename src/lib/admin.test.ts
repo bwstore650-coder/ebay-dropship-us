@@ -18,6 +18,7 @@ describe("admin", () => {
       { plan: "AGENCY", billingInterval: "year", trialEndsAt: null },                     // 2241 / 12 = 186,75 $
       { plan: "STARTER", billingInterval: "month", trialEndsAt: new Date("2026-10-01") }, // essai : exclu
       { plan: "NONE", billingInterval: null, trialEndsAt: null },                         // exclu
+      { plan: "AGENCY", billingInterval: "comp", trialEndsAt: null },                     // accès admin offert : exclu
       { plan: "BUSINESS", billingInterval: "month", trialEndsAt: new Date("2026-09-01") },// essai fini : 99 $
     ], now);
     expect(mrr).toBe(5900 + 18675 + 9900);

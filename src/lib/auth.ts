@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { readSession, SESSION_COOKIE, signSession } from "@/lib/session";
 import { sessionStillValid } from "@/lib/password-reset";
-import { isAdminEmail, parseAdminEmails } from "@/lib/admin";
+import { ADMIN_PLAN, COMP_INTERVAL, isAdminEmail, parseAdminEmails } from "@/lib/admin";
 
 export const hashPassword = (p: string) => bcrypt.hash(p, 12);
 export const checkPassword = (p: string, h: string) => bcrypt.compare(p, h);
@@ -31,6 +31,11 @@ export async function currentUser() {
   const user = await db.user.findUnique({ where: { id: session.userId }, include: { ebayAccounts: { orderBy: { createdAt: "asc" } }, supplierAccounts: true } });
   // Mot de passe changé depuis l'ouverture de cette session : elle n'est plus valable.
   if (!user || !sessionStillValid(session.issuedAt, user.passwordChangedAt)) return null;
+  // Les administrateurs ont l'accès complet offert (enregistré en base pour que les tâches automatiques en tiennent compte aussi).
+  if (user.plan === "NONE" && isAdminEmail(user.email, parseAdminEmails(process.env.ADMIN_EMAILS))) {
+    await db.user.update({ where: { id: user.id }, data: { plan: ADMIN_PLAN, billingInterval: COMP_INTERVAL } });
+    return { ...user, plan: ADMIN_PLAN, billingInterval: COMP_INTERVAL };
+  }
   return user;
 }
 

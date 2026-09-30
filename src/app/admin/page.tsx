@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { dailyCounts, isTrialing, money, mrrCents } from "@/lib/admin";
+import { dailyCounts, isComp, isTrialing, money, mrrCents } from "@/lib/admin";
 import { totals } from "@/lib/affiliate";
 import { PLANS } from "@/lib/plans";
 import { Bars, Card, Kpi } from "@/components/admin/Kpi";
@@ -18,11 +18,11 @@ export default async function AdminHome() {
   ]);
 
   const mrr = mrrCents(users, now);
-  const paying = users.filter((u) => u.plan !== "NONE" && !isTrialing(u, now)).length;
+  const paying = users.filter((u) => u.plan !== "NONE" && !isComp(u) && !isTrialing(u, now)).length;
   const trialing = users.filter((u) => isTrialing(u, now)).length;
   const byPlan = PLANS.map((p) => ({
     plan: p.id,
-    monthly: users.filter((u) => u.plan === p.id && u.billingInterval !== "year").length,
+    monthly: users.filter((u) => u.plan === p.id && u.billingInterval !== "year" && !isComp(u)).length,
     yearly: users.filter((u) => u.plan === p.id && u.billingInterval === "year").length,
   }));
   const aff = totals(commissions, now);

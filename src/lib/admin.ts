@@ -20,11 +20,16 @@ export function isTrialing(u: BillingRow, now = new Date()): boolean {
   return u.plan !== "NONE" && !!u.trialEndsAt && u.trialEndsAt > now;
 }
 
-/** Revenu mensuel récurrent (en cents) des clients qui paient déjà (essais exclus). Annuel = prix annuel / 12. */
+/** Accès offert (comptes admin) : formule complète, jamais comptée dans le revenu. */
+export const COMP_INTERVAL = "comp";
+export const ADMIN_PLAN: Plan = "AGENCY";
+export const isComp = (u: { billingInterval: string | null }) => u.billingInterval === COMP_INTERVAL;
+
+/** Revenu mensuel récurrent (en cents) des clients qui paient déjà (essais et accès offerts exclus). Annuel = prix annuel / 12. */
 export function mrrCents(users: BillingRow[], now = new Date()): number {
   let total = 0;
   for (const u of users) {
-    if (u.plan === "NONE" || isTrialing(u, now)) continue;
+    if (u.plan === "NONE" || isComp(u) || isTrialing(u, now)) continue;
     const info = PLANS.find((p) => p.id === u.plan);
     if (!info) continue;
     total += u.billingInterval === "year" ? Math.round((info.yearlyUsd * 100) / 12) : info.priceUsd * 100;

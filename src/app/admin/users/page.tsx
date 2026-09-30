@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { isTrialing } from "@/lib/admin";
+import { isComp, isTrialing } from "@/lib/admin";
 import { Card } from "@/components/admin/Kpi";
 
 export const dynamic = "force-dynamic";
@@ -56,6 +56,7 @@ export default async function AdminUsers({ searchParams }: { searchParams: Promi
                   <td className="py-2">{u.plan}{u.billingInterval === "year" ? " (annuel)" : ""}</td>
                   <td className="py-2">
                     {u.plan === "NONE" ? <span className="text-subtle">Sans formule</span>
+                      : isComp(u) ? <span className="rounded bg-brand-500/15 px-2 py-0.5 text-brand-200">Offert (admin)</span>
                       : isTrialing(u, now) ? <span className="rounded bg-amber-500/15 px-2 py-0.5 text-amber-300">Essai</span>
                       : <span className="rounded bg-green-500/15 px-2 py-0.5 text-green-300">Payant</span>}
                   </td>
