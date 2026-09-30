@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE } from "@/lib/session";
+import { SESSION_COOKIE } from "@/lib/session-cookie";
 
 const PROTECTED = ["/dashboard", "/finder", "/sniper", "/settings", "/billing", "/affiliate", "/admin", "/review", "/listings", "/orders"];
 const REF_COOKIE = "ref";

@@ -1,7 +1,7 @@
 /** Session : jeton JWT signé dans un cookie httpOnly (compatible middleware Edge). */
 import { SignJWT, jwtVerify } from "jose";
 
-export const SESSION_COOKIE = "session";
+export { SESSION_COOKIE } from "@/lib/session-cookie";
 const secret = () => new TextEncoder().encode(process.env.SESSION_SECRET ?? "");
 
 export async function signSession(userId: string): Promise<string> {
