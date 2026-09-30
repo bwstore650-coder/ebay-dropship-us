@@ -199,7 +199,11 @@ export async function sellerCounts(productIds: string[], exceptUserId?: string):
   return new Map([...out].map(([k, v]) => [k, v.size]));
 }
 
-const normTitle = (t: string | null) => (t ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+/** Titre comparable : sans ponctuation ni couleur (« …Throttle, Blue » et « …Throttle, Pink » = même produit). */
+const COLORS =
+  /\b(black|white|red|blue|pink|green|yellow|orange|purple|grey|gray|silver|gold|brown|beige|navy|khaki|rose|multicolor)\b/g;
+export const normTitle = (t: string | null) =>
+  (t ?? "").toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(COLORS, " ").replace(/\s+/g, " ").trim();
 const sameTitle = (a: string | null, b: string | null) => Boolean(a && b) && normTitle(a) === normTitle(b);
 
 /** Ordre propre à chaque vendeur (stable) : deux vendeurs ne reçoivent pas les produits dans le même ordre. */
