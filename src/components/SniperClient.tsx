@@ -89,6 +89,7 @@ export default function SniperClient({
     setTab("good");
     setRun({
       id: data.id, mode, marketId: String(f.get("marketId")) as MarketplaceId, status: "RUNNING", target: Number(f.get("target")),
+      minMarginPct: Math.max(minMargin, Number(f.get("minMarginPct")) || 0),
       scanned: 0, found: 0, listed: 0, maxScan: 0, autoList, error: null, createdAt: new Date().toISOString(), candidates: [],
     });
     alive.current = true;
