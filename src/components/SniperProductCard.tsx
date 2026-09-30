@@ -88,7 +88,7 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
   const num = (v: number | null | undefined, suffix = "") => (v === null || v === undefined ? "—" : `${v.toLocaleString("en-US", { maximumFractionDigits: 1 })}${suffix}`);
 
   const breakdown: [string, string, string?][] = [
-    [k.ebayPrice, money(c.marketPrice)],
+    [k.ebayPrice, c.marketPrice ? money(c.marketPrice) : "—"],
     [k.fees, d.fees !== null && d.fees !== undefined ? `− ${money(d.fees)}` : "—"],
     [k.supplierPrice, d.supplierPrice !== null && d.supplierPrice !== undefined ? `− ${money(d.supplierPrice)}` : "—"],
     [k.shipping, d.shipping === 0 ? k.free : d.shipping !== null && d.shipping !== undefined ? `− ${money(d.shipping)}` : "—"],
@@ -118,12 +118,12 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
           <p className="line-clamp-2 text-sm font-medium text-fg" title={c.title ?? c.keyword}>{c.title ?? c.keyword}</p>
           <p className="mt-1 truncate text-xs text-subtle">{fmt(t.search, { keyword: c.keyword })}</p>
           <p className="mt-2 flex flex-wrap items-baseline gap-x-2 tabular-nums">
-            <span className={`text-xl font-semibold ${c.profit !== null && c.profit > 0 ? "text-emerald-300" : "text-muted"}`}>
+            <span className={`text-xl font-semibold ${c.profit !== null && c.profit > 0 ? marginTone : "text-muted"}`}>
               {c.profit !== null ? `${c.profit > 0 ? "+" : ""}${money(c.profit)}` : "—"}
             </span>
             <span className={`text-sm font-medium ${marginTone}`}>{c.marginPct !== null ? `${c.marginPct} % ${k.margin}` : ""}</span>
           </p>
-          {reason && <p className={`mt-1 text-xs ${good ? "text-amber-300" : "text-muted"}`}><span className="badge bg-surface-3 text-muted">{reason}</span></p>}
+          {reason && <p className="mt-1.5 text-xs"><span className="inline-block rounded-md bg-surface-3 px-2 py-0.5 font-medium leading-snug text-muted">{reason}</span></p>}
         </div>
       </div>
 
@@ -148,7 +148,7 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
           <dl className="grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-line bg-line text-xs">
             {stats.map(([label, value]) => (
               <div key={label} className="min-w-0 bg-surface px-3 py-2">
-                <dt className="truncate text-subtle" title={label}>{label}</dt>
+                <dt className="leading-tight text-subtle">{label}</dt>
                 <dd className="mt-0.5 truncate font-medium text-fg-2 tabular-nums">{value}</dd>
               </div>
             ))}
