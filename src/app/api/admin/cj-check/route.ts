@@ -38,11 +38,23 @@ export async function GET(req: Request) {
         if (v) {
           await new Promise((r) => setTimeout(r, 1200));
           const r2 = await fetch(`https://developers.cjdropshipping.com/api2.0/v1/product/stock/queryByVid?vid=${encodeURIComponent(v.vid)}`, { headers: { "CJ-Access-Token": token } });
-          row.stock = await r2.json().catch(() => r2.status);
+          const js = await r2.json().catch(() => null); row.stock = js?.data;
           await new Promise((r) => setTimeout(r, 1200));
           try {
             const f = await cj.freightCalculate(token, v.vid, 1, "US");
-            row.freight = f.slice(0, 3);
+            row.freight = f.slice(0, 4).map((o) => ({ n: o.logisticName, p: o.logisticPrice, a: o.logisticAging }));
+            row.sell = v.variantSellPrice;
+            row.weight = v.variantWeight;
+            for (const zip of ["90001", "10001"]) {
+              await new Promise((r) => setTimeout(r, 1200));
+              const r3 = await fetch("https://developers.cjdropshipping.com/api2.0/v1/logistic/freightCalculate", {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "CJ-Access-Token": token },
+                body: JSON.stringify({ startCountryCode: "US", endCountryCode: "US", zip, products: [{ vid: v.vid, quantity: 1 }] }),
+              });
+              const j3 = await r3.json();
+              row[`zip${zip}`] = j3?.message + " " + JSON.stringify((j3?.data ?? []).slice(0, 4).map((o: { logisticName: string; logisticPrice: number; postage: number; totalPostageFee: number }) => [o.logisticName, o.logisticPrice, o.postage, o.totalPostageFee]));
+            }
           } catch (e) { row.freightError = String(e); }
         }
       } catch (e) { row.productError = String(e); }
