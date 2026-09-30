@@ -10,17 +10,14 @@
 import type { Prisma, SnipeCandidate, SnipeRun, User } from "@prisma/client";
 import { db } from "@/lib/db";
 import { decrypt } from "@/lib/crypto";
-import { searchWithDemand } from "@/lib/ebay";
 import { findProduct } from "@/lib/finder";
-import { getUsdRates, offersToCurrency } from "@/lib/fx";
 import { ListingError, prepareListing, publishListing } from "@/lib/listing-service";
-import { evaluateProduct, weightedMedian, type SupplierOffer } from "@/lib/margin";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import * as cj from "@/lib/suppliers/cj";
-import { marketInsights } from "@/lib/market-insights";
+import { analyzeCatalogProduct, minPriceFor, pickFromPool, POOL_FRESH_MS, savePool } from "@/lib/product-pool";
 import {
   type CandidateDetails,
-  classify, DEFAULT_SEEDS, isFinished, keywordFromTitle, MAX_TARGET, MAX_VARIANTS, maxScan, MIN_UNITS_SOLD, RESUME_AFTER_MS,
+  classify, DEFAULT_SEEDS, isFinished, keywordFromTitle, MAX_TARGET, maxScan, RESUME_AFTER_MS,
 } from "@/lib/sniper";
 
 type UserWithAccounts = User & {
@@ -87,8 +84,72 @@ export async function createRun(user: UserWithAccounts, input: CreateInput) {
   });
   if (input.mode === "KEYWORDS") {
     await db.snipeCandidate.createMany({ data: input.seeds.map((keyword) => ({ runId: run.id, keyword })) });
+  } else {
+    await prefillFromPool(run);
   }
   return run;
+}
+
+/**
+ * Produits rentables déjà analysés (base commune) : ajoutés tout de suite à la recherche.
+ * Avec la mise en vente automatique, ils sont revérifiés en direct avant publication (statut « à analyser »).
+ */
+async function prefillFromPool(run: SnipeRun): Promise<number> {
+  const need = run.target - run.found;
+  if (run.mode !== "CATALOG" || need <= 0) return 0;
+  try {
+    const [listed, seen] = await Promise.all([
+      db.listing.findMany({ where: { userId: run.userId, supplier: "CJ", status: { in: ["ACTIVE", "PAUSED", "DRAFT"] } }, select: { supplierProductId: true } }),
+      db.snipeCandidate.findMany({ where: { runId: run.id }, select: { productId: true } }),
+    ]);
+    const custom = Array.isArray(run.seeds) ? (run.seeds as string[]).filter(Boolean) : [];
+    const rows = await pickFromPool({
+      userId: run.userId,
+      marketId: run.marketplace as MarketplaceId,
+      minMarginPct: run.minMarginPct,
+      priceMin: run.priceMin,
+      priceMax: run.priceMax,
+      themes: custom,
+      exclude: [...listed.map((l) => l.supplierProductId), ...seen.map((c) => c.productId).filter((x): x is string => Boolean(x))],
+      limit: need,
+    });
+    if (!rows.length) return 0;
+    if (run.autoList) {
+      await db.snipeCandidate.createMany({ data: rows.map((r) => ({ runId: run.id, supplier: "CJ" as const, productId: r.productId, title: r.title, keyword: r.keyword })) });
+      return 0;
+    }
+    await db.snipeCandidate.createMany({
+      data: rows.map((r) => {
+        const d = (r.details ?? {}) as CandidateDetails;
+        return {
+          runId: run.id,
+          supplier: "CJ" as const,
+          productId: r.productId,
+          variantId: r.variantId,
+          keyword: r.keyword,
+          title: r.title,
+          image: r.image,
+          status: "PROFITABLE" as const,
+          marketPrice: r.marketPrice,
+          cost: r.cost,
+          profit: r.profit,
+          marginPct: r.marginPct,
+          unitsSold: r.unitsSold,
+          deliveryDaysMax: r.deliveryDaysMax,
+          details: toJson({ ...d, minPrice: minPriceFor(r, run.minMarginPct, run.marketplace as MarketplaceId) ?? d.minPrice ?? null }),
+        };
+      }),
+    });
+    const found = run.found + rows.length;
+    await db.snipeRun.update({
+      where: { id: run.id },
+      data: { found, scanned: { increment: rows.length }, ...(found >= run.target ? { status: "DONE" } : {}) },
+    });
+    return rows.length;
+  } catch (e) {
+    console.error("Pool", run.id, e);
+    return 0;
+  }
 }
 
 export async function stopRun(userId: string, runId: string) {
@@ -119,6 +180,8 @@ export async function continueRun(userId: string, runId: string): Promise<"OK" |
       scanLimit: scanned + maxScan(run.target),
     },
   });
+  const updated = await db.snipeRun.findUnique({ where: { id: runId } });
+  if (updated) await prefillFromPool(updated);
   return "OK";
 }
 
@@ -143,11 +206,15 @@ async function gather(run: RunRow, token: string): Promise<Cursor> {
 
   if (items.length) {
     const ids = items.map((it) => String(it.id ?? it.pid));
-    const [known, listed] = await Promise.all([
+    const [known, listed, pooled] = await Promise.all([
       db.snipeCandidate.findMany({ where: { runId: run.id, productId: { in: ids } }, select: { productId: true } }),
       db.listing.findMany({ where: { userId: run.userId, supplier: "CJ", supplierProductId: { in: ids }, status: { in: ["ACTIVE", "PAUSED", "DRAFT"] } }, select: { supplierProductId: true } }),
+      // Déjà analysés récemment dans la base commune : les rentables ont été proposés d'office, inutile de refaire l'analyse.
+      run.autoList
+        ? Promise.resolve([] as { productId: string }[])
+        : db.productInsight.findMany({ where: { marketplace: run.marketplace, supplier: "CJ", productId: { in: ids }, analyzedAt: { gt: new Date(Date.now() - POOL_FRESH_MS) } }, select: { productId: true } }),
     ]);
-    const skip = new Set([...known.map((k) => k.productId), ...listed.map((l) => l.supplierProductId)]);
+    const skip = new Set([...known.map((k) => k.productId), ...listed.map((l) => l.supplierProductId), ...pooled.map((p) => p.productId)]);
     const fresh = items.filter((it) => !skip.has(String(it.id ?? it.pid)));
     if (fresh.length) {
       await db.snipeCandidate.createMany({
@@ -169,32 +236,6 @@ async function gather(run: RunRow, token: string): Promise<Cursor> {
   return next;
 }
 
-/** Offres pour un produit CJ : les variantes en stock dans le pays (les moins chères), avec la livraison la moins chère. */
-async function cjOffersFor(token: string, product: cj.CjProduct, country: string): Promise<SupplierOffer[]> {
-  const inStock = product.variants
-    .map((v) => ({ v, stock: v.inventories?.find((i) => i.countryCode === country)?.totalInventory ?? 0 }))
-    .filter((x) => x.stock > 0)
-    .sort((a, b) => Number(a.v.variantSellPrice) - Number(b.v.variantSellPrice))
-    .slice(0, MAX_VARIANTS);
-  const offers: SupplierOffer[] = [];
-  for (const { v, stock } of inStock) {
-    const options = await cj.freightCalculate(token, v.vid, 1, country);
-    if (!options.length) continue;
-    const cheapest = options.reduce((a, b) => (b.logisticPrice < a.logisticPrice ? b : a));
-    offers.push({
-      supplier: "CJ",
-      productId: product.pid,
-      variantId: v.vid,
-      title: `${product.productNameEn}${v.variantKey ? ` — ${v.variantKey}` : ""}`,
-      price: Number(v.variantSellPrice),
-      shipping: Number(cheapest.logisticPrice),
-      stockUs: stock,
-      deliveryDaysMax: cj.parseMaxDays(cheapest.logisticAging),
-    });
-  }
-  return offers;
-}
-
 type RunRow = SnipeRun;
 
 const toJson = (d: CandidateDetails) => d as unknown as Prisma.InputJsonValue;
@@ -202,8 +243,6 @@ const toJson = (d: CandidateDetails) => d as unknown as Prisma.InputJsonValue;
 /** Analyse d'un produit ou d'un mot-clé → données à enregistrer sur le candidat. */
 async function evaluate(run: RunRow, c: SnipeCandidate, token: string): Promise<Prisma.SnipeCandidateUpdateInput> {
   const m = marketplace(run.marketplace);
-  const toMarket = async (offers: SupplierOffer[]) => (m.currency === "USD" ? offers : offersToCurrency(offers, m.currency, await getUsdRates()));
-
   if (run.mode === "KEYWORDS") {
     const r = await findProduct(c.keyword, { cjToken: token, minMarginPct: run.minMarginPct, marketId: m.id });
     const k = classify(r, { unitsSold: r.unitsSold, priceMin: run.priceMin, priceMax: run.priceMax, title: r.best?.title });
@@ -231,55 +270,22 @@ async function evaluate(run: RunRow, c: SnipeCandidate, token: string): Promise<
     };
   }
 
-  // CATALOG : stock local d'abord (1 appel), puis demande eBay, et seulement ensuite les frais de port.
-  const product = await cj.getProduct(token, c.productId!);
-  const image = cj.productImages(product)[0] ?? null;
-  const title = product.productNameEn || c.title;
-  const base = { title: title?.slice(0, 300) ?? null, image };
-  const stocked = product.variants
-    .map((v) => ({ v, stock: v.inventories?.find((i) => i.countryCode === m.country)?.totalInventory ?? 0 }))
-    .filter((x) => x.stock > 0)
-    .sort((a, b) => Number(a.v.variantSellPrice) - Number(b.v.variantSellPrice));
-  if (!stocked.length) return { ...base, status: "REJECTED", reason: "NO_SUPPLIER" };
-  // Prix fournisseur (sans la livraison) dans la devise du pays, connu même quand le produit est rejeté plus loin.
-  const [cheapest] = await toMarket([{ supplier: "CJ", productId: product.pid, variantId: stocked[0].v.vid, title: title ?? "", price: Number(stocked[0].v.variantSellPrice), shipping: 0, stockUs: stocked[0].stock, deliveryDaysMax: 0 }]);
-  const supplierInfo: CandidateDetails = { supplierPrice: cheapest.price, stock: stocked[0].stock };
-
-  const market = await searchWithDemand(c.keyword, 10, m.id);
-  const insights = marketInsights(market);
-  const sold = weightedMedian(market.soldWeighted);
-  const prices = sold !== null ? [sold] : market.prices;
-  // Pas d'annonce comparable ou pas de ventes : inutile d'interroger les frais de port.
-  if (!prices.length) return { ...base, status: "REJECTED", reason: "NO_PRICE", unitsSold: market.unitsSold, details: toJson({ ...supplierInfo, market: insights }) };
-  if (market.unitsSold < MIN_UNITS_SOLD) {
-    const e = evaluateProduct(prices, [cheapest], run.minMarginPct, { market: m });
-    return {
-      ...base, status: "REJECTED", reason: "NO_DEMAND", marketPrice: e.marketPrice, unitsSold: market.unitsSold,
-      details: toJson({ ...supplierInfo, market: insights, fees: e.margin?.fees ?? null }),
-    };
-  }
-  const offers = await toMarket(await cjOffersFor(token, product, m.country));
-  const e = evaluateProduct(prices, offers, run.minMarginPct, { market: m });
-  const k = classify(e, { unitsSold: market.unitsSold, priceMin: run.priceMin, priceMax: run.priceMax, title });
+  // CATALOG : analyse complète, enregistrée aussi dans la base commune (sert aux recherches suivantes).
+  const a = await analyzeCatalogProduct(token, m.id, c.productId!, c.keyword, c.title, { minMarginPct: run.minMarginPct, priceMin: run.priceMin, priceMax: run.priceMax });
+  await savePool(m.id, c.productId!, c.keyword, a).catch((e) => console.error("Pool", e));
   return {
-    ...base,
-    status: k.status,
-    reason: k.reason ?? null,
-    variantId: e.best?.variantId ?? null,
-    marketPrice: e.marketPrice,
-    cost: e.margin?.landedCost ?? null,
-    profit: e.margin?.profit ?? null,
-    marginPct: e.margin?.marginPct ?? null,
-    unitsSold: market.unitsSold,
-    deliveryDaysMax: e.best?.deliveryDaysMax ?? null,
-    details: toJson({
-      market: insights,
-      supplierPrice: e.best?.price ?? supplierInfo.supplierPrice,
-      shipping: e.best?.shipping ?? null,
-      fees: e.margin?.fees ?? null,
-      stock: e.best?.stockUs ?? supplierInfo.stock,
-      minPrice: e.minPriceForTarget,
-    }),
+    title: a.title,
+    image: a.image,
+    status: a.status,
+    reason: a.reason,
+    variantId: a.variantId,
+    marketPrice: a.marketPrice,
+    cost: a.cost,
+    profit: a.profit,
+    marginPct: a.marginPct,
+    unitsSold: a.unitsSold,
+    deliveryDaysMax: a.deliveryDaysMax,
+    details: toJson(a.details),
   };
 }
 

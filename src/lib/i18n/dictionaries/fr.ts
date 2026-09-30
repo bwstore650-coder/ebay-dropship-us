@@ -612,6 +612,13 @@ export const fr: Dict = {
       AUTO_LIST: "Pas mis en vente automatiquement : {reason}",
     },
   },
+  winners: {
+    title: "Produits gagnants",
+    subtitle: "Déjà analysés par Sellvela : vraie demande eBay et au moins {margin} % de marge après tous les frais. {total} produits analysés ces dernières 48 h.",
+    more: "En trouver plus avec le Sniper →",
+    empty: "Aucun produit gagnant prêt pour l'instant : le catalogue est analysé toutes les heures, reviens bientôt ou lance le Sniper.",
+    ebayTitle: "Meilleures ventes eBay",
+  },
   research: {
     competitorsTitle: "Espion de concurrents",
     competitorsSubtitle: "Tape n'importe quel vendeur eBay : vois ses annonces actives, ses meilleures ventes et une estimation de son chiffre d'affaires. Idéal pour trouver des produits qui se vendent déjà.",

@@ -611,6 +611,13 @@ export const en = {
       AUTO_LIST: "Not listed automatically: {reason}",
     },
   },
+  winners: {
+    title: "Winning products",
+    subtitle: "Already analyzed by Sellvela: real eBay demand and at least {margin}% margin after every fee. {total} products analyzed in the last 48 hours.",
+    more: "Find more with the Sniper →",
+    empty: "No winning product ready yet: the catalog is analyzed every hour, come back soon or run the Sniper.",
+    ebayTitle: "eBay best sellers",
+  },
   research: {
     competitorsTitle: "Competitor spy",
     competitorsSubtitle: "Type any eBay seller: see their active listings, their best sellers and an estimate of their revenue. Ideal to find products that already sell.",

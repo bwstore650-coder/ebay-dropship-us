@@ -4,6 +4,8 @@ import { isAdminEmail, parseAdminEmails } from "@/lib/admin";
 import { env } from "@/lib/env";
 import { getAppToken } from "@/lib/ebay";
 import { priceTable, stripe } from "@/lib/stripe";
+import { poolStats } from "@/lib/product-pool";
+import { db } from "@/lib/db";
 
 export const dynamic = "force-dynamic";
 
@@ -50,5 +52,6 @@ export async function GET() {
     s.error = String(err).slice(0, 200);
   }
 
-  return NextResponse.json({ ebay, stripe: s });
+  const pool = { ...(await poolStats("EBAY_US")), cursor: await db.scanCursor.findUnique({ where: { marketplace: "EBAY_US" } }), trends: await db.trendItem.count() };
+  return NextResponse.json({ ebay, stripe: s, pool });
 }

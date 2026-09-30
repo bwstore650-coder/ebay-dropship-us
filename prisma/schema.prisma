@@ -458,3 +458,40 @@ model AfterSale {
   @@unique([type, ebayId])
   @@index([userId, open])
 }
+
+/**
+ * Produits du catalogue fournisseur déjà analysés (commun à tout le site), remplis par le scanner de fond
+ * et par les recherches Sniper. Le Sniper y pioche d'abord : résultats immédiats au lieu d'une analyse en direct.
+ */
+model ProductInsight {
+  id              String   @id @default(cuid())
+  marketplace     String
+  supplier        Supplier
+  productId       String
+  variantId       String?
+  keyword         String
+  title           String?
+  image           String?
+  reason          String?  // rejet définitif pour tous (pas de stock local, pas de prix, pas de demande, marque protégée), sinon null
+  marketPrice     Float?
+  cost            Float?   // coût rendu (produit + livraison)
+  profit          Float?
+  marginPct       Float?
+  unitsSold       Int      @default(0)
+  deliveryDaysMax Int?
+  details         Json?
+  analyzedAt      DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@unique([marketplace, supplier, productId])
+  @@index([marketplace, reason, marginPct])
+  @@index([analyzedAt])
+}
+
+/** Progression du scanner de fond dans le catalogue (une ligne par pays). */
+model ScanCursor {
+  marketplace String   @id
+  seed        Int      @default(0)
+  round       Int      @default(1)
+  updatedAt   DateTime @updatedAt
+}

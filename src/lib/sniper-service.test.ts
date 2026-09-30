@@ -4,7 +4,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Row = Record<string, unknown>;
-const mem = vi.hoisted(() => ({ runs: [] as Row[], cands: [] as Row[], listings: [] as Row[], users: [] as Row[], seq: 0 }));
+const mem = vi.hoisted(() => ({ runs: [] as Row[], cands: [] as Row[], listings: [] as Row[], users: [] as Row[], insights: [] as Row[], seq: 0 }));
 
 function match(row: Row, where: Row = {}): boolean {
   return Object.entries(where).every(([k, cond]) => {
@@ -13,9 +13,16 @@ function match(row: Row, where: Row = {}): boolean {
     if (cond && typeof cond === "object" && !(cond instanceof Date) && !Array.isArray(cond)) {
       const c = cond as Record<string, unknown>;
       if ("in" in c) return (c.in as unknown[]).includes(v);
+      if ("notIn" in c) return !(c.notIn as unknown[]).includes(v);
       if ("not" in c) return v !== c.not;
-      if ("lt" in c) return v instanceof Date && v < (c.lt as Date);
-      if ("gte" in c) return v instanceof Date && v >= (c.gte as Date);
+      if ("contains" in c) return typeof v === "string" && v.toLowerCase().includes(String(c.contains).toLowerCase());
+      const cmp = (a: unknown, b: unknown) => (a instanceof Date ? a.getTime() : (a as number)) - (b instanceof Date ? b.getTime() : (b as number));
+      if (v === null || v === undefined) return false;
+      if ("lt" in c && !(cmp(v, c.lt) < 0)) return false;
+      if ("gt" in c && !(cmp(v, c.gt) > 0)) return false;
+      if ("gte" in c && !(cmp(v, c.gte) >= 0)) return false;
+      if ("lte" in c && !(cmp(v, c.lte) <= 0)) return false;
+      return true;
     }
     return v === cond;
   });
@@ -54,13 +61,28 @@ function model(table: () => Row[], defaults: () => Row) {
       rows.forEach((r) => apply(r, data));
       return { count: rows.length };
     }),
+    upsert: vi.fn(async ({ where, create, update }: { where: Row; create: Row; update: Row }) => {
+      const key = Object.values(where)[0] as Row; // clé composée
+      const r = table().find((x) => match(x, key));
+      if (r) return { ...apply(r, update) };
+      const n = { id: `id${++mem.seq}`, createdAt: new Date(), ...defaults(), ...create };
+      table().push(n);
+      return { ...n };
+    }),
   };
 }
 
 vi.mock("@/lib/db", () => ({
   db: {
     snipeRun: model(() => mem.runs, () => ({ status: "RUNNING", scanned: 0, found: 0, listed: 0, lockedUntil: null, lastStepAt: null, error: null, cursor: null })),
-    snipeCandidate: model(() => mem.cands, () => ({ status: "PENDING", reason: null, supplier: null, productId: null, variantId: null, title: null })),
+    snipeCandidate: (() => {
+      const m = model(() => mem.cands, () => ({ status: "PENDING", reason: null, supplier: null, productId: null, variantId: null, title: null }));
+      const base = m.findMany;
+      // Relation « run » (utilisée pour compter les vendeurs d'un produit).
+      m.findMany = vi.fn(async (args: { where?: Row } = {}) => (await base(args)).map((c: Row) => ({ ...c, run: mem.runs.find((r) => r.id === c.runId) })));
+      return m;
+    })(),
+    productInsight: model(() => mem.insights, () => ({ reason: null, variantId: null, image: null, details: null })),
     listing: model(() => mem.listings, () => ({})),
     user: model(() => mem.users, () => ({})),
     ebayMarketSetup: { findUnique: vi.fn(async () => null) }, // pas de réglages eBay → mise en vente auto arrêtée
@@ -135,7 +157,7 @@ beforeEach(() => {
   vi.stubEnv("EBAY_CLIENT_ID", "id");
   vi.stubEnv("EBAY_CLIENT_SECRET", "secret");
   vi.stubEnv("ANTHROPIC_API_KEY", "");
-  mem.runs = []; mem.cands = []; mem.listings = []; mem.users = [baseUser()]; mem.seq = 0; listCalls = 0;
+  mem.runs = []; mem.cands = []; mem.listings = []; mem.insights = []; mem.users = [baseUser()]; mem.seq = 0; listCalls = 0;
   vi.stubGlobal("fetch", vi.fn(async (url: string) => router(url)));
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -177,6 +199,33 @@ describe("Sniper", { timeout: 90_000 }, () => {
     r.status = "DONE";
     r.cursor = { round: 1, seed: 0, exhausted: true };
     expect(await continueRun("U1", run.id)).toBe("EXHAUSTED");
+  });
+
+  it("base commune : un 2e vendeur reçoit tout de suite les produits déjà analysés, dans la limite de 5 vendeurs", async () => {
+    const r1 = await createRun(mem.users[0] as never, { mode: "CATALOG", marketId: "EBAY_US", target: 1, seeds: ["kitchen"], autoList: false });
+    await advanceRun(r1.id, Date.now() + 80_000);
+    const saved = mem.insights.find((i) => i.productId === "P-GOOD")!;
+    expect(saved).toMatchObject({ marketplace: "EBAY_US", reason: null, unitsSold: 12 });
+    expect(mem.insights.find((i) => i.productId === "P-OUT")).toMatchObject({ reason: "NO_SUPPLIER" });
+    expect(mem.insights.find((i) => i.productId === "P-LOW")).toMatchObject({ reason: null }); // marge faible : dépend du vendeur
+
+    // 2e vendeur : résultat immédiat, sans nouvelle analyse chez CJ.
+    mem.users.push(baseUser({ id: "U2", email: "u2@x.io" }));
+    const calls = (fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length;
+    const r2 = await createRun(mem.users[1] as never, { mode: "CATALOG", marketId: "EBAY_US", target: 1, seeds: [], autoList: false });
+    const s2 = (await runState("U2", r2.id))!;
+    expect(s2).toMatchObject({ status: "DONE", found: 1 });
+    expect(s2.candidates[0]).toMatchObject({ productId: "P-GOOD", status: "PROFITABLE", profit: expect.any(Number) });
+    expect((fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBe(calls);
+
+    // Déjà proposé à 5 vendeurs (U1, U2 + 3 autres) : plus proposé au suivant.
+    for (const u of ["U3", "U4", "U5"]) {
+      mem.runs.push({ id: `R-${u}`, userId: u });
+      mem.cands.push({ id: `C-${u}`, runId: `R-${u}`, productId: "P-GOOD", status: "PROFITABLE", createdAt: new Date() });
+    }
+    mem.users.push(baseUser({ id: "U6", email: "u6@x.io" }));
+    const r6 = await createRun(mem.users[2] as never, { mode: "CATALOG", marketId: "EBAY_US", target: 1, seeds: [], autoList: false });
+    expect((await runState("U6", r6.id))!.found).toBe(0);
   });
 
   it("un produit déjà en vente n'est pas analysé à nouveau", async () => {

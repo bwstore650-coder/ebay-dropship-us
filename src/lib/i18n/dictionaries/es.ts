@@ -612,6 +612,13 @@ export const es: Dict = {
       AUTO_LIST: "No publicado automáticamente: {reason}",
     },
   },
+  winners: {
+    title: "Productos ganadores",
+    subtitle: "Ya analizados por Sellvela: demanda real en eBay y al menos un {margin} % de margen después de todas las comisiones. {total} productos analizados en las últimas 48 h.",
+    more: "Encuentra más con el Sniper →",
+    empty: "Todavía no hay productos ganadores listos: el catálogo se analiza cada hora, vuelve pronto o lanza el Sniper.",
+    ebayTitle: "Más vendidos en eBay",
+  },
   research: {
     competitorsTitle: "Espía de competidores",
     competitorsSubtitle: "Escribe cualquier vendedor de eBay: mira sus anuncios activos, sus productos más vendidos y una estimación de su facturación. Ideal para encontrar productos que ya se venden.",
