@@ -72,3 +72,20 @@ export function StatusBadge({ tone, children }: { tone: keyof typeof STATUS_TONE
     </span>
   );
 }
+
+/** Interrupteur (case à cocher stylée) utilisable dans un formulaire serveur. */
+export function Switch({ name, defaultChecked, label, hint, disabled }: { name: string; defaultChecked?: boolean; label: React.ReactNode; hint?: React.ReactNode; disabled?: boolean }) {
+  return (
+    <label className={`flex items-start gap-3 ${disabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}`}>
+      <input type="checkbox" name={name} defaultChecked={defaultChecked} disabled={disabled} className="peer sr-only" />
+      <span
+        aria-hidden="true"
+        className="relative mt-0.5 h-6 w-11 shrink-0 rounded-full bg-surface-3 ring-1 ring-line-strong transition peer-checked:bg-brand-500 peer-checked:ring-brand-500 peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand-400 after:absolute after:top-0.5 after:left-0.5 after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow after:transition peer-checked:after:translate-x-5"
+      />
+      <span>
+        <span className="block text-sm font-semibold text-fg">{label}</span>
+        {hint && <span className="mt-0.5 block text-xs text-muted">{hint}</span>}
+      </span>
+    </label>
+  );
+}

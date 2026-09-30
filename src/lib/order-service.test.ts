@@ -9,12 +9,13 @@ const mem = vi.hoisted(() => ({ orders: [] as Row[], listings: [] as Row[], seq:
 /** Filtre minimal façon Prisma : égalité, { in }, { not: null }, { lt }, { gte }. */
 function match(row: Row, where: Row = {}): boolean {
   return Object.entries(where).every(([k, cond]) => {
-    const v = row[k];
+    if (k === "OR") return (cond as Row[]).some((c) => match(row, c));
+    const v = row[k] ?? (k.startsWith("msg") ? (k === "msgFailures" ? 0 : null) : row[k]);
     if (cond && typeof cond === "object" && !(cond instanceof Date)) {
       const c = cond as Record<string, unknown>;
       if ("in" in c) return (c.in as unknown[]).includes(v);
       if ("not" in c) return c.not === null ? v !== null && v !== undefined : v !== c.not;
-      if ("lt" in c) return v instanceof Date && v < (c.lt as Date);
+      if ("lt" in c) return typeof v === "number" ? v < (c.lt as number) : v instanceof Date && v < (c.lt as Date);
       if ("gte" in c) return v instanceof Date && v >= (c.gte as Date);
       if ("gt" in c) return v instanceof Date && v > (c.gt as Date);
     }
@@ -31,7 +32,10 @@ function apply(row: Row, data: Row) {
 
 vi.mock("@/lib/db", () => ({
   db: {
-    listing: { findMany: vi.fn(async ({ where }: { where: Row }) => mem.listings.filter((l) => match(l, where))) },
+    listing: {
+      findMany: vi.fn(async ({ where }: { where: Row }) => mem.listings.filter((l) => match(l, where))),
+      findUnique: vi.fn(async ({ where }: { where: Row }) => mem.listings.find((l) => match(l, where)) ?? null),
+    },
     order: {
       findMany: vi.fn(async ({ where }: { where: Row }) => mem.orders.filter((o) => match(o, where))),
       findUniqueOrThrow: vi.fn(async ({ where }: { where: Row }) => {
@@ -58,6 +62,7 @@ vi.mock("@/lib/db", () => ({
     },
     ebayAccount: { update: vi.fn() },
     user: { update: vi.fn() },
+    afterSale: { count: vi.fn(async () => 0), upsert: vi.fn(), updateMany: vi.fn() },
   },
 }));
 vi.mock("@/lib/crypto", () => ({ decrypt: (s: string) => s, encrypt: (s: string) => s }));
@@ -88,7 +93,8 @@ const ebayOrder = (id: string, sku: string, extra: Record<string, unknown> = {})
   orderPaymentStatus: "PAID",
   cancelStatus: { cancelState: "NONE_REQUESTED" },
   pricingSummary: { total: { value: "30.75", currency: "USD" } },
-  lineItems: [{ lineItemId: `LI-${id}`, sku, quantity: 1, title: "Electric Can Opener" }],
+  lineItems: [{ lineItemId: `LI-${id}`, legacyItemId: `ITEM-${id}`, sku, quantity: 1, title: "Electric Can Opener" }],
+  buyer: { username: `buyer-${id}` },
   fulfillmentStartInstructions: [{ shippingStep: { shipTo: { fullName: "Jane Doe", primaryPhone: { phoneNumber: "555-123-4567" }, contactAddress: { addressLine1: "1 Main St", city: "Austin", stateOrProvince: "TX", postalCode: "73301", countryCode: "US" } } } }],
   ...extra,
 });
@@ -107,6 +113,7 @@ function router(url: string): Response {
   if (p === "/sell/fulfillment/v1/order")
     return json({ total: 3, orders: [ebayOrder("A-1", "PL-OURS"), ebayOrder("A-2", "SOMEONE-ELSE"), { ...ebayOrder("A-3", "PL-OURS"), lineItems: [{ lineItemId: "x", sku: "PL-OURS", quantity: 1, title: "Can opener" }, { lineItemId: "y", sku: "MANUAL", quantity: 1, title: "Old stock" }] }] });
   if (p.startsWith("/sell/fulfillment/v1/order/") && p.endsWith("/shipping_fulfillment")) return json({}, 201);
+  if (p === "/ws/api.dll") return new Response("<AddMemberMessageAAQToPartnerResponse><Ack>Success</Ack></AddMemberMessageAAQToPartnerResponse>", { status: 200 });
   if (p.startsWith("/sell/fulfillment/v1/order/")) return json({ ...ebayOrder(decodeURIComponent(p.split("/").pop()!), "PL-OURS"), ...ebayOrderOverride });
   return json({ errors: [{ message: `route inconnue ${url}` }] }, 500);
 }
@@ -140,7 +147,8 @@ describe("commandes automatiques", { timeout: 60_000 }, () => {
     expect(await importOrders(user(), account)).toBe(2);
     const a1 = mem.orders.find((o) => o.ebayOrderId === "A-1")!;
     expect(a1).toMatchObject({ status: "PENDING", saleTotal: 30.75, marketplace: "EBAY_US", listingId: "LST", ebayAccountId: "ACC" });
-    expect(a1.lines).toEqual([{ lineItemId: "LI-A-1", sku: "PL-OURS", quantity: 1, listingId: "LST", supplier: "CJ", productId: "P1", vid: "V1", title: "Electric Can Opener" }]);
+    expect(a1.lines).toEqual([{ lineItemId: "LI-A-1", sku: "PL-OURS", quantity: 1, listingId: "LST", supplier: "CJ", productId: "P1", vid: "V1", title: "Electric Can Opener", legacyItemId: "ITEM-A-1" }]);
+    expect(a1).toMatchObject({ buyerUsername: "buyer-A-1", buyerName: "Jane" });
     expect(mem.orders.find((o) => o.ebayOrderId === "A-2")).toBeUndefined();
     expect(mem.orders.find((o) => o.ebayOrderId === "A-3")).toMatchObject({ status: "NEEDS_REVIEW", errorCode: "NOT_OURS", errorMessage: "Old stock" });
     // Filtre eBay : commandes à expédier des 30 derniers jours.
@@ -216,6 +224,28 @@ describe("commandes automatiques", { timeout: 60_000 }, () => {
     mem.orders = [];
     const on = await runForUser(user());
     expect(on).toMatchObject({ imported: 2, ordered: 1, shipped: 1 });
+  });
+
+  it("messages automatiques : remerciement puis suivi, dans la langue du site ; rien si désactivés", async () => {
+    await runForUser(user());
+    expect(calls.filter((c) => c.url.includes("/ws/api.dll"))).toHaveLength(0); // désactivés par défaut
+    mem.orders = [];
+    calls = [];
+    const r = await runForUser(user({ msgThanks: true, msgShipped: true, msgFeedback: true, feedbackDelayDays: 7, ebayAccounts: [{ ...account, ebayUserId: "bawa-store" }] }));
+    expect(r.messages).toBe(1); // A-1 : remerciement (le suivi partira au passage suivant) ; A-3 : ligne sans numéro d'annonce eBay
+    const sent = calls.filter((c) => c.url.includes("/ws/api.dll")).map((c) => String(c.body));
+    expect(sent[0]).toContain("<RecipientID>buyer-A-1</RecipientID>");
+    expect(sent[0]).toContain("<ItemID>ITEM-A-1</ItemID>");
+    expect(sent[0]).toContain("Hi Jane,");
+    expect(sent[0]).toContain("bawa-store");
+    const a1 = mem.orders.find((o) => o.ebayOrderId === "A-1")!;
+    expect(a1.msgThanksAt).toBeInstanceOf(Date);
+    // Passage suivant : A-1 est expédiée → message de suivi avec le numéro.
+    calls = [];
+    await runForUser(user({ msgThanks: true, msgShipped: true, msgFeedback: true, feedbackDelayDays: 7, ebayAccounts: [{ ...account, ebayUserId: "bawa-store" }] }));
+    const shipMsg = calls.filter((c) => c.url.includes("/ws/api.dll")).map((c) => String(c.body)).find((b) => b.includes("buyer-A-1"))!;
+    expect(shipMsg).toContain("9400111899223345678901");
+    expect(mem.orders.find((o) => o.ebayOrderId === "A-1")!.msgShippedAt).toBeInstanceOf(Date);
   });
 
   it("commande bloquée « en cours » depuis plus de 30 min : à vérifier, jamais recommandée", async () => {

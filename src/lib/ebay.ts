@@ -13,12 +13,18 @@ const HOSTS = {
 
 const host = () => HOSTS[env().EBAY_ENV];
 
-export const SELLER_SCOPES = [
+/** Autorisations demandées aux comptes connectés avant l'ajout de la publicité (renouvellement de leurs jetons). */
+export const LEGACY_SCOPES = [
   "https://api.ebay.com/oauth/api_scope",
   "https://api.ebay.com/oauth/api_scope/sell.inventory",
   "https://api.ebay.com/oauth/api_scope/sell.fulfillment",
   "https://api.ebay.com/oauth/api_scope/sell.account",
 ];
+export const MARKETING_SCOPE = "https://api.ebay.com/oauth/api_scope/sell.marketing";
+export const SELLER_SCOPES = [...LEGACY_SCOPES, MARKETING_SCOPE];
+
+/** Le compte a-t-il autorisé la publicité (Promoted Listings) ? */
+export const canAdvertise = (scopes: string | null | undefined) => Boolean(scopes?.split(" ").includes(MARKETING_SCOPE));
 
 function basicAuth() {
   const { EBAY_CLIENT_ID, EBAY_CLIENT_SECRET } = env();
@@ -59,8 +65,9 @@ export function exchangeCode(code: string) {
   return tokenRequest({ grant_type: "authorization_code", code, redirect_uri: env().EBAY_RUNAME });
 }
 
-export function refreshUserToken(refreshToken: string) {
-  return tokenRequest({ grant_type: "refresh_token", refresh_token: refreshToken, scope: SELLER_SCOPES.join(" ") });
+/** Renouvelle le jeton avec les autorisations que le vendeur a réellement accordées (eBay refuse d'en demander plus). */
+export function refreshUserToken(refreshToken: string, scopes?: string | null) {
+  return tokenRequest({ grant_type: "refresh_token", refresh_token: refreshToken, scope: scopes || LEGACY_SCOPES.join(" ") });
 }
 
 let appToken: { token: string; expires: number } | null = null;
@@ -172,6 +179,92 @@ export async function getSoldQuantity(itemId: string, marketId: MarketplaceId = 
   return data.estimatedAvailabilities?.reduce((s, a) => s + (a.estimatedSoldQuantity ?? 0), 0) ?? 0;
 }
 
+/* ---------- Recherche marché (espion de concurrents, Title Builder, meilleures ventes) ---------- */
+
+export interface BrowseItem {
+  id: string;
+  title: string;
+  price: number;          // prix + livraison
+  currency: string;
+  url?: string;
+  image?: string;
+  categoryId?: string;
+  seller?: { username: string; feedbackScore?: number; feedbackPercentage?: number };
+}
+
+interface RawSummary extends ItemSummary {
+  seller?: { username?: string; feedbackScore?: number; feedbackPercentage?: string };
+}
+
+/**
+ * Recherche Browse générique (annonces neuves à prix fixe du pays).
+ * `q` ou `categoryId` est obligatoire ; `seller` limite aux annonces d'un vendeur.
+ */
+export async function browseSearch(
+  opts: { q?: string; categoryId?: string; seller?: string; limit?: number; offset?: number; newOnly?: boolean },
+  marketId: MarketplaceId = "EBAY_US",
+): Promise<{ total: number; items: BrowseItem[] }> {
+  const m = marketplace(marketId);
+  const filters = [`buyingOptions:{FIXED_PRICE}`, `priceCurrency:${m.currency}`];
+  if (opts.newOnly !== false) filters.push("conditions:{NEW}");
+  if (opts.seller) filters.push(`sellers:{${opts.seller.replace(/[{}|,]/g, "")}}`);
+  else filters.push(`itemLocationCountry:${m.country}`);
+  const params = new URLSearchParams({ limit: String(opts.limit ?? 50), offset: String(opts.offset ?? 0), filter: filters.join(",") });
+  if (opts.q) params.set("q", opts.q);
+  if (opts.categoryId) params.set("category_ids", opts.categoryId);
+  const data = await api<{ total?: number; itemSummaries?: RawSummary[] }>(await getAppToken(), `/buy/browse/v1/item_summary/search?${params}`, {}, m.id);
+  const items = (data.itemSummaries ?? []).map((i) => ({
+    id: i.itemId,
+    title: i.title,
+    price: Math.round((Number(i.price?.value ?? 0) + Number(i.shippingOptions?.[0]?.shippingCost?.value ?? 0)) * 100) / 100,
+    currency: i.price?.currency ?? m.currency,
+    url: i.itemWebUrl,
+    image: i.image?.imageUrl,
+    categoryId: i.leafCategoryIds?.[0],
+    seller: i.seller?.username
+      ? { username: i.seller.username, feedbackScore: i.seller.feedbackScore, feedbackPercentage: i.seller.feedbackPercentage ? Number(i.seller.feedbackPercentage) : undefined }
+      : undefined,
+  }));
+  return { total: data.total ?? items.length, items };
+}
+
+/**
+ * Ventes estimées de plusieurs annonces (estimation eBay, cumulée depuis la mise en ligne).
+ * Par lots de 20 avec getItems ; si la méthode n'est pas disponible, une annonce à la fois (5 en parallèle).
+ */
+export async function soldQuantities(ids: string[], marketId: MarketplaceId = "EBAY_US"): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  const token = await getAppToken();
+  let batchOk = true;
+  for (let i = 0; i < ids.length && batchOk; i += 20) {
+    const chunk = ids.slice(i, i + 20);
+    try {
+      const d = await api<{ items?: { itemId: string; estimatedAvailabilities?: { estimatedSoldQuantity?: number }[] }[] }>(
+        token,
+        `/buy/browse/v1/item/?${new URLSearchParams({ item_ids: chunk.join(",") })}`,
+        {},
+        marketId,
+      );
+      for (const it of d.items ?? []) out.set(it.itemId, it.estimatedAvailabilities?.reduce((s, a) => s + (a.estimatedSoldQuantity ?? 0), 0) ?? 0);
+    } catch {
+      batchOk = false;
+    }
+  }
+  const missing = ids.filter((id) => !out.has(id));
+  for (let i = 0; i < missing.length; i += 5) {
+    await Promise.all(
+      missing.slice(i, i + 5).map(async (id) => {
+        try {
+          out.set(id, await getSoldQuantity(id, marketId));
+        } catch {
+          /* annonce retirée entre-temps */
+        }
+      }),
+    );
+  }
+  return out;
+}
+
 export interface DemandSnapshot extends MarketSnapshot {
   unitsSold: number;                                  // total estimé sur les annonces analysées
   soldWeighted: { price: number; weight: number }[]; // prix × unités vendues
@@ -180,14 +273,10 @@ export interface DemandSnapshot extends MarketSnapshot {
 /** Marché + demande : prix des annonces actives, pondérés par ce qu'elles ont réellement vendu. */
 export async function searchWithDemand(q: string, sample = 20, marketId: MarketplaceId = "EBAY_US"): Promise<DemandSnapshot> {
   const market = await searchActive(q, 50, marketId);
-  const soldWeighted: { price: number; weight: number }[] = [];
-  for (const item of market.items.slice(0, sample)) {
-    try {
-      soldWeighted.push({ price: item.price, weight: await getSoldQuantity(item.id, marketId) });
-    } catch {
-      /* annonce retirée entre-temps : on l'ignore */
-    }
-  }
+  const sampled = market.items.slice(0, sample);
+  const sold = await soldQuantities(sampled.map((i) => i.id), marketId);
+  // Annonce retirée entre-temps : absente de la liste, on l'ignore.
+  const soldWeighted = sampled.filter((i) => sold.has(i.id)).map((i) => ({ price: i.price, weight: sold.get(i.id)! }));
   return { ...market, soldWeighted, unitsSold: soldWeighted.reduce((s, p) => s + p.weight, 0) };
 }
 
@@ -298,7 +387,7 @@ export function publishOffer(token: string, offerId: string, marketId: Marketpla
 /** Quantités (et prix) de plusieurs annonces d'un coup : 25 au maximum par appel. */
 export async function bulkUpdateQuantity(
   token: string,
-  items: { sku: string; offerId: string; quantity: number }[],
+  items: { sku: string; offerId: string; quantity: number; price?: { value: number; currency: string } }[],
 ): Promise<{ sku: string; ok: boolean; message?: string }[]> {
   const out: { sku: string; ok: boolean; message?: string }[] = [];
   for (let i = 0; i < items.length; i += 25) {
@@ -312,7 +401,7 @@ export async function bulkUpdateQuantity(
           requests: chunk.map((c) => ({
             sku: c.sku,
             shipToLocationAvailability: { quantity: c.quantity },
-            offers: [{ offerId: c.offerId, availableQuantity: c.quantity }],
+            offers: [{ offerId: c.offerId, availableQuantity: c.quantity, ...(c.price ? { price: { value: c.price.value.toFixed(2), currency: c.price.currency } } : {}) }],
           })),
         }),
       },
@@ -501,7 +590,8 @@ export interface EbayOrder {
   orderPaymentStatus?: string;               // PAID | PENDING | FAILED | FULLY_REFUNDED | PARTIALLY_REFUNDED
   cancelStatus?: { cancelState?: string };   // NONE_REQUESTED si aucune annulation
   pricingSummary: { total: { value: string; currency?: string } };
-  lineItems: { lineItemId: string; sku?: string; quantity: number; title: string; lineItemFulfillmentStatus?: string }[];
+  lineItems: { lineItemId: string; legacyItemId?: string; sku?: string; quantity: number; title: string; lineItemFulfillmentStatus?: string }[];
+  buyer?: { username?: string };
   fulfillmentStartInstructions: {
     shippingStep?: {
       shipTo: {
@@ -551,4 +641,183 @@ export function addTracking(
       trackingNumber,
     }),
   });
+}
+
+/* ---------- API Trading (XML) : messages aux acheteurs ---------- */
+
+/** Numéro de site eBay (API Trading) par pays. */
+export const SITE_IDS: Record<MarketplaceId, string> = {
+  EBAY_US: "0", EBAY_CA: "2", EBAY_GB: "3", EBAY_AU: "15", EBAY_DE: "77", EBAY_FR: "71", EBAY_IT: "101", EBAY_ES: "186", EBAY_IE: "205",
+};
+
+const xmlEscape = (s: string) => s.replace(/[<>&'"]/g, (c) => ({ "<": "&lt;", ">": "&gt;", "&": "&amp;", "'": "&apos;", '"': "&quot;" })[c]!);
+
+export class TradingError extends Error {
+  constructor(readonly call: string, readonly detail: string) {
+    super(`eBay ${call} : ${detail}`);
+  }
+}
+
+async function trading(token: string, call: string, inner: string, marketId: MarketplaceId): Promise<string> {
+  const res = await fetch(`${host().api}/ws/api.dll`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/xml",
+      "X-EBAY-API-CALL-NAME": call,
+      "X-EBAY-API-SITEID": SITE_IDS[marketId] ?? "0",
+      "X-EBAY-API-COMPATIBILITY-LEVEL": "1349",
+      "X-EBAY-API-IAF-TOKEN": token,
+    },
+    body: `<?xml version="1.0" encoding="utf-8"?><${call}Request xmlns="urn:ebay:apis:eBLBaseComponents">${inner}</${call}Request>`,
+  });
+  const text = await res.text();
+  if (!res.ok || !/<Ack>(Success|Warning)<\/Ack>/.test(text)) {
+    const msg = [...text.matchAll(/<LongMessage>([\s\S]*?)<\/LongMessage>/g)].map((m) => m[1]).join(" · ") || `HTTP ${res.status}`;
+    throw new TradingError(call, msg);
+  }
+  return text;
+}
+
+/** Message à l'acheteur d'une commande (API Trading AddMemberMessageAAQToPartner). */
+export async function sendBuyerMessage(
+  token: string,
+  m: { itemId: string; buyer: string; subject: string; body: string },
+  marketId: MarketplaceId = "EBAY_US",
+): Promise<void> {
+  await trading(
+    token,
+    "AddMemberMessageAAQToPartner",
+    `<ItemID>${xmlEscape(m.itemId)}</ItemID><MemberMessage><Subject>${xmlEscape(m.subject.slice(0, 100))}</Subject><Body>${xmlEscape(m.body.slice(0, 2000))}</Body><QuestionType>General</QuestionType><RecipientID>${xmlEscape(m.buyer)}</RecipientID></MemberMessage>`,
+    marketId,
+  );
+}
+
+/* ---------- Retours et annulations (API Post-Order v2) ---------- */
+
+async function postOrder<T>(token: string, path: string, init: RequestInit = {}, marketId: MarketplaceId = "EBAY_US"): Promise<T> {
+  const res = await fetch(`${host().api}/post-order/v2${path}`, {
+    ...init,
+    headers: {
+      Authorization: `IAF ${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "X-EBAY-C-MARKETPLACE-ID": marketplace(marketId).id,
+      ...init.headers,
+    },
+  });
+  if (res.status === 204) return undefined as T;
+  const text = await res.text();
+  if (!res.ok) throw new EbayApiError(`/post-order/v2${path}`, res.status, text);
+  return (text ? JSON.parse(text) : undefined) as T;
+}
+
+type Money = { value?: number | string; currency?: string };
+
+export interface EbayReturn {
+  returnId: string;
+  orderId: string;
+  state: string;
+  status?: string;
+  creationInfo?: {
+    reason?: string;
+    comments?: { content?: string };
+    creationDate?: { value?: string };
+    item?: { itemId?: string; itemTitle?: string };
+  };
+  buyerTotalRefund?: { estimatedRefundAmount?: Money };
+}
+
+export interface EbayCancellation {
+  cancelId: string;
+  legacyOrderId: string;
+  cancelState: string;   // CANCEL_REQUESTED, CANCEL_CLOSED…
+  cancelStatus?: string;
+  cancelReason?: string;
+  requestRefundAmount?: Money;
+  cancelRequestDate?: { value?: string };
+}
+
+/** Retours en cours (ouverts). */
+export async function searchReturns(token: string, marketId: MarketplaceId = "EBAY_US"): Promise<EbayReturn[]> {
+  const d = await postOrder<{ members?: EbayReturn[] }>(token, `/return/search?${new URLSearchParams({ return_state: "ALL_OPEN", limit: "100" })}`, {}, marketId);
+  return d.members ?? [];
+}
+
+/** Demandes d'annulation des 30 derniers jours. */
+export async function searchCancellations(token: string, marketId: MarketplaceId = "EBAY_US"): Promise<EbayCancellation[]> {
+  const from = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const d = await postOrder<{ cancellations?: EbayCancellation[] }>(token, `/cancellation/search?${new URLSearchParams({ creation_date_range_from: from, limit: "100" })}`, {}, marketId);
+  return d.cancellations ?? [];
+}
+
+/** Accepte la demande d'annulation de l'acheteur (il est remboursé par eBay). */
+export function approveCancellation(token: string, cancelId: string, marketId: MarketplaceId = "EBAY_US") {
+  return postOrder<void>(token, `/cancellation/${encodeURIComponent(cancelId)}/approve`, { method: "POST", body: "{}" }, marketId);
+}
+
+/** Accepte le retour (l'acheteur renvoie l'article ; remboursement à réception). */
+export function acceptReturn(token: string, returnId: string, marketId: MarketplaceId = "EBAY_US") {
+  return postOrder<void>(token, `/return/${encodeURIComponent(returnId)}/decide`, { method: "POST", body: JSON.stringify({ decision: "ACCEPT" }) }, marketId);
+}
+
+/* ---------- Publicité (API Marketing : Promoted Listings, coût par vente) ---------- */
+
+/** Crée (ou retrouve) la campagne « coût par vente » de l'outil pour un pays. Renvoie son identifiant. */
+export async function ensureCampaign(token: string, marketId: MarketplaceId, name: string): Promise<string> {
+  const m = marketplace(marketId);
+  const found = await api<{ campaigns?: { campaignId: string; campaignStatus?: string }[] }>(
+    token,
+    `/sell/marketing/v1/ad_campaign?${new URLSearchParams({ campaign_name: name, limit: "10" })}`,
+    {},
+    m.id,
+  ).catch(() => ({ campaigns: [] as { campaignId: string; campaignStatus?: string }[] }));
+  const live = found.campaigns?.find((c) => c.campaignStatus !== "ENDED");
+  if (live) return live.campaignId;
+  const res = await fetch(`${host().api}/sell/marketing/v1/ad_campaign`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json", "X-EBAY-C-MARKETPLACE-ID": m.id },
+    body: JSON.stringify({
+      campaignName: name,
+      marketplaceId: m.id,
+      startDate: new Date(Date.now() + 60_000).toISOString(),
+      fundingStrategy: { fundingModel: "COST_PER_SALE", bidPercentage: "2.0" },
+    }),
+  });
+  if (!res.ok) throw new EbayApiError("/sell/marketing/v1/ad_campaign", res.status, await res.text());
+  const id = res.headers.get("location")?.split("/").pop();
+  if (!id) throw new EbayApiError("/sell/marketing/v1/ad_campaign", 500, "Identifiant de campagne absent");
+  return id;
+}
+
+/** Ajoute des annonces à la campagne avec leur taux (%). */
+export async function createAds(
+  token: string,
+  campaignId: string,
+  ads: { listingId: string; rate: number }[],
+  marketId: MarketplaceId,
+): Promise<{ listingId: string; adId?: string; ok: boolean; message?: string }[]> {
+  const d = await api<{ responses?: { listingId?: string; adId?: string; statusCode?: number; errors?: EbayErrorDetail[] }[] }>(
+    token,
+    `/sell/marketing/v1/ad_campaign/${encodeURIComponent(campaignId)}/bulk_create_ads_by_listing_id`,
+    { method: "POST", body: JSON.stringify({ requests: ads.map((a) => ({ listingId: a.listingId, bidPercentage: a.rate.toFixed(1) })) }) },
+    marketId,
+  );
+  return ads.map((a) => {
+    const r = d.responses?.find((x) => x.listingId === a.listingId);
+    const ok = Boolean(r && (r.statusCode ?? 200) < 400 && r.adId);
+    return { listingId: a.listingId, adId: r?.adId, ok, message: ok ? undefined : r?.errors?.map((e) => e.longMessage || e.message).join(" · ") };
+  });
+}
+
+export function updateAdRate(token: string, campaignId: string, adId: string, rate: number, marketId: MarketplaceId) {
+  return api<void>(
+    token,
+    `/sell/marketing/v1/ad_campaign/${encodeURIComponent(campaignId)}/ad/${encodeURIComponent(adId)}/update_bid`,
+    { method: "POST", body: JSON.stringify({ bidPercentage: rate.toFixed(1) }) },
+    marketId,
+  );
+}
+
+export function deleteAd(token: string, campaignId: string, adId: string, marketId: MarketplaceId) {
+  return api<void>(token, `/sell/marketing/v1/ad_campaign/${encodeURIComponent(campaignId)}/ad/${encodeURIComponent(adId)}`, { method: "DELETE" }, marketId);
 }

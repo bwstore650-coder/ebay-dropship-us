@@ -49,6 +49,7 @@ model User {
   failedLogins       Int       @default(0)
   lockedUntil        DateTime?  // blocage temporaire après trop d'essais de mot de passe
   lastAttentionEmailAt DateTime? // dernier email « commandes à vérifier »
+  afterSalesSyncedAt DateTime?  // dernier relevé des retours et annulations
   resetTokens        PasswordResetToken[]
 
   plan               Plan      @default(NONE)
@@ -62,6 +63,18 @@ model User {
   defaultMarketplace String    @default("EBAY_US") // EBAY_US, EBAY_CA, EBAY_GB, EBAY_AU
   ebayAccountOpenedAt DateTime?                // pour les limites anti-ban
   autoOrder          Boolean   @default(true)    // commander automatiquement chez le fournisseur à chaque vente
+
+  // Messages automatiques aux acheteurs (désactivés tant que le vendeur ne les active pas)
+  msgThanks          Boolean   @default(false)   // remerciement après l'achat
+  msgShipped         Boolean   @default(false)   // numéro de suivi à l'expédition
+  msgFeedback        Boolean   @default(false)   // demande d'évaluation après la livraison
+  feedbackDelayDays  Int       @default(7)       // jours après l'expédition
+
+  // Publicité automatique (Promoted Listings, coût par vente) et repricing
+  adsEnabled         Boolean   @default(false)
+  adRateMax          Float     @default(5)        // taux publicitaire maximum (%)
+  repriceEnabled     Boolean   @default(false)
+  repriceUndercutPct Float     @default(1)        // passer sous le concurrent le moins cher de x %
 
   // Personne responsable dans l'UE (règlement GPSR) : obligatoire pour vendre sur eBay DE, FR, IT, ES, IE
   euRpCompany        String?
@@ -85,6 +98,8 @@ model User {
   orders             Order[]
   review             Review?
   snipeRuns          SnipeRun[]
+  savedSellers       SavedSeller[]
+  afterSales         AfterSale[]
 }
 
 model EbayAccount {
@@ -97,6 +112,7 @@ model EbayAccount {
   accessTokenExpires DateTime
   refreshToken       String   // chiffré au repos
   refreshTokenExpires DateTime
+  scopes             String?  // autorisations accordées par le vendeur (ex. publicité) ; null = autorisations d'origine
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   listings           Listing[]
@@ -116,6 +132,7 @@ model EbayMarketSetup {
   paymentPolicyId     String
   returnPolicyId      String
   merchantLocationKey String
+  adCampaignId        String?     // campagne Promoted Listings créée par l'outil pour ce pays
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
@@ -161,6 +178,11 @@ model Listing {
   pauseDetail      String?       // ex. prix minimum conseillé pour retrouver la marge
   categoryId       String?
   errorMessage     String?       // dernier refus d'eBay, pour l'afficher au client
+  searchKeyword    String?       // recherche eBay du produit (repricing)
+  basePrice        Float?        // prix de départ (le repricing ne dépasse jamais 1,5 ×)
+  repricedAt       DateTime?
+  adRate           Float?        // taux Promoted Listings en cours (%), null = pas de publicité
+  adId             String?
   publishedAt      DateTime?
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
@@ -180,6 +202,12 @@ model Order {
   listing            Listing?    @relation(fields: [listingId], references: [id])
   ebayOrderId        String      @unique
   ebayCreatedAt      DateTime?
+  buyerUsername      String?     // pseudo eBay de l'acheteur (messages)
+  buyerName          String?     // prénom de l'acheteur (messages)
+  msgThanksAt        DateTime?   // messages automatiques déjà envoyés
+  msgShippedAt       DateTime?
+  msgFeedbackAt      DateTime?
+  msgFailures        Int         @default(0)
   marketplace        String      @default("EBAY_US")
   currency           String      @default("USD")
   status             OrderStatus @default(PENDING)
@@ -350,4 +378,81 @@ model SnipeCandidate {
   createdAt       DateTime             @default(now())
 
   @@index([runId, status])
+}
+
+/* ---------- Recherche marché : espion de concurrents, Title Builder, meilleures ventes ---------- */
+
+/** Résultats d'analyse gardés quelques heures (limite les appels à eBay). */
+model ResearchCache {
+  key       String   @id   // ex. seller:EBAY_US:nom:mot-clé, title:EBAY_US:mot-clé
+  data      Json
+  createdAt DateTime @default(now())
+}
+
+/** Vendeurs suivis par un client. */
+model SavedSeller {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  username    String
+  marketplace String
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, username, marketplace])
+}
+
+/** Meilleures ventes par niche et par pays, relevées chaque jour. */
+model TrendItem {
+  id           String   @id @default(cuid())
+  marketplace  String
+  niche        String
+  categoryId   String
+  categoryName String?
+  itemId       String
+  title        String
+  image        String?
+  url          String?
+  price        Float
+  currency     String
+  sold         Int      // ventes cumulées (estimation eBay)
+  soldPrev     Int?     // au relevé précédent : sold − soldPrev = ventes du jour
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([marketplace, itemId])
+  @@index([marketplace, niche])
+}
+
+/* ---------- Retours et annulations (API Post-Order d'eBay) ---------- */
+
+enum AfterSaleType {
+  RETURN
+  CANCEL
+}
+
+model AfterSale {
+  id            String        @id @default(cuid())
+  userId        String
+  user          User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ebayAccountId String?
+  marketplace   String        @default("EBAY_US")
+  type          AfterSaleType
+  ebayId        String        // returnId ou cancelId
+  ebayOrderId   String
+  orderId       String?       // notre commande (si elle vient de l'outil)
+  state         String        // état eBay (RETURN_REQUESTED, CANCEL_REQUESTED…)
+  open          Boolean       @default(true)
+  reason        String?
+  buyerComment  String?
+  amount        Float?
+  currency      String?
+  itemTitle     String?
+  requestedAt   DateTime?
+  action        String?       // ce que le vendeur a fait depuis l'outil (APPROVED, ACCEPTED, SUPPLIER_CANCELLED)
+  actionAt      DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@unique([type, ebayId])
+  @@index([userId, open])
 }

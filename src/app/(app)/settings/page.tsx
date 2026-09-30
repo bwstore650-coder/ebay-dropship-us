@@ -7,15 +7,17 @@ import CjConnectForm from "@/components/CjConnectForm";
 import { EU_COUNTRIES } from "@/lib/eu";
 import { aeConfig } from "@/lib/suppliers";
 import { LOCALE_TAGS } from "@/lib/i18n";
-import { saveGpsr, setAutoOrder } from "./actions";
+import { saveGpsr, saveGrowth, saveMessages, setAutoOrder } from "./actions";
+import { canAdvertise } from "@/lib/ebay";
 import { Icon, type IconName } from "@/components/icons";
-import { Notice } from "@/components/ui";
+import { Notice, Switch } from "@/components/ui";
 
-export default async function Settings({ searchParams }: { searchParams: Promise<{ ebay?: string; gpsr?: string; ae?: string }> }) {
+export default async function Settings({ searchParams }: { searchParams: Promise<{ ebay?: string; gpsr?: string; ae?: string; saved?: string }> }) {
   const user = await requireUser();
   const { locale, t } = await getI18n();
   const s = t.settings;
-  const { ebay, gpsr, ae } = await searchParams;
+  const { ebay, gpsr, ae, saved } = await searchParams;
+  const adsReady = user.ebayAccounts.length > 0 && user.ebayAccounts.every((a: { scopes?: string | null }) => canAdvertise(a.scopes));
   const aeAccount = user.supplierAccounts.find((a: { supplier: string }) => a.supplier === "ALIEXPRESS");
   const aeAvailable = Boolean(aeConfig());
   const countryName = new Intl.DisplayNames([LOCALE_TAGS[locale]], { type: "region" });
@@ -83,6 +85,47 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <button className={user.autoOrder ? "btn-secondary px-4 py-2 text-sm" : "btn-primary px-4 py-2 text-sm"}>
             {user.autoOrder ? s.autoOrderDisable : s.autoOrderEnable}
           </button>
+        </form>
+      </section>
+
+      <section id="messages" className="card scroll-mt-24">
+        <h2 className="flex items-center gap-2.5 font-semibold text-fg"><SectionIcon name="message" />{s.messagesTitle}</h2>
+        <p className="mt-2 text-sm text-muted">{s.messagesHelp}</p>
+        {saved === "messages" && <Notice tone="emerald" className="mt-3">{s.saved}</Notice>}
+        <form action={saveMessages} className="mt-4 space-y-4">
+          <Switch name="msgThanks" defaultChecked={user.msgThanks} label={s.msgThanks} hint={s.msgThanksHelp} />
+          <Switch name="msgShipped" defaultChecked={user.msgShipped} label={s.msgShipped} hint={s.msgShippedHelp} />
+          <Switch name="msgFeedback" defaultChecked={user.msgFeedback} label={s.msgFeedback} hint={s.msgFeedbackHelp} />
+          <label className="block max-w-xs text-sm font-medium text-fg-2">
+            {s.feedbackDelay}
+            <input name="feedbackDelayDays" type="number" min={1} max={30} defaultValue={user.feedbackDelayDays} className={input} />
+          </label>
+          <p className="text-xs text-subtle">{s.messagesNote}</p>
+          <button className="btn-primary px-4 py-2 text-sm">{s.save}</button>
+        </form>
+      </section>
+
+      <section id="growth" className="card scroll-mt-24">
+        <h2 className="flex items-center gap-2.5 font-semibold text-fg"><SectionIcon name="megaphone" />{s.growthTitle}</h2>
+        {saved === "growth" && <Notice tone="emerald" className="mt-3">{s.saved}</Notice>}
+        <form action={saveGrowth} className="mt-4 space-y-5">
+          <div className="space-y-3 rounded-xl border border-line bg-surface-2 p-4">
+            <Switch name="adsEnabled" defaultChecked={user.adsEnabled} label={s.adsTitle} hint={s.adsHelp} />
+            <label className="block max-w-xs text-sm font-medium text-fg-2">
+              {s.adRateMax}
+              <input name="adRateMax" type="number" min={2} max={20} step="0.1" defaultValue={user.adRateMax} className={input} />
+              <span className="mt-1 block text-xs font-normal text-subtle">{s.adRateHint}</span>
+            </label>
+            {!adsReady && user.ebayAccounts.length > 0 && <Notice tone="brand">{s.adsReconnect}</Notice>}
+          </div>
+          <div className="space-y-3 rounded-xl border border-line bg-surface-2 p-4">
+            <Switch name="repriceEnabled" defaultChecked={user.repriceEnabled} label={s.repriceTitle} hint={s.repriceHelp} />
+            <label className="block max-w-xs text-sm font-medium text-fg-2">
+              {s.repriceUndercut}
+              <input name="repriceUndercutPct" type="number" min={0} max={10} step="0.1" defaultValue={user.repriceUndercutPct} className={input} />
+            </label>
+          </div>
+          <button className="btn-primary px-4 py-2 text-sm">{s.save}</button>
         </form>
       </section>
 

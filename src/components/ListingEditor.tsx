@@ -115,6 +115,7 @@ export default function ListingEditor({
         aspects,
         price: priceNum,
         quantity,
+        keyword: keyword.slice(0, 120),
       }),
     });
     const data = await res.json().catch(() => ({}));

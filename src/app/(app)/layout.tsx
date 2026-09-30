@@ -13,7 +13,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { locale, t } = await getI18n();
   const n = t.nav;
   const isAdmin = isAdminEmail(user.email, parseAdminEmails(process.env.ADMIN_EMAILS));
-  const attention = await db.order.count({ where: { userId: user.id, status: { in: ["NEEDS_REVIEW", "FAILED"] } } });
+  const [attention, openReturns] = await Promise.all([
+    db.order.count({ where: { userId: user.id, status: { in: ["NEEDS_REVIEW", "FAILED"] } } }),
+    db.afterSale.count({ where: { userId: user.id, open: true, action: null } }),
+  ]);
 
   const sections: NavSection[] = [
     {
@@ -23,6 +26,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         { href: "/sniper", label: n.sniper, icon: "zap" },
         { href: "/listings", label: n.listings, icon: "tag" },
         { href: "/orders", label: n.orders, icon: "box", badge: attention },
+        { href: "/returns", label: n.returns, icon: "undo", badge: openReturns },
+      ],
+    },
+    {
+      title: n.sectionResearch,
+      items: [
+        { href: "/best-sellers", label: n.bestSellers, icon: "fire" },
+        { href: "/competitors", label: n.competitors, icon: "eye" },
+        { href: "/title-builder", label: n.titleBuilder, icon: "type" },
       ],
     },
     {

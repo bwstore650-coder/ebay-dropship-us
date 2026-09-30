@@ -8,6 +8,8 @@ import type { OrderLine } from "@/lib/orders";
 import { Icon } from "@/components/icons";
 import { Notice, StatCard, StatusBadge } from "@/components/ui";
 import { ORDER_TONE } from "@/lib/status-tones";
+import { getTrends } from "@/lib/research-service";
+import TrendCard from "@/components/TrendCard";
 
 export const dynamic = "force-dynamic";
 
@@ -18,13 +20,15 @@ export default async function Dashboard() {
   const { locale, t } = await getI18n();
   const D = t.dashboard;
   const since = new Date(Date.now() - 30 * DAY);
-  const [active, paused, drafts, orders30, recent, attention] = await Promise.all([
+  const trendMarket = marketplace(user.defaultMarketplace).id;
+  const [active, paused, drafts, orders30, recent, attention, trends] = await Promise.all([
     db.listing.count({ where: { userId: user.id, status: "ACTIVE" } }),
     db.listing.count({ where: { userId: user.id, status: "PAUSED" } }),
     db.listing.count({ where: { userId: user.id, status: "DRAFT" } }),
     db.order.findMany({ where: { userId: user.id, createdAt: { gte: since } }, orderBy: { createdAt: "desc" } }),
     db.order.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 5 }),
     db.order.count({ where: { userId: user.id, status: { in: ["NEEDS_REVIEW", "FAILED"] } } }),
+    getTrends(trendMarket, { limit: 10 }).catch(() => []),
   ]);
 
   // Chiffre d'affaires et profit réel (après frais eBay et coût fournisseur), par devise.
@@ -109,6 +113,20 @@ export default async function Dashboard() {
           hint={avgMargin !== null ? `${D.kpiMargin} : ${avgMargin} %` : undefined}
         />
       </section>
+
+      {trends.length > 0 && (
+        <section>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 font-semibold text-fg"><Icon name="fire" className="h-4 w-4 text-amber-300" />{t.research.dashboardTrends}</h2>
+            <Link href="/best-sellers" className="inline-flex items-center gap-1 text-sm font-medium text-brand-300 hover:text-brand-200">{t.research.seeAll} <Icon name="arrowRight" className="h-3.5 w-3.5" /></Link>
+          </div>
+          <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2">
+            {trends.map((it) => (
+              <div key={it.itemId} className="w-40 shrink-0 snap-start sm:w-44"><TrendCard item={it} t={t.research} marketId={trendMarket} /></div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="grid grid-cols-1 items-start gap-6 lg:grid-cols-5">
         {/* Dernières commandes */}

@@ -32,3 +32,41 @@ export async function setAutoOrder(formData: FormData) {
   revalidatePath("/settings");
   revalidatePath("/orders");
 }
+
+const checked = (f: FormData, k: string) => f.get(k) === "on";
+const numberIn = (v: FormDataEntryValue | null, min: number, max: number, fallback: number) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
+};
+
+/** Messages automatiques aux acheteurs. */
+export async function saveMessages(formData: FormData) {
+  const user = await requireUser();
+  await db.user.update({
+    where: { id: user.id },
+    data: {
+      msgThanks: checked(formData, "msgThanks"),
+      msgShipped: checked(formData, "msgShipped"),
+      msgFeedback: checked(formData, "msgFeedback"),
+      feedbackDelayDays: Math.round(numberIn(formData.get("feedbackDelayDays"), 1, 30, 7)),
+    },
+  });
+  revalidatePath("/settings");
+  redirect("/settings?saved=messages#messages");
+}
+
+/** Publicité automatique (Promoted Listings) et repricing. */
+export async function saveGrowth(formData: FormData) {
+  const user = await requireUser();
+  await db.user.update({
+    where: { id: user.id },
+    data: {
+      adsEnabled: checked(formData, "adsEnabled"),
+      adRateMax: Math.round(numberIn(formData.get("adRateMax"), 2, 20, 5) * 10) / 10,
+      repriceEnabled: checked(formData, "repriceEnabled"),
+      repriceUndercutPct: Math.round(numberIn(formData.get("repriceUndercutPct"), 0, 10, 1) * 10) / 10,
+    },
+  });
+  revalidatePath("/settings");
+  redirect("/settings?saved=growth#growth");
+}

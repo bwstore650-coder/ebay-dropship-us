@@ -60,6 +60,17 @@ function router(url: string, init?: RequestInit): Response {
     if (u.pathname.endsWith("/logistic/freightCalculate")) return cjOk([{ logisticName: "CJPacket", logisticPrice: 3.45, logisticAging: "2-5" }]);
   }
   if (u.hostname === "api.frankfurter.dev") return json({ rates: { EUR: 0.9, CAD: 1.35, GBP: 0.78, AUD: 1.5 } });
+  if (u.pathname === "/identity/v1/oauth2/token") return json({ access_token: "APP", expires_in: 7200 });
+  if (u.pathname === "/buy/browse/v1/item_summary/search")
+    return json({
+      total: 4,
+      itemSummaries: [
+        { itemId: "v1|L-OK|0", title: "Electric Can Opener", price: { value: "30.75", currency: "USD" } }, // notre annonce
+        { itemId: "v1|2|0", title: "Electric Can Opener Automatic", price: { value: "27.50", currency: "USD" } },
+        { itemId: "v1|3|0", title: "Can Opener Electric Smooth", price: { value: "29.00", currency: "USD" } },
+        { itemId: "v1|4|0", title: "Electric can opener white", price: { value: "31.00", currency: "USD" } },
+      ],
+    });
   if (u.pathname === "/sell/inventory/v1/bulk_update_price_quantity") {
     const body = JSON.parse(String(init?.body)) as { requests: { sku: string; offers: { offerId: string }[] }[] };
     return json({
@@ -95,7 +106,13 @@ beforeEach(() => {
   calls = [];
   ebayFailSku = null;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
-    calls.push({ method: init?.method ?? "GET", url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    let body: unknown;
+    try {
+      body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    } catch {
+      body = String(init?.body);
+    }
+    calls.push({ method: init?.method ?? "GET", url, body });
     return router(url, init);
   }));
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -114,7 +131,7 @@ describe("surveillance du stock et des prix", { timeout: 60_000 }, () => {
       listing("DE", "P-OK", { marketplace: "EBAY_DE", currency: "EUR", price: 29.9 }),
     ];
     const r = await monitorUser(user());
-    expect(r).toEqual({ checked: 7, paused: 3, resumed: 1, updated: 1, errors: 1 });
+    expect(r).toEqual({ checked: 7, paused: 3, resumed: 1, updated: 1, repriced: 0, errors: 1 });
 
     const bulk = calls.filter((c) => c.url.includes("bulk_update_price_quantity"));
     expect(bulk).toHaveLength(1);
@@ -155,6 +172,21 @@ describe("surveillance du stock et des prix", { timeout: 60_000 }, () => {
     const r = await monitorUser(user());
     expect(r).toMatchObject({ paused: 0, errors: 1 });
     expect(get("OUT")).toMatchObject({ status: "ACTIVE", errorMessage: "Listing ended" });
+  });
+
+  it("repricing : juste sous le concurrent le moins cher, dans le même envoi groupé ; pas avant 6 h", async () => {
+    mem.listings = [listing("OK", "P-OK", { searchKeyword: "electric can opener", ebayListingId: "L-OK", basePrice: 30.75, repricedAt: null })];
+    const r = await monitorUser({ ...(user() as object), repriceEnabled: true, repriceUndercutPct: 1 } as never);
+    expect(r).toMatchObject({ checked: 1, repriced: 1 });
+    const bulk = calls.find((c) => c.url.includes("bulk_update_price_quantity"))!;
+    const req = (bulk.body as { requests: { offers: { price?: { value: string; currency: string }; availableQuantity: number }[] }[] }).requests[0];
+    expect(req.offers[0]).toEqual({ offerId: "OF-OK", availableQuantity: 3, price: { value: "27.22", currency: "USD" } });
+    expect(get("OK")).toMatchObject({ price: 27.22, status: "ACTIVE" });
+    expect(get("OK").repricedAt).toBeInstanceOf(Date);
+
+    calls = [];
+    await monitorUser({ ...(user() as object), repriceEnabled: true, repriceUndercutPct: 1 } as never, { force: true });
+    expect(calls.some((c) => c.url.includes("item_summary/search"))).toBe(false); // repricé il y a moins de 6 h
   });
 
   it("déjà en pause et toujours en rupture : pas d'appel eBay", async () => {

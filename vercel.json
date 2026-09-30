@@ -11,6 +11,10 @@
     {
       "path": "/api/cron/sniper",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/trends",
+      "schedule": "13 6 * * *"
     }
   ]
 }

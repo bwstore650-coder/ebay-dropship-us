@@ -15,6 +15,7 @@ const body = z.object({
   aspects: z.record(z.string().max(60), z.array(z.string().max(200)).max(30)),
   price: z.number().positive().max(100000),
   quantity: z.number().int().min(1).max(10),
+  keyword: z.string().max(120).optional(),
 });
 
 /** Publie l'annonce sur eBay (tout est revérifié côté serveur). */

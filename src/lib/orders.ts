@@ -16,6 +16,7 @@ export interface OrderLine {
   productId: string;
   vid: string; // variante chez le fournisseur
   title: string;
+  legacyItemId?: string; // numéro de l'annonce eBay (messages à l'acheteur)
 }
 
 export type OrderCheck =
@@ -52,6 +53,7 @@ export function mapLines(
     lines.push({
       lineItemId: li.lineItemId, sku: li.sku!, quantity: li.quantity, listingId: l.id,
       supplier: l.supplier, productId: l.supplierProductId, vid: l.supplierVariantId, title: li.title,
+      ...(li.legacyItemId ? { legacyItemId: li.legacyItemId } : {}),
     });
   }
   return { lines, unknown };
@@ -76,8 +78,9 @@ export function shipAddress(to: { fullName: string; primaryPhone?: { phoneNumber
 export const supplierOrderNumber = (ebayOrderId: string) => `EB-${ebayOrderId}`.slice(0, 50);
 
 /** Frais eBay estimés et profit réel d'une commande. */
-export function orderProfit(saleTotal: number, supplierCost: number, marketId: string) {
-  const fees = ebayFees(saleTotal, { market: marketplace(marketId) });
+export function orderProfit(saleTotal: number, supplierCost: number, marketId: string, adRatePct?: number | null) {
+  // Annonce promue : les frais publicitaires sont comptés (hypothèse prudente : vente attribuée à la publicité).
+  const fees = ebayFees(saleTotal, { market: marketplace(marketId), promotedRate: (adRatePct ?? 0) / 100 });
   return { fees, profit: Math.round((saleTotal - supplierCost - fees) * 100) / 100 };
 }
 

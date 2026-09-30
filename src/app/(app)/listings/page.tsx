@@ -68,6 +68,14 @@ export default async function ListingsPage() {
                           {fmt((L.pause as Record<string, string>)[l.pauseReason] ?? L.pause.OUT_OF_STOCK, { detail: l.pauseDetail ? `${l.pauseDetail} ${m.symbol}` : "" })}
                         </p>
                       )}
+                      {(l.adRate !== null || l.repricedAt) && (
+                        <p className="mt-1.5 flex flex-wrap gap-1.5">
+                          {l.adRate !== null && <span className="badge bg-fuchsia-500/15 text-fuchsia-300"><Icon name="megaphone" className="h-3 w-3" />{fmt(L.adBadge, { rate: l.adRate })}</span>}
+                          {l.repricedAt && l.basePrice !== null && l.price !== l.basePrice && (
+                            <span className="badge bg-sky-500/15 text-sky-300">{fmt(L.repriced, { date: l.repricedAt.toLocaleDateString(LOCALE_TAGS[locale]) })}</span>
+                          )}
+                        </p>
+                      )}
                       {l.errorMessage && (
                         <p className="mt-1 text-xs text-red-400">{fmt(L.lastError, { message: l.errorMessage })}</p>
                       )}

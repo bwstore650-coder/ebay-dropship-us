@@ -10,15 +10,18 @@ import { EbayApiError } from "@/lib/ebay";
 import { EbayReconnectRequired, userToken } from "@/lib/ebay-account";
 import { getUsdRates, offersToCurrency } from "@/lib/fx";
 import { landedCost, type SupplierOffer } from "@/lib/margin";
+import { marketplace } from "@/lib/marketplaces";
 import { planInfo } from "@/lib/plans";
 import { ordersAttentionEmail, sendEmail } from "@/lib/email";
+import { MAX_MESSAGE_FAILURES, nextMessage, renderMessage } from "@/lib/messages";
+import { syncAfterSales } from "@/lib/aftersale-service";
 import { openSession, placeSupplierOrder, quote, supplierOrderState, SupplierError, type Session, type SupplierId } from "@/lib/suppliers";
 import {
   checkOrderable, shipAddress, ebayCarrierCode, isBalanceError, isDuplicateError, mapLines, orderProfit, shipTo,
   STUCK_AFTER_MS, supplierOrderNumber, type OrderLine,
 } from "@/lib/orders";
 
-type Account = { id: string; accessToken: string; accessTokenExpires: Date; refreshToken: string; refreshTokenExpires: Date };
+type Account = { id: string; accessToken: string; accessTokenExpires: Date; refreshToken: string; refreshTokenExpires: Date; ebayUserId?: string | null; label?: string | null };
 type UserWithAccounts = User & {
   ebayAccounts: Account[];
   supplierAccounts: { id?: string; supplier: string; accessToken: string; refreshToken?: string | null; expiresAt?: Date | null }[];
@@ -63,6 +66,8 @@ export async function importOrders(user: UserWithAccounts, account: Account): Pr
         listingId: first.id,
         ebayOrderId: o.orderId,
         ebayCreatedAt: new Date(o.creationDate),
+        buyerUsername: o.buyer?.username ?? null,
+        buyerName: shipTo(o)?.fullName?.trim().split(/\s+/)[0]?.slice(0, 40) ?? null,
         marketplace: first.marketplace,
         currency: o.pricingSummary.total.currency ?? first.currency,
         saleTotal: Number(o.pricingSummary.total.value),
@@ -165,7 +170,8 @@ export async function placeOrder(user: UserWithAccounts, orderId: string, opts: 
     }
     const offers = order.currency === "USD" ? usd : offersToCurrency(usd, order.currency, await getUsdRates());
     const cost = Math.round(offers.reduce((s, o) => s + landedCost({ supplierCost: o.price, supplierShipping: o.shipping, supplierTaxRate: o.taxRate }), 0) * 100) / 100;
-    const { fees, profit } = orderProfit(order.saleTotal, cost, order.marketplace);
+    const promoted = order.listingId ? await db.listing.findUnique({ where: { id: order.listingId }, select: { adRate: true } }).catch(() => null) : null;
+    const { fees, profit } = orderProfit(order.saleTotal, cost, order.marketplace, promoted?.adRate);
     if (profit < 0 && !opts.force) {
       await db.order.update({ where: { id: orderId }, data: { supplierCost: cost, fees, profit } });
       return await fail("NEEDS_REVIEW", "LOSS", `${profit.toFixed(2)} ${order.currency}`);
@@ -256,11 +262,11 @@ async function releaseStuck(userId: string) {
   });
 }
 
-export interface RunReport { imported: number; ordered: number; review: number; shipped: number; errors: string[] }
+export interface RunReport { imported: number; ordered: number; review: number; shipped: number; messages: number; errors: string[] }
 
 /** Cycle complet pour un vendeur. */
 export async function runForUser(user: UserWithAccounts): Promise<RunReport> {
-  const report: RunReport = { imported: 0, ordered: 0, review: 0, shipped: 0, errors: [] };
+  const report: RunReport = { imported: 0, ordered: 0, review: 0, shipped: 0, messages: 0, errors: [] };
   if (user.plan === "NONE") return report;
   await releaseStuck(user.id);
   for (const account of user.ebayAccounts) {
@@ -279,8 +285,61 @@ export async function runForUser(user: UserWithAccounts): Promise<RunReport> {
     }
   }
   report.shipped = await syncTracking(user);
+  report.messages = await sendMessages(user);
+  // Retours et annulations : relevés au plus une fois par heure.
+  if (!user.afterSalesSyncedAt || Date.now() - user.afterSalesSyncedAt.getTime() > 55 * 60_000) {
+    try {
+      await syncAfterSales(user);
+      await db.user.update({ where: { id: user.id }, data: { afterSalesSyncedAt: new Date() } });
+    } catch (e) {
+      report.errors.push(e instanceof Error ? e.message : String(e));
+    }
+  }
   await notifyAttention(user);
   return report;
+}
+
+const MESSAGES_PER_RUN = 20;
+
+/** Messages automatiques aux acheteurs (remerciement, suivi, demande d'évaluation), selon les réglages du vendeur. */
+export async function sendMessages(user: UserWithAccounts, now = Date.now()): Promise<number> {
+  if (!user.msgThanks && !user.msgShipped && !user.msgFeedback) return 0;
+  const orders = await db.order.findMany({
+    where: {
+      userId: user.id,
+      buyerUsername: { not: null },
+      msgFailures: { lt: MAX_MESSAGE_FAILURES },
+      status: { in: ["PENDING", "ORDERING", "ORDERED", "SHIPPED", "NEEDS_REVIEW"] },
+      createdAt: { gte: new Date(now - 60 * 86_400_000) },
+      OR: [{ msgThanksAt: null }, { msgShippedAt: null }, { msgFeedbackAt: null }],
+    },
+    orderBy: { createdAt: "asc" },
+    take: 200,
+  });
+  const tokens = new Map<string, Promise<string>>();
+  let sent = 0;
+  for (const o of orders) {
+    if (sent >= MESSAGES_PER_RUN) break;
+    const kind = nextMessage(o, user, now);
+    if (!kind) continue;
+    const account = user.ebayAccounts.find((a) => a.id === o.ebayAccountId);
+    const line = ((o.lines as unknown as OrderLine[]) ?? []).find((l) => l.legacyItemId);
+    if (!account || !line?.legacyItemId) continue;
+    const field = kind === "THANKS" ? "msgThanksAt" : kind === "SHIPPED" ? "msgShippedAt" : "msgFeedbackAt";
+    try {
+      if (!tokens.has(account.id)) tokens.set(account.id, userToken(account));
+      const msg = renderMessage(kind, o.marketplace, {
+        name: o.buyerName, item: line.title, store: account.ebayUserId ?? account.label ?? "", tracking: o.trackingNumber, carrier: o.carrier,
+      });
+      await ebay.sendBuyerMessage(await tokens.get(account.id)!, { itemId: line.legacyItemId, buyer: o.buyerUsername!, ...msg }, marketplace(o.marketplace).id);
+      await db.order.update({ where: { id: o.id }, data: { [field]: new Date(now) } });
+      sent++;
+    } catch (e) {
+      console.error("Message acheteur", o.ebayOrderId, kind, e);
+      await db.order.update({ where: { id: o.id }, data: { msgFailures: { increment: 1 } } });
+    }
+  }
+  return sent;
 }
 
 /** Email « commandes à vérifier » : seulement s'il y a du nouveau, et au plus une fois toutes les 6 heures. */

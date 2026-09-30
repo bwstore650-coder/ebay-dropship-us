@@ -201,6 +201,11 @@ export function getOrderDetail(token: string, orderId: string) {
   return cjFetch<CjOrderDetail>(`/shopping/order/getOrderDetail?${new URLSearchParams({ orderId })}`, { token });
 }
 
+/** Supprime une commande CJ (possible seulement tant qu'elle n'est ni payée ni traitée). */
+export function deleteOrder(token: string, orderId: string) {
+  return cjFetch<unknown>(`/shopping/order/deleteOrder?${new URLSearchParams({ orderId })}`, { method: "DELETE", token });
+}
+
 export function trackInfo(token: string, trackNumber: string) {
   return cjFetch<unknown>(`/logistic/trackInfo?${new URLSearchParams({ trackNumber })}`, { token });
 }

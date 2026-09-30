@@ -122,7 +122,7 @@ export function cleanImages(urls: (string | undefined | null)[]): string[] {
   return out;
 }
 
-const EBAY_DOMAINS: Record<MarketplaceId, string> = {
+export const EBAY_DOMAINS: Record<MarketplaceId, string> = {
   EBAY_US: "www.ebay.com", EBAY_CA: "www.ebay.ca", EBAY_GB: "www.ebay.co.uk", EBAY_AU: "www.ebay.com.au",
   EBAY_DE: "www.ebay.de", EBAY_FR: "www.ebay.fr", EBAY_IT: "www.ebay.it", EBAY_ES: "www.ebay.es", EBAY_IE: "www.ebay.ie",
 };

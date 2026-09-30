@@ -15,6 +15,8 @@ import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import { planInfo } from "@/lib/plans";
 import { openSession, productInfo, quote, SupplierError, type ProductInfo, type SupplierId } from "@/lib/suppliers";
 import { htmlToText, writeListingCopy } from "@/lib/ai";
+import { syncAds } from "@/lib/ads-service";
+import { keywordFromTitle } from "@/lib/sniper";
 import {
   buildAspects, cleanImages, cleanTitle, DEFAULT_QUANTITY, ebayItemUrl, isEuMarket, makeSku, mostCommon,
   sanitizeDescription, startOfUtcDay, veroIn,
@@ -180,6 +182,7 @@ export interface PublishInput {
   aspects: Record<string, string[]>;
   price: number;
   quantity: number;
+  keyword?: string; // recherche eBay du produit (repricing)
 }
 
 /** Publie l'annonce après avoir revérifié le coût fournisseur, la marge, les marques protégées et les limites. */
@@ -246,6 +249,8 @@ export async function publishListing(user: UserWithAccounts, input: PublishInput
       lastMarginPct: margin.marginPct,
       quantity,
       categoryId: input.categoryId,
+      searchKeyword: input.keyword?.trim().slice(0, 120) || keywordFromTitle(title) || null,
+      basePrice: price,
     },
   });
 
@@ -281,6 +286,8 @@ export async function publishListing(user: UserWithAccounts, input: PublishInput
       where: { id: listing.id },
       data: { status: "ACTIVE", ebayOfferId: offerId, ebayListingId: listingId, publishedAt: new Date(), errorMessage: null },
     });
+    // Publicité automatique (si activée) : ne bloque jamais la mise en vente.
+    if (user.adsEnabled) await syncAds(user, [listing.id]).catch((e) => console.error("Publicité", sku, e));
     return { id: listing.id, listingId, url: ebayItemUrl(m.id, listingId) };
   } catch (e) {
     const message = e instanceof EbayApiError ? e.readable : e instanceof Error ? e.message : String(e);

@@ -12,8 +12,11 @@ import { landedCost } from "@/lib/margin";
 import { marketplace } from "@/lib/marketplaces";
 import { openSession, quote, type Session, type SupplierId } from "@/lib/suppliers";
 import { CHECK_EVERY_MS, decide, type MonitorDecision } from "@/lib/monitor";
+import { competitorPrices, REPRICE_EVERY_MS, repriceTarget } from "@/lib/pricing";
+import { keywordFromTitle } from "@/lib/sniper";
+import { syncAds } from "@/lib/ads-service";
 
-type Account = { id: string; accessToken: string; accessTokenExpires: Date; refreshToken: string; refreshTokenExpires: Date };
+type Account = { id: string; accessToken: string; accessTokenExpires: Date; refreshToken: string; refreshTokenExpires: Date; scopes?: string | null };
 type UserWithAccounts = User & {
   ebayAccounts: Account[];
   supplierAccounts: { id?: string; supplier: string; accessToken: string; refreshToken?: string | null; expiresAt?: Date | null }[];
@@ -21,11 +24,11 @@ type UserWithAccounts = User & {
 
 const PER_RUN = 60;
 
-export interface MonitorReport { checked: number; paused: number; resumed: number; updated: number; errors: number }
+export interface MonitorReport { checked: number; paused: number; resumed: number; updated: number; repriced: number; errors: number }
 
 export async function monitorUser(user: UserWithAccounts, opts: { now?: number; force?: boolean } = {}): Promise<MonitorReport> {
   const now = opts.now ?? Date.now();
-  const report: MonitorReport = { checked: 0, paused: 0, resumed: 0, updated: 0, errors: 0 };
+  const report: MonitorReport = { checked: 0, paused: 0, resumed: 0, updated: 0, repriced: 0, errors: 0 };
   if (user.plan === "NONE") return report;
 
   const listings = await db.listing.findMany({
@@ -43,7 +46,8 @@ export async function monitorUser(user: UserWithAccounts, opts: { now?: number; 
   let rates: Rates | null = null;
   const cache = new Map<string, Promise<unknown>>(); // une seule lecture par produit et par passage
   const sessions = new Map<SupplierId, Session | null>();
-  const changes = new Map<string, { listing: (typeof listings)[number]; decision: MonitorDecision }[]>(); // par compte eBay
+  const changes = new Map<string, { listing: (typeof listings)[number]; decision: MonitorDecision; price?: number }[]>(); // par compte eBay
+  const markets = new Map<string, Promise<{ id: string; title: string; price: number }[]>>(); // recherches eBay du repricing
 
   for (const l of listings) {
     const m = marketplace(l.marketplace);
@@ -69,11 +73,33 @@ export async function monitorUser(user: UserWithAccounts, opts: { now?: number; 
       }
       const decision = decide({ status: l.status as "ACTIVE" | "PAUSED", price: l.price, quantity: l.quantity, marketId: m.id, minMarginPct: user.minMarginPct, supplier });
       report.checked++;
+
+      // Repricing face aux concurrents (annonces en ligne, toutes les 6 h au plus).
+      let price: number | undefined;
+      let repriceChecked = false;
+
+      if (
+        user.repriceEnabled && l.status === "ACTIVE" && (decision.action === "KEEP" || decision.action === "SET_QUANTITY") &&
+        (!l.repricedAt || now - l.repricedAt.getTime() > REPRICE_EVERY_MS)
+      ) {
+        repriceChecked = true;
+        const keyword = l.searchKeyword || keywordFromTitle(l.title);
+        if (keyword) {
+          const key = `${m.id}:${keyword}`;
+          if (!markets.has(key)) markets.set(key, ebay.searchActive(keyword, 30, m.id).then((r) => r.items).catch(() => []));
+          const target = repriceTarget({
+            price: l.price, basePrice: l.basePrice ?? l.price, cost: decision.cost, minMarginPct: user.minMarginPct, marketId: m.id,
+            competitors: competitorPrices(keyword, await markets.get(key)!, l.ebayListingId), undercutPct: user.repriceUndercutPct,
+          });
+          if (target !== null) price = target;
+        }
+      }
+
       const needsEbay =
-        decision.action === "RESUME" || decision.action === "SET_QUANTITY" || (decision.action === "PAUSE" && l.status === "ACTIVE");
+        decision.action === "RESUME" || decision.action === "SET_QUANTITY" || (decision.action === "PAUSE" && l.status === "ACTIVE") || price !== undefined;
       if (needsEbay && l.ebayAccountId) {
         const list = changes.get(l.ebayAccountId) ?? [];
-        list.push({ listing: l, decision });
+        list.push({ listing: l, decision, price });
         changes.set(l.ebayAccountId, list);
       } else {
         // Rien à changer sur eBay : on note seulement la vérification (et la raison si déjà en pause).
@@ -84,6 +110,7 @@ export async function monitorUser(user: UserWithAccounts, opts: { now?: number; 
             ...("marginPct" in decision && decision.marginPct !== undefined ? { lastMarginPct: decision.marginPct } : {}),
             ...("cost" in decision && decision.cost !== undefined ? { supplierCost: decision.cost } : {}),
             ...(decision.action === "PAUSE" ? { pauseReason: decision.reason, pauseDetail: decision.detail ?? null } : {}),
+            ...(repriceChecked ? { repricedAt: new Date(now) } : {}),
           },
         });
       }
@@ -102,14 +129,19 @@ export async function monitorUser(user: UserWithAccounts, opts: { now?: number; 
       const qty = (d: MonitorDecision) => (d.action === "PAUSE" ? 0 : "quantity" in d ? d.quantity : 0);
       results = await ebay.bulkUpdateQuantity(
         await userToken(account),
-        list.map(({ listing, decision }) => ({ sku: listing.sku, offerId: listing.ebayOfferId!, quantity: qty(decision) })),
+        list.map(({ listing, decision, price }) => ({
+          sku: listing.sku,
+          offerId: listing.ebayOfferId!,
+          quantity: decision.action === "KEEP" ? listing.quantity : qty(decision),
+          ...(price !== undefined ? { price: { value: price, currency: listing.currency } } : {}),
+        })),
       );
     } catch (e) {
       report.errors += list.length;
       console.error("Surveillance eBay", e);
       continue;
     }
-    for (const { listing, decision } of list) {
+    for (const { listing, decision, price } of list) {
       const r = results.find((x) => x.sku === listing.sku);
       if (!r?.ok) {
         report.errors++;
@@ -118,6 +150,7 @@ export async function monitorUser(user: UserWithAccounts, opts: { now?: number; 
       }
       const common = {
         lastCheckedAt: new Date(now),
+        ...(price !== undefined ? { price, repricedAt: new Date(now) } : user.repriceEnabled && listing.status === "ACTIVE" ? { repricedAt: new Date(now) } : {}),
         errorMessage: null,
         ...("marginPct" in decision && decision.marginPct !== undefined ? { lastMarginPct: decision.marginPct } : {}),
         ...("cost" in decision && decision.cost !== undefined ? { supplierCost: decision.cost } : {}),
@@ -131,8 +164,17 @@ export async function monitorUser(user: UserWithAccounts, opts: { now?: number; 
       } else if (decision.action === "SET_QUANTITY") {
         report.updated++;
         await db.listing.update({ where: { id: listing.id }, data: { ...common, quantity: decision.quantity } });
+      } else {
+        await db.listing.update({ where: { id: listing.id }, data: common });
       }
+      if (price !== undefined) report.repriced++;
     }
+  }
+  // Publicité : taux ajustés au nouveau coût et aux nouveaux prix.
+  try {
+    await syncAds(user);
+  } catch (e) {
+    console.error("Publicité", user.id, e);
   }
   return report;
 }

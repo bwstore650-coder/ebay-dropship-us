@@ -242,6 +242,7 @@ async function autoList(user: UserWithAccounts, run: RunRow, c: { keyword: strin
     aspects: draft.aspects,
     price: draft.suggestedPrice,
     quantity: draft.quantity,
+    keyword: c.keyword,
   });
 }
 
