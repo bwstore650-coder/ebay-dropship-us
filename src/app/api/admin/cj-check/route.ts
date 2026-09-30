@@ -26,6 +26,12 @@ export async function GET(req: Request) {
         const p = await cj.getProduct(token, String(it.id));
         row.variants = p.variants?.length;
         row.inventories = p.variants?.slice(0, 3).map((v) => v.inventories);
+        for (const path of ["/product/stock/getInventoryByPid", "/product/inventory/queryProductId"]) {
+          await new Promise((r) => setTimeout(r, 1200));
+          const rr = await fetch(`https://developers.cjdropshipping.com/api2.0/v1${path}?pid=${encodeURIComponent(String(it.id))}&productId=${encodeURIComponent(String(it.id))}`, { headers: { "CJ-Access-Token": token } });
+          const t = await rr.text();
+          row[path] = `${rr.status} ${t.slice(0, 900)}`;
+        }
         await new Promise((r) => setTimeout(r, 1200));
         const q = new URLSearchParams({ pid: String(it.id), countryCode: "US" });
         const r1 = await fetch(`https://developers.cjdropshipping.com/api2.0/v1/product/query?${q}`, { headers: { "CJ-Access-Token": token } });
