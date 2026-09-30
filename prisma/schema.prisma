@@ -344,6 +344,7 @@ model SnipeRun {
   status        SnipeStatus @default(RUNNING)
   scanned       Int         @default(0)
   found         Int         @default(0)
+  scanLimit     Int?        // produits à analyser au maximum (sinon calculé depuis target ; augmenté par « Continuer »)
   listed        Int         @default(0)
   error         String?
   lockedUntil   DateTime?   // un seul traitement à la fois

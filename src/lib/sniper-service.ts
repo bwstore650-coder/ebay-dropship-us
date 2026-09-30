@@ -96,6 +96,32 @@ export async function stopRun(userId: string, runId: string) {
   return r.count > 0;
 }
 
+/**
+ * « Continuer la recherche » : une recherche du catalogue terminée (limite atteinte), arrêtée ou en erreur
+ * repart là où elle s'était arrêtée, avec un nouveau lot de produits à analyser.
+ */
+export async function continueRun(userId: string, runId: string): Promise<"OK" | "NOT_FOUND" | "EXHAUSTED"> {
+  const run = await db.snipeRun.findFirst({ where: { id: runId, userId } });
+  if (!run || run.mode !== "CATALOG" || run.status === "RUNNING") return "NOT_FOUND";
+  if ((run.cursor as Partial<Cursor> | null)?.exhausted) return "EXHAUSTED";
+  // Produits restés en erreur (panne passagère) : on les réessaie (ils ne comptent plus comme analysés).
+  const retried = await db.snipeCandidate.updateMany({ where: { runId, status: "ERROR" }, data: { status: "PENDING", reason: null } });
+  const scanned = Math.max(0, run.scanned - retried.count);
+  await db.snipeRun.update({
+    where: { id: runId },
+    data: {
+      scanned,
+      status: "RUNNING",
+      error: null,
+      lockedUntil: null,
+      lastStepAt: null,
+      target: Math.max(run.target, run.found + 1),
+      scanLimit: scanned + maxScan(run.target),
+    },
+  });
+  return "OK";
+}
+
 interface Cursor { round: number; seed: number; exhausted: boolean }
 
 interface CjListItem { id?: string; pid?: string; nameEn?: string; productNameEn?: string; productName?: string }
@@ -106,7 +132,7 @@ async function gather(run: RunRow, token: string): Promise<Cursor> {
   const custom = Array.isArray(run.seeds) ? (run.seeds as string[]).filter(Boolean) : [];
   const seeds = custom.length ? custom : DEFAULT_SEEDS;
   const cur: Cursor = { round: 1, seed: 0, exhausted: false, ...((run.cursor as Partial<Cursor> | null) ?? {}) };
-  const MAX_ROUNDS = 5;
+  const MAX_ROUNDS = 20;
 
   const data = (await cj.searchProducts(token, seeds[cur.seed], cur.round, 20, m.country)) as { content?: { productList?: CjListItem[] }[]; list?: CjListItem[] };
   const items = (data.content?.[0]?.productList ?? data.list ?? []).filter((it) => it.id ?? it.pid);
@@ -307,7 +333,7 @@ export async function advanceRun(runId: string, deadline: number): Promise<boole
       const c = await db.snipeCandidate.findFirst({ where: { runId, status: "PENDING" }, orderBy: { createdAt: "asc" } });
       if (!c) {
         const cur = run.cursor as Partial<Cursor> | null;
-        if (run.mode === "CATALOG" && !cur?.exhausted && run.scanned < maxScan(run.target)) {
+        if (run.mode === "CATALOG" && !cur?.exhausted && run.scanned < (run.scanLimit ?? maxScan(run.target))) {
           const next = await gather(run, token);
           run = await db.snipeRun.update({ where: { id: runId }, data: { cursor: { ...next } } });
           continue;
@@ -357,7 +383,7 @@ export async function advanceRun(runId: string, deadline: number): Promise<boole
 
   const pending = await db.snipeCandidate.count({ where: { runId, status: "PENDING" } });
   const exhausted = Boolean((run.cursor as Partial<Cursor> | null)?.exhausted);
-  const done = isFinished({ mode: run.mode, target: run.target, found: run.found, scanned: run.scanned, pending, exhausted });
+  const done = isFinished({ mode: run.mode, target: run.target, found: run.found, scanned: run.scanned, pending, exhausted, scanLimit: run.scanLimit });
   // Arrêtée par le vendeur pendant le traitement : on ne la relance pas.
   const current = await db.snipeRun.findUnique({ where: { id: runId }, select: { status: true } });
   await db.snipeRun.update({
@@ -410,7 +436,8 @@ export async function runState(userId: string, runId: string) {
     scanned: run.scanned,
     found: run.found,
     listed: run.listed,
-    maxScan: run.mode === "CATALOG" ? maxScan(run.target) : (run.seeds as string[]).length,
+    maxScan: run.mode === "CATALOG" ? run.scanLimit ?? maxScan(run.target) : (run.seeds as string[]).length,
+    exhausted: Boolean((run.cursor as Partial<Cursor> | null)?.exhausted),
     autoList: run.autoList,
     error: run.error,
     createdAt: run.createdAt.toISOString(),

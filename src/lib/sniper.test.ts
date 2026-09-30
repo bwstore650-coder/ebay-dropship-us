@@ -48,7 +48,11 @@ describe("fin de la recherche", () => {
     expect(isFinished({ mode: "CATALOG", target: 5, found: 1, scanned: 10, pending: 0, exhausted: false })).toBe(false);
     expect(isFinished({ mode: "CATALOG", target: 5, found: 1, scanned: maxScan(5), pending: 0, exhausted: false })).toBe(true);
     expect(isFinished({ mode: "CATALOG", target: 5, found: 1, scanned: 3, pending: 0, exhausted: true })).toBe(true);
-    expect(maxScan(1)).toBe(20);
-    expect(maxScan(50)).toBe(150);
+    expect(maxScan(1)).toBe(25);
+    expect(maxScan(10)).toBe(250);
+    expect(maxScan(50)).toBe(400);
+    // « Continuer la recherche » : la limite enregistrée remplace celle calculée.
+    expect(isFinished({ mode: "CATALOG", target: 5, found: 1, scanned: maxScan(5), pending: 0, exhausted: false, scanLimit: maxScan(5) * 2 })).toBe(false);
+    expect(isFinished({ mode: "CATALOG", target: 5, found: 1, scanned: maxScan(5) * 2, pending: 0, exhausted: false, scanLimit: maxScan(5) * 2 })).toBe(true);
   });
 });

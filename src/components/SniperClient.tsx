@@ -90,10 +90,24 @@ export default function SniperClient({
     setRun({
       id: data.id, mode, marketId: String(f.get("marketId")) as MarketplaceId, status: "RUNNING", target: Number(f.get("target")),
       minMarginPct: Math.max(minMargin, Number(f.get("minMarginPct")) || 0),
-      scanned: 0, found: 0, listed: 0, maxScan: 0, autoList, error: null, createdAt: new Date().toISOString(), candidates: [],
+      scanned: 0, found: 0, listed: 0, maxScan: 0, exhausted: false, autoList, error: null, createdAt: new Date().toISOString(), candidates: [],
     });
     alive.current = true;
     loop(data.id);
+  }
+
+  const [continuing, setContinuing] = useState(false);
+  async function keepSearching() {
+    if (!run) return;
+    setContinuing(true);
+    setError(null);
+    const res = await fetch(`/api/sniper/${run.id}/continue`, { method: "POST" });
+    const data = await res.json().catch(() => ({}));
+    setContinuing(false);
+    if (!res.ok) return setError(errorMessage(errors, data.error));
+    setRun(data as RunState);
+    alive.current = true;
+    loop(run.id);
   }
 
   async function stop() {
@@ -280,6 +294,16 @@ export default function SniperClient({
               {running && <p className="mt-3 text-xs text-subtle">{t.background}</p>}
               {run.error && run.status !== "FAILED" && <p className="mt-3 text-xs text-amber-300">{fmt(t.autoListStopped, { reason: fmt(errorMessage(errors, run.error), { detail: "" }) })}</p>}
               {run.status === "FAILED" && <p className="mt-3 text-xs text-red-300">{errorMessage(errors, run.error)}</p>}
+              {!running && run.mode === "CATALOG" && run.found < run.target && (
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface-2 px-4 py-3">
+                  <p className="text-sm text-muted">{run.exhausted ? t.exhaustedNote : fmt(t.limitReached, { scanned: run.scanned })}</p>
+                  {!run.exhausted && (
+                    <button onClick={keepSearching} disabled={continuing} className="btn-primary shrink-0 px-4 py-2 text-sm">
+                      {continuing ? "…" : t.continueSearch}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </section>
 

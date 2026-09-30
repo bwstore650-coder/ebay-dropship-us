@@ -68,7 +68,7 @@ vi.mock("@/lib/db", () => ({
 }));
 vi.mock("@/lib/crypto", () => ({ decrypt: (s: string) => s, encrypt: (s: string) => s }));
 
-import { advanceAll, advanceRun, createRun, runState, SnipeError } from "./sniper-service";
+import { advanceAll, advanceRun, continueRun, createRun, runState, SnipeError } from "./sniper-service";
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 const cjOk = (data: unknown) => json({ code: 200, result: true, message: "ok", data });
@@ -161,6 +161,22 @@ describe("Sniper", { timeout: 90_000 }, () => {
     expect(by["P-GOOD"].profit).toBeGreaterThan(10);
     expect(s.candidates[0].productId).toBe("P-GOOD"); // les rentables d'abord
     expect(listCalls).toBe(1);
+  });
+
+  it("continuer la recherche : nouveau lot de produits, erreurs réessayées, refus si déjà en cours", async () => {
+    const run = await createRun(mem.users[0] as never, { mode: "CATALOG", marketId: "EBAY_US", target: 1, seeds: ["kitchen"], autoList: false });
+    expect(await continueRun("U1", run.id)).toBe("NOT_FOUND"); // encore en cours
+    await advanceRun(run.id, Date.now() + 80_000);
+    const r = mem.runs.find((x) => x.id === run.id)!;
+    r.status = "DONE";
+    mem.cands.find((c) => c.runId === run.id && c.productId === "P-LOW")!.status = "ERROR";
+    expect(await continueRun("U2", run.id)).toBe("NOT_FOUND"); // pas sa recherche
+    expect(await continueRun("U1", run.id)).toBe("OK");
+    expect(r).toMatchObject({ status: "RUNNING", target: 2, scanned: 3, scanLimit: 3 + 25 });
+    expect(mem.cands.find((c) => c.runId === run.id && c.productId === "P-LOW")!.status).toBe("PENDING");
+    r.status = "DONE";
+    r.cursor = { round: 1, seed: 0, exhausted: true };
+    expect(await continueRun("U1", run.id)).toBe("EXHAUSTED");
   });
 
   it("un produit déjà en vente n'est pas analysé à nouveau", async () => {

@@ -22,8 +22,8 @@ export const MAX_TARGET = 50;
 /** Nombre maximum de mots-clés dans une liste. */
 export const MAX_KEYWORDS = 50;
 /** On arrête de parcourir le catalogue après autant de produits analysés par produit demandé. */
-export const SCAN_FACTOR = 8;
-export const MAX_SCAN = 150;
+export const SCAN_FACTOR = 25;
+export const MAX_SCAN = 400;
 /** Ventes minimum (estimation eBay sur les annonces comparables) pour considérer qu'il y a une demande. */
 export const MIN_UNITS_SOLD = 3;
 /** Variantes en stock analysées par produit (les moins chères) : limite les appels au fournisseur. */
@@ -112,8 +112,8 @@ export function classify(
 }
 
 /** Recherche terminée ? */
-export function isFinished(r: { mode: "CATALOG" | "KEYWORDS"; target: number; found: number; scanned: number; pending: number; exhausted: boolean }): boolean {
+export function isFinished(r: { mode: "CATALOG" | "KEYWORDS"; target: number; found: number; scanned: number; pending: number; exhausted: boolean; scanLimit?: number | null }): boolean {
   if (r.found >= r.target) return true;
   if (r.mode === "KEYWORDS") return r.pending === 0;
-  return r.pending === 0 && (r.exhausted || r.scanned >= maxScan(r.target));
+  return r.pending === 0 && (r.exhausted || r.scanned >= (r.scanLimit ?? maxScan(r.target)));
 }
