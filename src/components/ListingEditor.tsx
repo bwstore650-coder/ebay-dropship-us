@@ -300,7 +300,21 @@ function SetupForm({
   onRefresh: () => void;
 }) {
   const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState(false);
   const empty = !policies.fulfillment.length || !policies.payment.length || !policies.returns.length;
+
+  async function createPolicies() {
+    setCreating(true);
+    const res = await fetch("/api/ebay/policies", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accountId, marketId }),
+    });
+    const data = await res.json().catch(() => ({}));
+    setCreating(false);
+    if (!res.ok) return onError(data);
+    onRefresh();
+  }
 
   async function submit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -346,6 +360,14 @@ function SetupForm({
         <p className="mt-1 text-sm text-muted">{t.setupHelp}</p>
         <a href={POLICIES_URL[marketId]} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-sm font-medium text-brand-300 underline">{t.policiesLink}</a>
       </div>
+      {empty && (
+        <div className="rounded-lg border border-line bg-surface-2 p-4">
+          <button type="button" onClick={createPolicies} disabled={creating} className="btn-primary px-4 py-2 text-sm">
+            {creating ? t.creatingPolicies : t.createPolicies}
+          </button>
+          <p className="mt-2 text-xs text-muted">{t.createPoliciesHelp}</p>
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-3">
         {select("fulfillment", t.fulfillment)}
         {select("payment", t.payment)}

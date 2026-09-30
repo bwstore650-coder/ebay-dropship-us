@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ListingError } from "@/lib/listing-service";
-import { EbayApiError } from "@/lib/ebay";
+import { EbayApiError, TradingError } from "@/lib/ebay";
 import { EbayReconnectRequired } from "@/lib/ebay-account";
 
 /** Réponse JSON d'erreur commune aux routes d'annonces : { error: CODE, detail? }. */
@@ -14,6 +14,10 @@ export function listingErrorResponse(e: unknown, context: string) {
   if (e instanceof EbayApiError) {
     console.error(context, e);
     return NextResponse.json({ error: "EBAY_REJECTED", detail: e.readable }, { status: 502 });
+  }
+  if (e instanceof TradingError) {
+    console.error(context, e);
+    return NextResponse.json({ error: "EBAY_REJECTED", detail: e.detail }, { status: 502 });
   }
   console.error(context, e);
   return NextResponse.json({ error: "UPSTREAM" }, { status: 502 });

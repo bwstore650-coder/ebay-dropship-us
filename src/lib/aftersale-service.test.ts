@@ -58,6 +58,8 @@ function router(url: string, init?: RequestInit): Response {
   const u = new URL(url);
   const p = u.pathname;
   if (p === "/post-order/v2/return/search") return json({ members: returns });
+  if (p === "/post-order/v2/cancellation/search" && !(u.searchParams.get("creation_date_range_from") && u.searchParams.get("creation_date_range_to")))
+    return json({ error: [{ errorId: 10003, message: "Validation Error - Missing input" }] }, 400); // comme eBay
   if (p === "/post-order/v2/cancellation/search")
     return json({ cancellations: [{ cancelId: "C1", legacyOrderId: "E-1", cancelState: "CANCEL_REQUESTED", cancelReason: "BUYER_ASKED_CANCEL", requestRefundAmount: { value: "30.75", currency: "USD" } }, { cancelId: "C2", legacyOrderId: "E-2", cancelState: "CANCEL_REQUESTED" }] });
   if (p.startsWith("/post-order/v2/cancellation/") && p.endsWith("/approve")) return new Response(null, { status: 204 });

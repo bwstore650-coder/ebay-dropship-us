@@ -315,6 +315,21 @@ export async function setupOptions(user: UserWithAccounts, accountId: string, ma
   return { policies, existing };
 }
 
+/** Crée les politiques standard qui manquent au vendeur pour ce pays, puis renvoie les réglages à jour. */
+export async function createStandardPolicies(user: UserWithAccounts, accountId: string, marketId: MarketplaceId) {
+  const account = user.ebayAccounts.find((a) => a.id === accountId);
+  if (!account) throw new ListingError("EBAY_NOT_CONNECTED");
+  const token = await userToken(account);
+  await ebay.optInBusinessPolicies(token);
+  const current = await ebay.getPolicies(token, marketId);
+  await ebay.createDefaultPolicies(token, marketId, {
+    fulfillment: !current.fulfillment.length,
+    payment: !current.payment.length,
+    returns: !current.returns.length,
+  });
+  return setupOptions(user, accountId, marketId);
+}
+
 export async function saveSetup(
   user: UserWithAccounts,
   i: { accountId: string; marketId: MarketplaceId; fulfillmentPolicyId: string; paymentPolicyId: string; returnPolicyId: string; postalCode: string; city?: string; stateOrProvince?: string },

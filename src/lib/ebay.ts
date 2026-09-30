@@ -472,6 +472,85 @@ export async function getPolicies(token: string, marketId: MarketplaceId): Promi
   };
 }
 
+/* ---------- Politiques standard créées automatiquement (vendeur qui n'en a pas encore) ---------- */
+
+export interface ShippingServiceOption { code: string; category: string; carrier: string | null; maxDays: number | null }
+
+const tag = (block: string, name: string) => block.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`))?.[1]?.trim() ?? null;
+
+/** Services de livraison nationaux au forfait, utilisables à la mise en vente (réponse GeteBayDetails). */
+export function parseShippingServices(xml: string): ShippingServiceOption[] {
+  const out: ShippingServiceOption[] = [];
+  for (const m of xml.matchAll(/<ShippingServiceDetails>([\s\S]*?)<\/ShippingServiceDetails>/g)) {
+    const b = m[1];
+    const code = tag(b, "ShippingService");
+    if (!code || tag(b, "ValidForSellingFlow") !== "true" || tag(b, "InternationalService") === "true") continue;
+    const types = [...b.matchAll(/<ServiceType>([^<]*)<\/ServiceType>/g)].map((x) => x[1]);
+    if (!types.includes("Flat")) continue;
+    const max = Number(tag(b, "ShippingTimeMax"));
+    out.push({ code, category: tag(b, "ShippingCategory") ?? "", carrier: tag(b, "ShippingCarrier"), maxDays: Number.isFinite(max) && max > 0 ? max : null });
+  }
+  return out;
+}
+
+/** Service choisi : livraison standard (sinon économique, sinon express), générique plutôt que lié à un transporteur, la plus rapide. */
+export function pickShippingService(list: ShippingServiceOption[]): string | null {
+  const rank = (c: string) => ({ STANDARD: 0, ECONOMY: 1, EXPEDITED: 2 } as Record<string, number>)[c] ?? 9;
+  const best = list
+    .filter((s) => rank(s.category) < 9)
+    .sort((a, b) => rank(a.category) - rank(b.category) || Number(!!a.carrier) - Number(!!b.carrier) || (a.maxDays ?? 99) - (b.maxDays ?? 99) || a.code.localeCompare(b.code))[0];
+  return best?.code ?? null;
+}
+
+export const DEFAULT_POLICY_NAMES = { fulfillment: "Sellvela - Free shipping", payment: "Sellvela - Payment", returns: "Sellvela - 30-day returns" } as const;
+export const DEFAULT_HANDLING_DAYS = 3;
+
+/** Crée les politiques standard manquantes : livraison gratuite (préparation 3 jours), paiement immédiat, retours 30 jours. */
+export async function createDefaultPolicies(
+  token: string,
+  marketId: MarketplaceId,
+  missing: { fulfillment: boolean; payment: boolean; returns: boolean },
+): Promise<void> {
+  const m = marketplace(marketId);
+  const base = { marketplaceId: marketId, categoryTypes: [{ name: "ALL_EXCLUDING_MOTORS_VEHICLES" }] };
+  if (missing.fulfillment) {
+    const code = pickShippingService(parseShippingServices(await trading(token, "GeteBayDetails", "<DetailName>ShippingServiceDetails</DetailName>", marketId)));
+    if (!code) throw new EbayApiError("/sell/account/v1/fulfillment_policy", 400, "NO_SHIPPING_SERVICE");
+    await api<unknown>(token, "/sell/account/v1/fulfillment_policy", {
+      method: "POST",
+      body: JSON.stringify({
+        ...base,
+        name: DEFAULT_POLICY_NAMES.fulfillment,
+        handlingTime: { value: DEFAULT_HANDLING_DAYS, unit: "DAY" },
+        shippingOptions: [{
+          optionType: "DOMESTIC",
+          costType: "FLAT_RATE",
+          shippingServices: [{ shippingServiceCode: code, freeShipping: true, sortOrder: 1, shippingCost: { value: "0.00", currency: m.currency } }],
+        }],
+      }),
+    }, marketId);
+  }
+  if (missing.payment) {
+    await api<unknown>(token, "/sell/account/v1/payment_policy", {
+      method: "POST",
+      body: JSON.stringify({ ...base, name: DEFAULT_POLICY_NAMES.payment, immediatePay: true }),
+    }, marketId);
+  }
+  if (missing.returns) {
+    await api<unknown>(token, "/sell/account/v1/return_policy", {
+      method: "POST",
+      body: JSON.stringify({
+        ...base,
+        name: DEFAULT_POLICY_NAMES.returns,
+        returnsAccepted: true,
+        returnPeriod: { value: 30, unit: "DAY" },
+        returnShippingCostPayer: "BUYER",
+        refundMethod: "MONEY_BACK",
+      }),
+    }, marketId);
+  }
+}
+
 export interface ShipFrom { postalCode: string; city?: string; stateOrProvince?: string; country: string }
 
 /** Crée le lieu d'expédition (entrepôt) s'il n'existe pas encore. La clé ne peut plus changer ensuite. */
@@ -745,8 +824,11 @@ export async function searchReturns(token: string, marketId: MarketplaceId = "EB
 
 /** Demandes d'annulation des 30 derniers jours. */
 export async function searchCancellations(token: string, marketId: MarketplaceId = "EBAY_US"): Promise<EbayCancellation[]> {
-  const from = new Date(Date.now() - 30 * 86_400_000).toISOString();
-  const d = await postOrder<{ cancellations?: EbayCancellation[] }>(token, `/cancellation/search?${new URLSearchParams({ creation_date_range_from: from, limit: "100" })}`, {}, marketId);
+  // eBay exige les deux bornes de la période.
+  const now = Date.now();
+  const from = new Date(now - 30 * 86_400_000).toISOString();
+  const to = new Date(now).toISOString();
+  const d = await postOrder<{ cancellations?: EbayCancellation[] }>(token, `/cancellation/search?${new URLSearchParams({ creation_date_range_from: from, creation_date_range_to: to, limit: "100" })}`, {}, marketId);
   return d.cancellations ?? [];
 }
 
