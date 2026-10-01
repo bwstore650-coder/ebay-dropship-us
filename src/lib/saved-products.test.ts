@@ -16,7 +16,7 @@ vi.mock("@/lib/db", () => ({
       upsert: vi.fn(async ({ where, create, update }: { where: { userId_supplier_productId: Record<string, string> }; create: Row; update: Record<string, unknown> }) => {
         const r = mem.rows.find((x) => matches(x, where.userId_supplier_productId));
         if (r) return Object.assign(r, update);
-        const n = { id: `s${++mem.seq}`, createdAt: new Date(Date.now() + mem.seq), ...create };
+        const n = { ...create, id: `s${++mem.seq}`, createdAt: new Date(Date.now() + mem.seq) };
         mem.rows.push(n);
         return n;
       }),
