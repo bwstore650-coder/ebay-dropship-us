@@ -46,6 +46,7 @@ export interface Analysis {
   unitsSold: number;
   deliveryDaysMax: number | null;
   details: CandidateDetails;
+  keyword?: string; // mot-clé eBay utilisé (déduit du titre quand il n'est pas fourni)
 }
 
 export interface AnalyzeOptions {
@@ -100,28 +101,32 @@ export async function analyzeCatalogProduct(
   const title = product.productNameEn || fallbackTitle;
   const empty = { variantId: null, marketPrice: null, cost: null, profit: null, marginPct: null, unitsSold: 0, deliveryDaysMax: null };
   const base = { title: title?.slice(0, 300) ?? null, image };
+  // Sans mot-clé (ex. produit ouvert depuis l'extension) : déduit du titre fournisseur.
+  const kw = keyword || keywordFromTitle(title ?? "");
+  if (!kw) return { ...base, ...empty, status: "REJECTED", reason: "NO_KEYWORD", details: {} };
   const stocked = product.variants
     .map((v) => ({ v, stock: v.inventories?.find((i) => i.countryCode === m.country)?.totalInventory ?? 0 }))
     .filter((x) => x.stock > 0)
     .sort((a, b) => Number(a.v.variantSellPrice) - Number(b.v.variantSellPrice));
-  if (!stocked.length) return { ...base, ...empty, status: "REJECTED", reason: "NO_SUPPLIER", details: {} };
+  if (!stocked.length) return { ...base, ...empty, status: "REJECTED", reason: "NO_SUPPLIER", details: {}, keyword: kw };
   // Prix fournisseur (sans la livraison) dans la devise du pays, connu même quand le produit est rejeté plus loin.
   const [cheapest] = await toMarket([{ supplier: "CJ", productId: product.pid, variantId: stocked[0].v.vid, title: title ?? "", price: Number(stocked[0].v.variantSellPrice), shipping: 0, stockUs: stocked[0].stock, deliveryDaysMax: 0 }]);
   const supplierInfo: CandidateDetails = { supplierPrice: cheapest.price, stock: stocked[0].stock };
 
-  const market = await cachedDemand(keyword, 10, m.id);
+  const market = await cachedDemand(kw, 10, m.id);
   const insights = marketInsights(market);
   const sold = weightedMedian(market.soldWeighted);
   const prices = sold !== null ? [sold] : market.prices;
   // Pas d'annonce comparable ou pas de ventes : inutile d'interroger les frais de port.
   if (!prices.length) {
-    return { ...base, ...empty, status: "REJECTED", reason: "NO_PRICE", unitsSold: market.unitsSold, details: { ...supplierInfo, market: insights } };
+    return { ...base, ...empty, status: "REJECTED", reason: "NO_PRICE", unitsSold: market.unitsSold, details: { ...supplierInfo, market: insights }, keyword: kw };
   }
   if (market.unitsSold < MIN_UNITS_SOLD) {
     const e = evaluateProduct(prices, [cheapest], o.minMarginPct, { market: m });
     return {
       ...base, ...empty, status: "REJECTED", reason: "NO_DEMAND", marketPrice: e.marketPrice, unitsSold: market.unitsSold,
       details: { ...supplierInfo, market: insights, fees: e.margin?.fees ?? null },
+      keyword: kw,
     };
   }
   const offers = await toMarket(await cjOffersFor(token, product, m.country));
@@ -129,6 +134,7 @@ export async function analyzeCatalogProduct(
   const k = classify(e, { unitsSold: market.unitsSold, priceMin: o.priceMin, priceMax: o.priceMax, title, minProfit: o.minProfit });
   return {
     ...base,
+    keyword: kw,
     status: k.status,
     reason: k.reason ?? null,
     variantId: e.best?.variantId ?? null,

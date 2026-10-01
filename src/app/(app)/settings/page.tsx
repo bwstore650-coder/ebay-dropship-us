@@ -11,6 +11,7 @@ import { saveGpsr, saveGrowth, saveMessages, setAutoOrder } from "./actions";
 import { canAdvertise } from "@/lib/ebay";
 import { Icon, type IconName } from "@/components/icons";
 import { Notice, Switch } from "@/components/ui";
+import ExtensionTokens from "@/components/ExtensionTokens";
 
 export default async function Settings({ searchParams }: { searchParams: Promise<{ ebay?: string; gpsr?: string; ae?: string; saved?: string }> }) {
   const user = await requireUser();
@@ -153,6 +154,12 @@ export default async function Settings({ searchParams }: { searchParams: Promise
             <button className="btn-primary px-4 py-2 text-sm">{s.gpsrSave}</button>
           </div>
         </form>
+      </section>
+
+      <section id="extension" className="card scroll-mt-24">
+        <h2 className="flex items-center gap-2.5 font-semibold text-fg"><SectionIcon name="plus" />{t.extension.settingsTitle}</h2>
+        <p className="mt-2 text-sm text-muted">{t.extension.settingsText}</p>
+        <ExtensionTokens t={t.extension} locale={LOCALE_TAGS[locale]} />
       </section>
 
       <section className="card">

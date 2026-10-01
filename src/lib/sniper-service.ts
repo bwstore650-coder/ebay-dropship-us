@@ -22,7 +22,7 @@ import {
   classify, DEFAULT_SEEDS, HIGH_TICKET_PROFIT, HIGH_TICKET_SEEDS, isFinished, keywordFromTitle, MAX_TARGET, maxScan, RESUME_AFTER_MS,
 } from "@/lib/sniper";
 
-type UserWithAccounts = User & {
+export type UserWithAccounts = User & {
   ebayAccounts: { id: string; accessToken: string; accessTokenExpires: Date; refreshToken: string; refreshTokenExpires: Date }[];
   supplierAccounts: { id?: string; supplier: string; accessToken: string; refreshToken?: string | null; expiresAt?: Date | null }[];
 };
@@ -45,7 +45,12 @@ export interface CreateInput {
   autoList: boolean;
   ebayAccountId?: string | null;
   highTicket?: boolean;     // produits chers : au moins HIGH_TICKET_PROFIT de profit par vente
+  /** Produits précis à analyser (liste d'idées de l'extension) : pas de parcours du catalogue. */
+  products?: { productId: string; title?: string | null }[];
 }
+
+/** Nombre maximum de produits envoyés d'un coup depuis la liste d'idées. */
+export const MAX_IDEAS_PER_RUN = 50;
 
 /** Arrêt de la mise en vente automatique pour toute la recherche (inutile de réessayer à chaque produit). */
 const STOP_AUTO_LIST = new Set(["DAILY_LIMIT", "PLAN_LIMIT", "EBAY_SETUP_REQUIRED", "GPSR_REQUIRED", "EBAY_NOT_CONNECTED", "EBAY_RECONNECT", "PLAN_REQUIRED"]);
@@ -65,7 +70,8 @@ const cjToken = (user: UserWithAccounts) => {
 export async function createRun(user: UserWithAccounts, input: CreateInput) {
   if (user.plan === "NONE") throw new SnipeError("PLAN_REQUIRED");
   if (!cjToken(user)) throw new SnipeError("CJ_REQUIRED");
-  const target = Math.max(1, Math.min(MAX_TARGET, Math.floor(input.target)));
+  const products = input.mode === "CATALOG" && input.products?.length ? input.products.slice(0, MAX_IDEAS_PER_RUN) : null;
+  const target = products ? products.length : Math.max(1, Math.min(MAX_TARGET, Math.floor(input.target)));
   if (input.mode === "KEYWORDS" && input.seeds.length === 0) throw new SnipeError("INVALID_INPUT");
   if (input.priceMin != null && input.priceMax != null && input.priceMin > input.priceMax) throw new SnipeError("INVALID_INPUT");
   const account = input.autoList ? user.ebayAccounts.find((a) => a.id === input.ebayAccountId) ?? user.ebayAccounts[0] : null;
@@ -87,11 +93,17 @@ export async function createRun(user: UserWithAccounts, input: CreateInput) {
       autoList: Boolean(account),
       ebayAccountId: account?.id ?? null,
       seeds: input.seeds,
-      ...(input.mode === "CATALOG" ? { cursor: { round: 1, seed: 0, exhausted: false } } : {}),
+      // Liste de produits précis : rien d'autre à parcourir (« exhausted »).
+      ...(input.mode === "CATALOG" ? { cursor: { round: 1, seed: 0, exhausted: Boolean(products) } } : {}),
     },
   });
   if (input.mode === "KEYWORDS") {
     await db.snipeCandidate.createMany({ data: input.seeds.map((keyword) => ({ runId: run.id, keyword })) });
+  } else if (products) {
+    // Le mot-clé eBay est déduit du titre fournisseur pendant l'analyse.
+    await db.snipeCandidate.createMany({
+      data: products.map((p) => ({ runId: run.id, supplier: "CJ" as const, productId: p.productId, title: p.title?.slice(0, 300) ?? null, keyword: "" })),
+    });
   } else {
     await prefillFromPool(run);
   }
@@ -282,8 +294,10 @@ async function evaluate(run: RunRow, c: SnipeCandidate, token: string): Promise<
 
   // CATALOG : analyse complète, enregistrée aussi dans la base commune (sert aux recherches suivantes).
   const a = await analyzeCatalogProduct(token, m.id, c.productId!, c.keyword, c.title, { minMarginPct: run.minMarginPct, minProfit: run.minProfit, priceMin: run.priceMin, priceMax: run.priceMax });
-  await savePool(m.id, c.productId!, c.keyword, a).catch((e) => console.error("Pool", e));
+  const keyword = a.keyword || c.keyword;
+  if (keyword) await savePool(m.id, c.productId!, keyword, a).catch((e) => console.error("Pool", e));
   return {
+    keyword,
     title: a.title,
     image: a.image,
     status: a.status,

@@ -236,6 +236,21 @@ describe("Sniper", { timeout: 90_000 }, () => {
     expect(s).toMatchObject({ status: "DONE", error: null, found: 1, pausedUntil: null });
   });
 
+  it("liste d'idées de l'extension : analyse seulement ces produits, mot-clé déduit du titre CJ, puis s'arrête", async () => {
+    const run = await createRun(mem.users[0] as never, {
+      mode: "CATALOG", marketId: "EBAY_US", target: 99, seeds: [], autoList: false,
+      products: [{ productId: "P-GOOD", title: "Can opener" }, { productId: "P-OUT", title: null }],
+    });
+    expect(mem.runs.find((r) => r.id === run.id)).toMatchObject({ target: 2, cursor: { exhausted: true } });
+    await advanceRun(run.id, Date.now() + 80_000);
+    const s = (await runState("U1", run.id))!;
+    expect(s).toMatchObject({ status: "DONE", scanned: 2, found: 1 });
+    expect(listCalls).toBe(0); // pas de parcours du catalogue
+    const by = Object.fromEntries(s.candidates.map((c) => [c.productId, c]));
+    expect(by["P-GOOD"]).toMatchObject({ status: "PROFITABLE", keyword: "electric can opener automatic" });
+    expect(by["P-OUT"]).toMatchObject({ status: "REJECTED", reason: "NO_SUPPLIER" });
+  });
+
   it("continuer la recherche : nouveau lot de produits, erreurs réessayées, refus si déjà en cours", async () => {
     const run = await createRun(mem.users[0] as never, { mode: "CATALOG", marketId: "EBAY_US", target: 1, seeds: ["kitchen"], autoList: false });
     expect(await continueRun("U1", run.id)).toBe("NOT_FOUND"); // encore en cours

@@ -251,3 +251,11 @@ export function parseMaxDays(aging: string | undefined): number {
   const nums = (aging ?? "").match(/\d+/g)?.map(Number) ?? [];
   return nums.length ? Math.max(...nums) : 99;
 }
+
+/** Solde du portefeuille CJ (USD) : sert à payer les commandes automatiques (payType 2). */
+export async function getBalance(token: string): Promise<number> {
+  const d = await cjFetch<{ balance?: number | string; amount?: number | string }>("/shopping/payment/getBalance", { token });
+  const v = Number(d?.balance ?? d?.amount);
+  if (!Number.isFinite(v)) throw new Error("CJ getBalance: missing balance");
+  return v;
+}

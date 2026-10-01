@@ -101,6 +101,8 @@ model User {
   snipeRuns          SnipeRun[]
   savedSellers       SavedSeller[]
   afterSales         AfterSale[]
+  extensionTokens    ExtensionToken[]
+  savedProducts      SavedProduct[]
 
   @@index([googleId])
 }
@@ -509,4 +511,32 @@ model AppState {
   updatedAt DateTime  @updatedAt
 
   @@index([expiresAt])
+}
+
+/// Connexion de l'extension navigateur : jeton aléatoire (seule son empreinte SHA-256 est gardée), révocable.
+model ExtensionToken {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String    @unique
+  label      String?   // navigateur (ex. « Chrome · macOS »)
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  @@index([userId])
+}
+
+/// Liste d'idées : produits fournisseur mis de côté depuis l'extension.
+model SavedProduct {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  supplier  Supplier
+  productId String
+  title     String?
+  image     String?
+  createdAt DateTime @default(now())
+
+  @@unique([userId, supplier, productId])
+  @@index([userId, createdAt])
 }
