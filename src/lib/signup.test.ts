@@ -4,13 +4,15 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 type U = { id: string; email: string; googleId: string | null; passwordHash: string | null; referralCode: string; referredById: string | null; passwordChangedAt?: Date | null };
 const mem = vi.hoisted(() => ({ users: [] as U[], emails: [] as string[] }));
 
+function find(where: Partial<U>) {
+  const [k, v] = Object.entries(where)[0];
+  return mem.users.find((u) => (u as Record<string, unknown>)[k] === v) ?? null;
+}
 vi.mock("@/lib/db", () => ({
   db: {
     user: {
-      findUnique: vi.fn(async ({ where }: { where: Partial<U> }) => {
-        const [k, v] = Object.entries(where)[0];
-        return mem.users.find((u) => (u as Record<string, unknown>)[k] === v) ?? null;
-      }),
+      findUnique: vi.fn(async ({ where }: { where: Partial<U> }) => find(where)),
+      findFirst: vi.fn(async ({ where }: { where: Partial<U> }) => find(where)),
       create: vi.fn(async ({ data }: { data: Omit<U, "id"> }) => {
         const u = { id: `u${mem.users.length + 1}`, ...data } as U;
         mem.users.push(u);

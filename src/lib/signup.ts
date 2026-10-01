@@ -48,7 +48,7 @@ export type GoogleSignIn =
 export async function signInWithGoogle(p: GoogleProfile, ctx: SignupContext): Promise<GoogleSignIn> {
   // Sans email vérifié par Google, impossible de savoir à qui appartient l'adresse.
   if (!p.emailVerified) return { ok: false, error: "GOOGLE_UNVERIFIED" };
-  const linked = await db.user.findUnique({ where: { googleId: p.sub }, select: { id: true } });
+  const linked = await db.user.findFirst({ where: { googleId: p.sub }, select: { id: true } });
   if (linked) return { ok: true, userId: linked.id, created: false };
   const existing = await db.user.findUnique({ where: { email: p.email }, select: { id: true, googleId: true } });
   if (existing) {

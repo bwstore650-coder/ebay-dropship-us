@@ -42,7 +42,7 @@ model User {
   id                 String    @id @default(cuid())
   email              String    @unique
   passwordHash       String?   // null : compte créé avec Google (pas de mot de passe)
-  googleId           String?   @unique // identifiant Google (« sub ») si le compte se connecte avec Google
+  googleId           String?   // identifiant Google (« sub ») ; un seul compte par identifiant (vérifié dans le code)
   createdAt          DateTime  @default(now())
   locale             String    @default("en") // langue des emails
   termsAcceptedAt    DateTime?
@@ -101,6 +101,8 @@ model User {
   snipeRuns          SnipeRun[]
   savedSellers       SavedSeller[]
   afterSales         AfterSale[]
+
+  @@index([googleId])
 }
 
 model EbayAccount {
