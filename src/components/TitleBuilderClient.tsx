@@ -105,7 +105,7 @@ export default function TitleBuilderClient({
             <section className="card lg:col-span-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2 className="font-semibold text-fg">{t.wordsTitle}</h2>
-                <span className="text-xs text-subtle">{fmt(t.analyzedNote, { listings: data.listingsAnalyzed, sold: nf(data.unitsSold) })}</span>
+                <span className="text-xs text-subtle">{fmt(t.analyzedNote, { listings: data.listingsAnalyzed })}</span>
               </div>
               <p className="mt-1 text-xs text-subtle">{t.wordsHint}</p>
               <div className="mt-4 flex flex-wrap gap-2">

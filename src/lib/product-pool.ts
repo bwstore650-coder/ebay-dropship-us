@@ -25,9 +25,9 @@ import { type CandidateDetails, classify, DEFAULT_SEEDS, keywordFromTitle, MAX_V
 /** Un produit n'est plus proposé au-delà de ce nombre de vendeurs. */
 export const MAX_SELLERS_PER_PRODUCT = 5;
 /** Une analyse reste utilisable pendant ce délai (prix et stock revérifiés de toute façon avant la mise en vente). */
-export const POOL_FRESH_MS = 48 * 3600_000;
+export const POOL_FRESH_MS = 24 * 3600_000; // contrat eBay : données eBay affichées de moins de 24 h
 /** Au-delà, le scanner réanalyse le produit. */
-export const POOL_REFRESH_MS = 24 * 3600_000;
+export const POOL_REFRESH_MS = 20 * 3600_000; // réanalysés avant d'avoir 24 h
 const EXPOSURE_WINDOW_MS = 14 * 86_400_000;
 
 /** Rejets valables pour tout le monde (ne dépendent pas des réglages du vendeur). */

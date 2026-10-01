@@ -378,6 +378,7 @@ model SnipeCandidate {
   deliveryDaysMax Int?
   details         Json?                // analyse complète : marché eBay (prix, ventes/mois, concurrents), prix fournisseur, frais eBay…
   listingId       String?
+  analyzedAt      DateTime?            // date des données eBay (au-delà de 24 h elles ne sont plus affichées)
   createdAt       DateTime             @default(now())
 
   @@index([runId, status])

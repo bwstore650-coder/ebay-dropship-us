@@ -130,7 +130,6 @@ export default function FinderClient({
           <dl className="grid gap-px bg-line text-sm sm:grid-cols-2 lg:grid-cols-3">
             <Row k={r.priceSource === "SOLD_WEIGHTED" ? t.marketPriceSold : t.marketPriceActive} v={r.marketPrice !== null ? money(r.marketPrice) : "—"} />
             <Row k={t.listingsFound} v={r.ebayListingsCount} />
-            <Row k={t.unitsSold} v={r.unitsSold} />
             <Row k={t.offersCompared} v={r.offersChecked} />
             {r.best && <Row k={t.bestSupplier} v={`${r.best.supplier} — ${r.best.title}`} />}
             {r.best && <Row k={t.deliveryLabel} v={fmt(t.delivery, { days: r.best.deliveryDaysMax, stock: r.best.stockUs })} />}

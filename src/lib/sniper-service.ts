@@ -53,6 +53,8 @@ const STOP_AUTO_LIST = new Set(["DAILY_LIMIT", "PLAN_LIMIT", "EBAY_SETUP_REQUIRE
 const MAX_CONSECUTIVE_ERRORS = 5;
 /** Erreur affichée (recherche en pause) quand le quota eBay du jour est atteint. */
 export const QUOTA_ERROR = "EBAY_QUOTA";
+/** Âge maximum des données eBay affichées (contrat de licence API eBay). */
+export const EBAY_DATA_MAX_AGE_MS = 24 * 3600_000;
 const LOCK_MS = 90_000;
 
 const cjToken = (user: UserWithAccounts) => {
@@ -143,6 +145,7 @@ async function prefillFromPool(run: SnipeRun): Promise<number> {
           marginPct: r.marginPct,
           unitsSold: r.unitsSold,
           deliveryDaysMax: r.deliveryDaysMax,
+          analyzedAt: r.analyzedAt,
           details: toJson({ ...d, minPrice: minPriceFor(r, run.minMarginPct, run.marketplace as MarketplaceId) ?? d.minPrice ?? null }),
         };
       }),
@@ -394,7 +397,7 @@ export async function advanceRun(runId: string, deadline: number): Promise<boole
         }
       }
 
-      await db.snipeCandidate.update({ where: { id: c.id }, data: update });
+      await db.snipeCandidate.update({ where: { id: c.id }, data: { ...update, analyzedAt: new Date() } });
       const good = update.status === "PROFITABLE" || update.status === "LISTED";
       run = await db.snipeRun.update({
         where: { id: runId },
@@ -477,7 +480,11 @@ export async function runState(userId: string, runId: string) {
     error: run.error,
     pausedUntil: run.status === "RUNNING" && run.error === QUOTA_ERROR ? ((await quotaPausedUntil())?.toISOString() ?? null) : null,
     createdAt: run.createdAt.toISOString(),
-    candidates: candidates.map((c) => ({
+    candidates: candidates.map((c) => {
+      // Contrat eBay : pas de données eBay de plus de 24 h à l'écran (prix, ventes, frais et profit qui en découlent).
+      const expired = Date.now() - (c.analyzedAt ?? c.createdAt).getTime() > EBAY_DATA_MAX_AGE_MS && c.status !== "PENDING";
+      const details = (c.details ?? null) as CandidateDetails | null;
+      return {
       id: c.id,
       keyword: c.keyword,
       supplier: c.supplier,
@@ -487,15 +494,17 @@ export async function runState(userId: string, runId: string) {
       image: c.image,
       status: c.status,
       reason: c.reason,
-      marketPrice: c.marketPrice,
+      marketPrice: expired ? null : c.marketPrice,
       cost: c.cost,
-      profit: c.profit,
-      marginPct: c.marginPct,
-      unitsSold: c.unitsSold,
+      profit: expired ? null : c.profit,
+      marginPct: expired ? null : c.marginPct,
+      unitsSold: expired ? 0 : c.unitsSold,
       deliveryDaysMax: c.deliveryDaysMax,
-      details: (c.details ?? null) as CandidateDetails | null,
+      details: expired && details ? { ...details, market: undefined, fees: undefined } : details,
       listingId: c.listingId,
-    })),
+      expired,
+      };
+    }),
   };
 }
 

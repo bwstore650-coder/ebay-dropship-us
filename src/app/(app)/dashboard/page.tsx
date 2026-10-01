@@ -8,9 +8,7 @@ import type { OrderLine } from "@/lib/orders";
 import { Icon, type IconName } from "@/components/icons";
 import { Notice, StatCard, StatusBadge } from "@/components/ui";
 import { ORDER_TONE } from "@/lib/status-tones";
-import { getTrends } from "@/lib/research-service";
 import { change, dailySeries, ordersByMarket, topProducts, totals, type DashOrder } from "@/lib/dashboard";
-import TrendCard from "@/components/TrendCard";
 import SalesChart from "@/components/SalesChart";
 
 export const dynamic = "force-dynamic";
@@ -27,9 +25,8 @@ export default async function Dashboard() {
   const end = new Date(now.getTime() + 1);
   const since = new Date(now.getTime() - 30 * DAY);
   const prevSince = new Date(now.getTime() - 60 * DAY);
-  const trendMarket = marketplace(user.defaultMarketplace).id;
 
-  const [active, paused, drafts, orders60, recent, needsReview, openReturns, pausedList, lastRun, trends] = await Promise.all([
+  const [active, paused, drafts, orders60, recent, needsReview, openReturns, pausedList, lastRun] = await Promise.all([
     db.listing.count({ where: { userId: user.id, status: "ACTIVE" } }),
     db.listing.count({ where: { userId: user.id, status: "PAUSED" } }),
     db.listing.count({ where: { userId: user.id, status: "DRAFT" } }),
@@ -39,7 +36,6 @@ export default async function Dashboard() {
     db.afterSale.count({ where: { userId: user.id, open: true } }),
     db.listing.findMany({ where: { userId: user.id, status: "PAUSED" }, select: { pauseReason: true } }),
     db.snipeRun.findFirst({ where: { userId: user.id }, orderBy: { createdAt: "desc" } }),
-    getTrends(trendMarket, { limit: 10 }).catch(() => []),
   ]);
   const sniperTop = lastRun
     ? await db.snipeCandidate.findMany({
@@ -356,19 +352,6 @@ export default async function Dashboard() {
         </div>
       </section>
 
-      {trends.length > 0 && (
-        <section>
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="flex items-center gap-2 font-semibold text-fg"><Icon name="fire" className="h-4 w-4 text-amber-300" />{t.research.dashboardTrends}</h2>
-            <Link href="/best-sellers" className="inline-flex items-center gap-1 text-sm font-medium text-brand-300 hover:text-brand-200">{t.research.seeAll} <Icon name="arrowRight" className="h-3.5 w-3.5" /></Link>
-          </div>
-          <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2">
-            {trends.map((it) => (
-              <div key={it.itemId} className="w-40 shrink-0 snap-start sm:w-44"><TrendCard item={it} t={t.research} marketId={trendMarket} /></div>
-            ))}
-          </div>
-        </section>
-      )}
     </div>
   );
 }

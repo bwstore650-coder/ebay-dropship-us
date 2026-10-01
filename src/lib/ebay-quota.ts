@@ -3,7 +3,7 @@
  * - Quand eBay répond « trop de requêtes », tout le monde se met en pause jusqu'à la remise à zéro
  *   (au lieu d'échouer produit après produit).
  * - Le scanner de fond ne consomme que la moitié haute du quota : le reste est gardé pour les vendeurs.
- * - Les recherches eBay déjà faites sont gardées 24 h : un même mot-clé ne coûte qu'une fois.
+ * - Les recherches eBay déjà faites sont gardées 6 h : un même mot-clé ne coûte qu'une fois.
  */
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -19,7 +19,8 @@ const DEFAULT_PAUSE_MS = 30 * 60_000;
 const MAX_PAUSE_MS = 24 * 3600_000;
 /** Part du quota réservée aux vendeurs : le scanner s'arrête en dessous. */
 export const SCANNER_RESERVE = 0.5;
-export const DEMAND_CACHE_MS = 24 * 3600_000;
+/** Contrat eBay : les infos d'annonces ne doivent pas avoir plus de 6 h de retard sur eBay. */
+export const DEMAND_CACHE_MS = 6 * 3600_000;
 
 async function readState<T>(key: string): Promise<T | null> {
   const row = await db.appState.findUnique({ where: { key } });
@@ -79,7 +80,7 @@ export function scannerMayRun(q: BrowseQuota | null): boolean {
 const demandKey = (q: string, sample: number, marketId: MarketplaceId) =>
   `demand:${marketId}:${sample}:${q.toLowerCase().replace(/\s+/g, " ").trim()}`;
 
-/** Prix + ventes eBay pour un mot-clé, avec cache 24 h partagé par tous les vendeurs. */
+/** Prix + ventes eBay pour un mot-clé, avec cache 6 h partagé par tous les vendeurs. */
 export async function cachedDemand(q: string, sample: number, marketId: MarketplaceId): Promise<DemandSnapshot> {
   const key = demandKey(q, sample, marketId);
   const hit = await readState<DemandSnapshot>(key);
@@ -89,8 +90,17 @@ export async function cachedDemand(q: string, sample: number, marketId: Marketpl
   return fresh;
 }
 
-/** Ménage : supprime les entrées expirées (appelé par le scanner). */
+/**
+ * Ménage (appelé par le scanner) : le contrat eBay demande de supprimer les copies de données eBay
+ * dès qu'elles ne servent plus. Supprime les caches expirés et les données des fonctions retirées
+ * (meilleures ventes eBay, vendeurs concurrents suivis, analyses de vendeurs).
+ */
 export async function purgeExpiredState(): Promise<number> {
-  const r = await db.appState.deleteMany({ where: { expiresAt: { lt: new Date() } } });
-  return r.count;
+  const counts = await Promise.all([
+    db.appState.deleteMany({ where: { expiresAt: { lt: new Date() } } }),
+    db.researchCache.deleteMany({ where: { OR: [{ createdAt: { lt: new Date(Date.now() - 6 * 3600_000) } }, { key: { startsWith: "seller:" } }] } }),
+    db.trendItem.deleteMany({}),
+    db.savedSeller.deleteMany({}),
+  ]);
+  return counts.reduce((s, r) => s + r.count, 0);
 }

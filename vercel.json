@@ -13,10 +13,6 @@
       "schedule": "*/5 * * * *"
     },
     {
-      "path": "/api/cron/trends",
-      "schedule": "13 6 * * *"
-    },
-    {
       "path": "/api/cron/scanner",
       "schedule": "23 * * * *"
     }

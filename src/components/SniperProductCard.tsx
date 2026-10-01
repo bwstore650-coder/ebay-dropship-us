@@ -98,8 +98,6 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
     [k.profit, c.profit !== null ? money(c.profit) : "—", "font-semibold text-fg"],
   ];
   const stats: [string, string][] = [
-    [k.monthly, m?.monthlySales !== null && m?.monthlySales !== undefined ? fmt(k.perMonth, { n: num(m.monthlySales) }) : "—"],
-    [k.soldTotal, num(m?.soldTotal ?? c.unitsSold)],
     [k.competitors, num(m?.listings)],
     [k.priceRange, m?.priceMin !== null && m?.priceMin !== undefined ? `${money(m.priceMin)} – ${money(m.priceMax ?? null)}` : "—"],
     [fmt(k.minPrice, { margin: minMargin }), money(d.minPrice ?? null)],
@@ -120,6 +118,7 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
         <div className="min-w-0 flex-1">
           <p className="line-clamp-2 text-sm font-medium text-fg" title={c.title ?? c.keyword}>{c.title ?? c.keyword}</p>
           <p className="mt-1 truncate text-xs text-subtle">{fmt(t.search, { keyword: c.keyword })}</p>
+          {c.expired && <p className="mt-1 text-xs text-amber-300">{k.expired}</p>}
           <p className="mt-2 flex flex-wrap items-baseline gap-x-2 tabular-nums">
             <span className={`text-xl font-semibold ${c.profit !== null && c.profit > 0 ? marginTone : "text-muted"}`}>
               {c.profit !== null ? `${c.profit > 0 ? "+" : ""}${money(c.profit)}` : "—"}
@@ -173,23 +172,6 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
             <p className="text-xs text-subtle">{k.noMarket}</p>
           )}
 
-          {m && m.top.length > 0 && (
-            <div>
-              <p className="text-xs font-medium text-muted">{k.topTitle}</p>
-              <ul className="mt-1.5 space-y-1 text-xs">
-                {m.top.map((l, i) => (
-                  <li key={i} className="flex items-center justify-between gap-3">
-                    {l.url ? (
-                      <a href={l.url} target="_blank" rel="noopener noreferrer" className="min-w-0 truncate text-fg-2 hover:text-brand-200" title={l.title}>{l.title}</a>
-                    ) : (
-                      <span className="min-w-0 truncate text-fg-2" title={l.title}>{l.title}</span>
-                    )}
-                    <span className="shrink-0 tabular-nums text-muted">{money(l.price)} · {fmt(k.soldN, { n: l.sold })}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
           <p className="text-[11px] text-subtle">{k.estimateNote}</p>
         </div>
       )}

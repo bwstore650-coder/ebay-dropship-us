@@ -37,7 +37,7 @@ export default function SniperClient({
   const [autoList, setAutoList] = useState(false);
   const [highTicket, setHighTicket] = useState(startHighTicket);
   const [tab, setTab] = useState<"good" | "bad">("good");
-  const [sort, setSort] = useState<"profit" | "margin" | "monthly" | "price">("profit");
+  const [sort, setSort] = useState<"profit" | "margin" | "price">("profit");
   const [editing, setEditing] = useState<Candidate | null>(null);
   const alive = useRef(true);
 
@@ -127,7 +127,6 @@ export default function SniperClient({
   const money = (v: number | null) => (v === null ? "—" : `${v.toFixed(2)} ${sym}`);
   const sortValue = (c: Candidate) =>
     sort === "margin" ? c.marginPct ?? -1e9
-    : sort === "monthly" ? c.details?.market?.monthlySales ?? -1
     : sort === "price" ? c.marketPrice ?? -1
     : c.profit ?? -1e9;
   const sorted = (list: Candidate[]) => [...list].sort((a, b) => sortValue(b) - sortValue(a));
@@ -350,7 +349,6 @@ export default function SniperClient({
                 <select value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} className="input w-auto py-1.5 text-sm">
                   <option value="profit">{t.card.sortProfit}</option>
                   <option value="margin">{t.card.sortMargin}</option>
-                  <option value="monthly">{t.card.sortMonthly}</option>
                   <option value="price">{t.card.sortPrice}</option>
                 </select>
               </label>

@@ -38,7 +38,7 @@ export default async function HighTicketPage() {
           items={items.map((r) => ({
             id: r.id, keyword: r.keyword, supplier: r.supplier, productId: r.productId, variantId: r.variantId, title: r.title, image: r.image,
             status: "PROFITABLE" as const, reason: null, marketPrice: r.marketPrice, cost: r.cost, profit: r.profit, marginPct: r.marginPct,
-            unitsSold: r.unitsSold, deliveryDaysMax: r.deliveryDaysMax, details: (r.details ?? null) as CandidateDetails | null, listingId: null,
+            unitsSold: r.unitsSold, deliveryDaysMax: r.deliveryDaysMax, details: (r.details ?? null) as CandidateDetails | null, listingId: null, expired: false,
           }))}
           t={t.sniper}
           tl={t.listing}

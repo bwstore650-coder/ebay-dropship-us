@@ -190,8 +190,10 @@ describe("Sniper", { timeout: 90_000 }, () => {
     expect(by["P-NIKE"]).toMatchObject({ status: "REJECTED", reason: "VERO" });
     expect(by["P-GOOD"]).toMatchObject({ status: "PROFITABLE", keyword: "electric can opener automatic", variantId: "V-P-GOOD", marketPrice: 29.99, cost: 12, unitsSold: 12, deliveryDaysMax: 5 });
     // Fiche complète : marché eBay, prix fournisseur, frais eBay, prix minimum.
-    const d = by["P-GOOD"].details as { market: { listings: number; priceMin: number; priceMax: number; soldTotal: number }; fees: number; minPrice: number; supplierPrice: number; stock: number };
-    expect(d.market).toMatchObject({ listings: expect.any(Number), priceMin: 25, priceMax: 31, soldTotal: 12 });
+    const d = by["P-GOOD"].details as { market: { listings: number; priceMin: number; priceMax: number }; fees: number; minPrice: number; supplierPrice: number; stock: number };
+    expect(d.market).toMatchObject({ listings: expect.any(Number), priceMin: 25, priceMax: 31 });
+    expect(d.market).not.toHaveProperty("soldTotal"); // pas de total de ventes agrégé
+    expect(d.market).not.toHaveProperty("top"); // pas d'annonces eBay gardées en base
     expect(d.fees).toBeGreaterThan(0);
     expect(d.minPrice).toBeGreaterThan(12);
     expect(d.supplierPrice).toBeGreaterThan(0);
@@ -199,6 +201,14 @@ describe("Sniper", { timeout: 90_000 }, () => {
     expect(by["P-GOOD"].profit).toBeGreaterThan(10);
     expect(s.candidates[0].productId).toBe("P-GOOD"); // les rentables d'abord
     expect(listCalls).toBe(1);
+
+    // Contrat eBay : au-delà de 24 h, les données eBay ne sont plus affichées.
+    expect(by["P-GOOD"].expired).toBe(false);
+    mem.cands.find((c) => c.productId === "P-GOOD")!.analyzedAt = new Date(Date.now() - 25 * 3600_000);
+    const old = (await runState("U1", run.id))!.candidates.find((c) => c.productId === "P-GOOD")!;
+    expect(old).toMatchObject({ expired: true, marketPrice: null, profit: null, marginPct: null, unitsSold: 0 });
+    expect(old.details?.market).toBeUndefined();
+    expect(old.details?.supplierPrice).toBeGreaterThan(0); // les données fournisseur restent
   });
 
   it("quota eBay atteint : la recherche se met en pause (sans rien rejeter à tort) puis reprend toute seule", async () => {

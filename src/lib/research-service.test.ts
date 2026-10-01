@@ -30,7 +30,7 @@ vi.mock("@/lib/db", () => ({
   },
 }));
 
-import { analyzeSeller, analyzeTitles, getTrends, refreshTrends, trendMarkets } from "./research-service";
+import { analyzeTitles, trendMarkets } from "./research-service";
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 let sold: Record<string, number> = {};
@@ -78,21 +78,6 @@ beforeEach(() => {
 });
 
 describe("recherche marché", () => {
-  it("espion : parcourt les catégories, ignore celles qui n'existent pas, calcule ventes et chiffre d'affaires ; résultat gardé en cache", async () => {
-    const r = await analyzeSeller("bestdeals", "EBAY_US");
-    expect(r).toMatchObject({ username: "bestdeals", listings: 3, unitsSold: 150, revenue: 3900, sellThrough: 67, feedbackScore: 5230, feedbackPercentage: 99.1, currency: "USD" });
-    expect(r.top[0]).toMatchObject({ id: "v1|1|0", sold: 120 });
-    const calls = browseCalls;
-    expect(calls).toBeGreaterThan(5); // toutes les grandes catégories
-    await analyzeSeller("bestdeals", "EBAY_US");
-    expect(browseCalls).toBe(calls); // cache
-  });
-
-  it("espion avec mot-clé : une seule recherche", async () => {
-    await analyzeSeller("bestdeals", "EBAY_US", "can opener");
-    expect(browseCalls).toBe(1);
-  });
-
   it("Title Builder : mots classés par ventes, titre proposé sans marque protégée", async () => {
     const r = await analyzeTitles("Can Opener", "EBAY_US");
     expect(r.keyword).toBe("can opener");
@@ -100,26 +85,11 @@ describe("recherche marché", () => {
     expect(r.keywords.find((k) => k.word === "nike")?.vero).toBe(true);
     expect(r.suggestion.toLowerCase()).not.toContain("nike");
     expect(r.topTitles[0]).toMatchObject({ sold: 120 });
-    expect(r).toMatchObject({ listingsAnalyzed: 3, unitsSold: 160 });
+    expect(r).toMatchObject({ listingsAnalyzed: 3 });
+    expect(r).not.toHaveProperty("unitsSold"); // pas de total de ventes agrégé affiché
   });
 
-  it("meilleures ventes : relevé quotidien, ventes du jour au 2e relevé", async () => {
+  it("pays des clients : les États-Unis toujours, puis ceux des abonnés", async () => {
     expect(await trendMarkets()).toEqual(["EBAY_US", "EBAY_DE"]);
-    sold = {};
-    const n1 = await refreshTrends("EBAY_US", Date.now() + 60_000);
-    expect(n1).toBe(32); // 16 niches × 2 annonces
-    expect((await getTrends("EBAY_US"))[0].daySales).toBeNull();
-
-    // Le lendemain : l'annonce la plus vendue a vendu 7 de plus.
-    for (const t of mem.trends) t.updatedAt = new Date(Date.now() - 25 * 3600_000);
-    const first = mem.trends[0];
-    sold = { [first.itemId as string]: 7 };
-    await refreshTrends("EBAY_US", Date.now() + 60_000);
-    const top = (await getTrends("EBAY_US"))[0];
-    expect(top).toMatchObject({ itemId: first.itemId, sold: 7, daySales: 7 });
-
-    // Un 2e passage le même jour n'écrase pas la référence de la veille.
-    await refreshTrends("EBAY_US", Date.now() + 60_000);
-    expect((await getTrends("EBAY_US"))[0].daySales).toBe(7);
   });
 });
