@@ -8,6 +8,7 @@ import type { RunState } from "@/lib/sniper-service";
 import { CATEGORY_IDS, type CategoryId } from "@/lib/sniper";
 import ListingEditor from "@/components/ListingEditor";
 import SniperProductCard from "@/components/SniperProductCard";
+import { useSavedProducts } from "@/components/useSavedProducts";
 import { Icon } from "@/components/icons";
 import { Notice, PageHeader } from "@/components/ui";
 
@@ -42,6 +43,8 @@ export default function SniperClient({
   const [tab, setTab] = useState<"good" | "bad">("good");
   const [sort, setSort] = useState<"profit" | "margin" | "price">("profit");
   const [editing, setEditing] = useState<Candidate | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const { isSaved, toggle: toggleSaved } = useSavedProducts(run?.marketId ?? defaultMarket, (code) => setSaveError(errorMessage(errors, code)));
   const alive = useRef(true);
 
   const running = run?.status === "RUNNING";
@@ -412,6 +415,7 @@ export default function SniperClient({
             {tab === "good" && good.length === 0 && (
               <p className="rounded-2xl border border-dashed border-line-strong bg-surface/50 p-10 text-center text-sm text-muted">{t.noResults}</p>
             )}
+            {saveError && <p className="text-sm text-red-300" role="alert">{saveError}</p>}
             {(tab === "good" ? good : bad).length > 0 && (
               <div className="grid grid-cols-1 items-start gap-4 md:grid-cols-2 xl:grid-cols-3">
                 {sorted(tab === "good" ? good : bad).map((c) => (
@@ -425,6 +429,8 @@ export default function SniperClient({
                     onCreate={setEditing}
                     collapsible={tab === "bad"}
                     marketId={run?.marketId ?? defaultMarket}
+                    saved={isSaved(c)}
+                    onToggleSave={(x) => { setSaveError(null); toggleSaved(x); }}
                   />
                 ))}
               </div>

@@ -72,7 +72,7 @@ function PriceChart({ t, prices, market, minPrice, cost, money }: {
   );
 }
 
-export default function SniperProductCard({ c, t, minMargin, money, reason, onCreate, collapsible, marketId }: {
+export default function SniperProductCard({ c, t, minMargin, money, reason, onCreate, collapsible, marketId, saved, onToggleSave }: {
   c: Candidate;
   t: Dict["sniper"];
   minMargin: number;
@@ -81,6 +81,9 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
   onCreate: (c: Candidate) => void;
   collapsible?: boolean;
   marketId: MarketplaceId;
+  /** Produit déjà sauvegardé (bouton marque-page plein). */
+  saved?: boolean;
+  onToggleSave?: (c: Candidate) => void;
 }) {
   const [open, setOpen] = useState(!collapsible);
   const k = t.card;
@@ -107,7 +110,19 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
   ];
 
   return (
-    <article className="card flex min-w-0 flex-col p-0">
+    <article className="card relative flex min-w-0 flex-col p-0">
+      {onToggleSave && c.productId && c.supplier && (
+        <button
+          type="button"
+          onClick={() => onToggleSave(c)}
+          aria-pressed={Boolean(saved)}
+          aria-label={saved ? k.unsave : k.save}
+          title={saved ? k.unsave : k.save}
+          className={`absolute right-3 top-3 grid h-8 w-8 place-items-center rounded-lg border transition ${saved ? "border-brand-500/50 bg-brand-500/15 text-brand-300" : "border-line bg-surface-2 text-subtle hover:border-brand-500/50 hover:text-fg"}`}
+        >
+          <Icon name="bookmark" className="h-4 w-4" filled={Boolean(saved)} />
+        </button>
+      )}
       <div className="flex gap-4 p-5">
         {c.image ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -115,7 +130,7 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
         ) : (
           <span className="grid h-20 w-20 shrink-0 place-items-center rounded-xl bg-surface-2 text-subtle"><Icon name="box" /></span>
         )}
-        <div className="min-w-0 flex-1">
+        <div className={`min-w-0 flex-1 ${onToggleSave ? "pr-8" : ""}`}>
           <p className="line-clamp-2 text-sm font-medium text-fg" title={c.title ?? c.keyword}>{c.title ?? c.keyword}</p>
           <p className="mt-1 truncate text-xs text-subtle">{fmt(t.search, { keyword: c.keyword })}</p>
           {c.expired && <p className="mt-1 text-xs text-amber-300">{k.expired}</p>}

@@ -6,6 +6,8 @@ import { marketplace } from "@/lib/marketplaces";
 import type { RunState } from "@/lib/sniper-service";
 import ListingEditor from "@/components/ListingEditor";
 import SniperProductCard from "@/components/SniperProductCard";
+import { useSavedProducts } from "@/components/useSavedProducts";
+import { errorMessage } from "@/lib/i18n/errors";
 
 type Candidate = RunState["candidates"][number];
 
@@ -24,13 +26,16 @@ export default function WinnersGrid({
   minMargin: number;
 }) {
   const [editing, setEditing] = useState<Candidate | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const { isSaved, toggle } = useSavedProducts(marketId, (code) => setSaveError(errorMessage(errors, code)));
   const sym = marketplace(marketId).symbol;
   const money = (v: number | null) => (v === null ? "—" : `${v.toFixed(2)} ${sym}`);
   return (
     <>
+      {saveError && <p className="mb-3 text-sm text-red-300" role="alert">{saveError}</p>}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {items.map((c) => (
-          <SniperProductCard key={c.id} c={c} t={t} minMargin={minMargin} money={money} reason={null} onCreate={setEditing} collapsible marketId={marketId} />
+          <SniperProductCard key={c.id} c={c} t={t} minMargin={minMargin} money={money} reason={null} onCreate={setEditing} collapsible marketId={marketId} saved={isSaved(c)} onToggleSave={(x) => { setSaveError(null); toggle(x); }} />
         ))}
       </div>
       {editing && editing.productId && editing.supplier && (

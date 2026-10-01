@@ -541,6 +541,13 @@ model SavedProduct {
   productId String
   title     String?
   image     String?
+  /// Instantané au moment de la sauvegarde (depuis le Sniper ou les produits gagnants) : vide si gardé depuis l'extension.
+  keyword   String?
+  marketId  String?
+  price     Float?
+  cost      Float?
+  profit    Float?
+  marginPct Float?
   createdAt DateTime @default(now())
 
   @@unique([userId, supplier, productId])
