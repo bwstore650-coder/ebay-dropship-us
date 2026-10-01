@@ -7,6 +7,8 @@ import { quotaPausedUntil } from "@/lib/ebay-quota";
 import { priceTable, stripe } from "@/lib/stripe";
 import { poolStats } from "@/lib/product-pool";
 import { db } from "@/lib/db";
+import { decrypt } from "@/lib/crypto";
+import * as cj from "@/lib/suppliers/cj";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +58,16 @@ export async function GET() {
     s.error = String(err).slice(0, 200);
   }
 
+  // Compte CJ de l'admin : solde lisible ? (sert aux alertes « solde bas » de l'extension)
+  const cjAcc = user.supplierAccounts.find((a) => a.supplier === "CJ");
+  const cjInfo: Record<string, unknown> = { connected: Boolean(cjAcc) };
+  if (cjAcc) {
+    try {
+      cjInfo.balance = await cj.getBalance(decrypt(cjAcc.accessToken));
+    } catch (err) {
+      cjInfo.error = String(err).slice(0, 300);
+    }
+  }
   const pool = { ...(await poolStats("EBAY_US")), cursor: await db.scanCursor.findUnique({ where: { marketplace: "EBAY_US" } }), trends: await db.trendItem.count() };
-  return NextResponse.json({ ebay, stripe: s, pool });
+  return NextResponse.json({ ebay, stripe: s, cj: cjInfo, pool });
 }

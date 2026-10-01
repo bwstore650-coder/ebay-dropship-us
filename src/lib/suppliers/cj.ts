@@ -256,6 +256,6 @@ export function parseMaxDays(aging: string | undefined): number {
 export async function getBalance(token: string): Promise<number> {
   const d = await cjFetch<{ balance?: number | string; amount?: number | string }>("/shopping/payment/getBalance", { token });
   const v = Number(d?.balance ?? d?.amount);
-  if (!Number.isFinite(v)) throw new Error("CJ getBalance: missing balance");
+  if (!Number.isFinite(v)) throw new Error(`CJ getBalance: unexpected response ${JSON.stringify(d).slice(0, 200)}`);
   return v;
 }
