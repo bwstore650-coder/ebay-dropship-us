@@ -496,3 +496,13 @@ model ScanCursor {
   round       Int      @default(1)
   updatedAt   DateTime @updatedAt
 }
+
+/// Petit état partagé entre les serveurs (ex. quota eBay atteint jusqu'à telle heure, cache de recherches).
+model AppState {
+  key       String    @id
+  value     Json
+  expiresAt DateTime?
+  updatedAt DateTime  @updatedAt
+
+  @@index([expiresAt])
+}

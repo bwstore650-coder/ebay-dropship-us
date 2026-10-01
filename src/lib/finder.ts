@@ -6,7 +6,7 @@
  * Quand l'accès Marketplace Insights (ventes réelles 90 jours) sera accordé, il passera en priorité.
  */
 import { evaluateProduct, weightedMedian, type Evaluation, type SupplierOffer } from "@/lib/margin";
-import { searchWithDemand } from "@/lib/ebay";
+import { cachedDemand } from "@/lib/ebay-quota";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import * as cj from "@/lib/suppliers/cj";
 import { getUsdRates, offersToCurrency } from "@/lib/fx";
@@ -48,7 +48,7 @@ export async function findProduct(
   opts: { cjToken?: string; minMarginPct: number; marketId?: MarketplaceId; extraOffers?: SupplierOffer[] },
 ): Promise<FinderResult> {
   const m = marketplace(opts.marketId);
-  const market = await searchWithDemand(keyword, 20, m.id);
+  const market = await cachedDemand(keyword, 20, m.id);
   const soldPrice = weightedMedian(market.soldWeighted);
   // Offres fournisseurs en USD → converties dans la devise du pays avant toute comparaison.
   const usdOffers: SupplierOffer[] = [...(opts.extraOffers ?? [])];

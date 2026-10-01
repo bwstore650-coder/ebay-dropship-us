@@ -13,7 +13,8 @@ import { db } from "@/lib/db";
 import { decrypt } from "@/lib/crypto";
 import { parseAdminEmails } from "@/lib/admin";
 import { findVeroBrand } from "@/lib/compliance";
-import { searchWithDemand } from "@/lib/ebay";
+import { isQuotaError } from "@/lib/ebay";
+import { browseQuota, cachedDemand, pauseForQuota, quotaPausedUntil, SCANNER_RESERVE, scannerMayRun } from "@/lib/ebay-quota";
 import { getUsdRates, offersToCurrency } from "@/lib/fx";
 import { DEFAULT_MIN_MARGIN_PCT, evaluateProduct, priceForTargetMargin, weightedMedian, type SupplierOffer } from "@/lib/margin";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
@@ -108,7 +109,7 @@ export async function analyzeCatalogProduct(
   const [cheapest] = await toMarket([{ supplier: "CJ", productId: product.pid, variantId: stocked[0].v.vid, title: title ?? "", price: Number(stocked[0].v.variantSellPrice), shipping: 0, stockUs: stocked[0].stock, deliveryDaysMax: 0 }]);
   const supplierInfo: CandidateDetails = { supplierPrice: cheapest.price, stock: stocked[0].stock };
 
-  const market = await searchWithDemand(keyword, 10, m.id);
+  const market = await cachedDemand(keyword, 10, m.id);
   const insights = marketInsights(market);
   const sold = weightedMedian(market.soldWeighted);
   const prices = sold !== null ? [sold] : market.prices;
@@ -290,6 +291,14 @@ const MAX_ROUNDS = 30;
  * Un passage du scanner : parcourt le catalogue (thème par thème, page par page) et analyse les produits
  * pas encore connus ou périmés, jusqu'à `deadline`. Réanalyse ensuite les produits rentables les plus anciens.
  */
+/** Appels eBay au plus par produit analysé (1 recherche + 10 ventes estimées). */
+export const CALLS_PER_PRODUCT = 11;
+/** Nombre de produits que le scanner peut analyser sans entamer la réserve des vendeurs. */
+export function scanBudget(q: { limit: number; remaining: number } | null): number {
+  if (!q || !q.limit) return Infinity;
+  return Math.max(0, Math.floor((q.remaining - q.limit * SCANNER_RESERVE) / CALLS_PER_PRODUCT));
+}
+
 export async function scanTick(
   marketId: MarketplaceId,
   deadline: number,
@@ -303,13 +312,25 @@ export async function scanTick(
   let refreshed = 0;
   let errors = 0;
 
+  // Quota eBay : jamais pendant une pause, et seulement sur la moitié haute du quota du jour (le reste est aux vendeurs).
+  if (await quotaPausedUntil()) return { analyzed, refreshed, skipped: "EBAY_QUOTA" };
+  const quota = await browseQuota();
+  if (!scannerMayRun(quota)) return { analyzed, refreshed, skipped: "EBAY_RESERVE" };
+  let budget = scanBudget(quota);
+
   const one = async (productId: string, keyword: string, title: string | null) => {
     try {
       const a = await analyzeCatalogProduct(token, m.id, productId, keyword, title, { minMarginPct: DEFAULT_MIN_MARGIN_PCT });
       await savePool(m.id, productId, keyword, a);
       errors = 0;
+      budget--;
       return true;
     } catch (e) {
+      if (isQuotaError(e)) {
+        await pauseForQuota();
+        errors = 5; // on arrête cette passe
+        return false;
+      }
       console.error("Scanner", productId, e);
       errors++;
       return false;
@@ -317,7 +338,7 @@ export async function scanTick(
   };
 
   // 1) Nouveaux produits du catalogue.
-  while (Date.now() < deadline - 20_000 && errors < 5) {
+  while (Date.now() < deadline - 20_000 && errors < 5 && budget > 0) {
     const key = opts.cursorKey ?? m.id;
     const cur = (await db.scanCursor.findUnique({ where: { marketplace: key } })) ?? { seed: 0, round: 1 };
     const seed = seeds[cur.seed % seeds.length];
@@ -335,7 +356,7 @@ export async function scanTick(
     });
     const skip = new Set(known.map((k) => k.productId));
     for (const it of items) {
-      if (Date.now() > deadline - 20_000 || errors >= 5) break;
+      if (Date.now() > deadline - 20_000 || errors >= 5 || budget <= 0) break;
       const pid = String(it.id ?? it.pid);
       if (skip.has(pid)) continue;
       const title = it.nameEn ?? it.productNameEn ?? it.productName ?? "";
@@ -355,7 +376,7 @@ export async function scanTick(
     select: { productId: true, keyword: true, title: true },
   });
   for (const s of stale) {
-    if (Date.now() > deadline - 10_000 || errors >= 5) break;
+    if (Date.now() > deadline - 10_000 || errors >= 5 || budget <= 0) break;
     if (await one(s.productId, s.keyword, s.title)) refreshed++;
   }
   return { analyzed, refreshed };

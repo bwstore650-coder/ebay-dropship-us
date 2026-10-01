@@ -125,6 +125,29 @@ export class EbayApiError extends Error {
   }
 }
 
+/** eBay a refusé l'appel parce que le quota de l'application est atteint (HTTP 429 / errorId 2001). */
+export function isQuotaError(e: unknown): boolean {
+  return e instanceof EbayApiError && (e.status === 429 || e.errors.some((x) => x.errorId === 2001));
+}
+
+export interface BrowseQuota {
+  limit: number;
+  remaining: number;
+  reset: string | null; // ISO : remise à zéro du compteur
+}
+
+/** Quota du jour de l'API Browse (API Analytics d'eBay, gratuite et non décomptée). */
+export async function getBrowseQuota(): Promise<BrowseQuota | null> {
+  const data = await api<{
+    rateLimits?: { apiName?: string; resources?: { name?: string; rates?: { limit?: number; remaining?: number; reset?: string }[] }[] }[];
+  }>(await getAppToken(), `/developer/analytics/v1_beta/rate_limit/?${new URLSearchParams({ api_context: "buy", api_name: "Browse" })}`);
+  const rates = (data.rateLimits ?? []).flatMap((r) => r.resources ?? []).flatMap((r) => r.rates ?? []);
+  if (!rates.length) return null;
+  // Plusieurs ressources (search, item…) : la plus limitée décide.
+  const tight = rates.reduce((a, b) => ((b.remaining ?? Infinity) < (a.remaining ?? Infinity) ? b : a));
+  return { limit: tight.limit ?? 0, remaining: tight.remaining ?? 0, reset: tight.reset ?? null };
+}
+
 /* ---------- Recherche (API Browse) : prix des annonces actives neuves dans le pays ---------- */
 
 interface ItemSummary {
@@ -236,10 +259,11 @@ export async function browseSearch(
  * Ventes estimées de plusieurs annonces (estimation eBay, cumulée depuis la mise en ligne).
  * Par lots de 20 avec getItems ; si la méthode n'est pas disponible, une annonce à la fois (5 en parallèle).
  */
+let batchRefused = false; // getItems refusé à cette application : inutile de le retenter (un appel gaspillé à chaque fois)
 export async function soldQuantities(ids: string[], marketId: MarketplaceId = "EBAY_US"): Promise<Map<string, number>> {
   const out = new Map<string, number>();
   const token = await getAppToken();
-  let batchOk = true;
+  let batchOk = !batchRefused;
   for (let i = 0; i < ids.length && batchOk; i += 20) {
     const chunk = ids.slice(i, i + 20);
     try {
@@ -250,7 +274,9 @@ export async function soldQuantities(ids: string[], marketId: MarketplaceId = "E
         marketId,
       );
       for (const it of d.items ?? []) out.set(it.itemId, it.estimatedAvailabilities?.reduce((s, a) => s + (a.estimatedSoldQuantity ?? 0), 0) ?? 0);
-    } catch {
+    } catch (e) {
+      if (isQuotaError(e)) throw e;
+      if (e instanceof EbayApiError && (e.status === 403 || e.status === 401)) batchRefused = true;
       batchOk = false;
     }
   }
@@ -260,7 +286,9 @@ export async function soldQuantities(ids: string[], marketId: MarketplaceId = "E
       missing.slice(i, i + 5).map(async (id) => {
         try {
           out.set(id, await getSoldQuantity(id, marketId));
-        } catch {
+        } catch (e) {
+          // Quota atteint : on arrête tout (sinon le produit serait faussement classé « pas de ventes »).
+          if (isQuotaError(e)) throw e;
           /* annonce retirée entre-temps */
         }
       }),

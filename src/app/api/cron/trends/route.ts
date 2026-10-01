@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { refreshTrends, trendMarkets } from "@/lib/research-service";
+import { quotaPausedUntil } from "@/lib/ebay-quota";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -8,6 +9,8 @@ export const maxDuration = 300;
 export async function GET(req: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret || req.headers.get("authorization") !== `Bearer ${secret}`) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });
+  // Quota eBay atteint : on laisse ce qui reste aux vendeurs.
+  if (await quotaPausedUntil()) return NextResponse.json({ skipped: "EBAY_QUOTA" });
   const deadline = Date.now() + 270_000;
   const result: Record<string, number> = {};
   for (const m of await trendMarkets()) {

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ListingError } from "@/lib/listing-service";
-import { EbayApiError, TradingError } from "@/lib/ebay";
+import { EbayApiError, isQuotaError, TradingError } from "@/lib/ebay";
 import { EbayReconnectRequired } from "@/lib/ebay-account";
 
 /** Réponse JSON d'erreur commune aux routes d'annonces : { error: CODE, detail? }. */
@@ -11,6 +11,7 @@ export function listingErrorResponse(e: unknown, context: string) {
   }
   if (e instanceof EbayReconnectRequired || (e instanceof EbayApiError && e.status === 401))
     return NextResponse.json({ error: "EBAY_RECONNECT" }, { status: 400 });
+  if (isQuotaError(e)) return NextResponse.json({ error: "EBAY_QUOTA" }, { status: 503 });
   if (e instanceof EbayApiError) {
     console.error(context, e);
     return NextResponse.json({ error: "EBAY_REJECTED", detail: e.readable }, { status: 502 });

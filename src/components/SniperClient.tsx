@@ -51,7 +51,8 @@ export default function SniperClient({
       if (!alive.current) return;
       if (data) setRun(data);
       if (!data || data.status !== "RUNNING") return;
-      await new Promise((r) => setTimeout(r, 1500));
+      // En pause (quota eBay) : on revérifie chaque minute au lieu de toutes les 1,5 s.
+      await new Promise((r) => setTimeout(r, data.pausedUntil ? 60_000 : 1500));
     }
   }, []);
 
@@ -94,7 +95,7 @@ export default function SniperClient({
       id: data.id, mode, marketId: String(f.get("marketId")) as MarketplaceId, status: "RUNNING", target: Number(f.get("target")),
       minMarginPct: Math.max(minMargin, Number(f.get("minMarginPct")) || 0),
       minProfit: highTicket ? 100 : null,
-      scanned: 0, found: 0, listed: 0, maxScan: 0, exhausted: false, autoList, error: null, createdAt: new Date().toISOString(), candidates: [],
+      scanned: 0, found: 0, listed: 0, maxScan: 0, exhausted: false, autoList, error: null, pausedUntil: null, createdAt: new Date().toISOString(), candidates: [],
     });
     alive.current = true;
     loop(data.id);
@@ -313,7 +314,12 @@ export default function SniperClient({
                 <div className="h-full rounded-full bg-gradient-to-r from-brand-500 to-fuchsia-500 transition-all duration-700" style={{ width: `${Math.min(100, (run.found / Math.max(1, run.target)) * 100)}%` }} />
               </div>
               {running && <p className="mt-3 text-xs text-subtle">{t.background}</p>}
-              {run.error && run.status !== "FAILED" && <p className="mt-3 text-xs text-amber-300">{fmt(t.autoListStopped, { reason: fmt(errorMessage(errors, run.error), { detail: "" }) })}</p>}
+              {run.pausedUntil && (
+                <p className="mt-3 text-xs text-amber-300">
+                  {fmt(t.quotaPaused, { time: new Date(run.pausedUntil).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) })}
+                </p>
+              )}
+              {run.error && run.error !== "EBAY_QUOTA" && run.status !== "FAILED" && <p className="mt-3 text-xs text-amber-300">{fmt(t.autoListStopped, { reason: fmt(errorMessage(errors, run.error), { detail: "" }) })}</p>}
               {run.status === "FAILED" && <p className="mt-3 text-xs text-red-300">{errorMessage(errors, run.error)}</p>}
               {!running && run.mode === "CATALOG" && run.found < run.target && (
                 <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-line bg-surface-2 px-4 py-3">

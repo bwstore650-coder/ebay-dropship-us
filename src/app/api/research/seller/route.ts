@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
+import { isQuotaError } from "@/lib/ebay";
 import { isMarketplaceId, marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import { normalizeSeller } from "@/lib/research";
 import { analyzeSeller } from "@/lib/research-service";
@@ -21,6 +22,7 @@ export async function GET(req: Request) {
     return NextResponse.json(await analyzeSeller(username, marketplace(market as MarketplaceId).id, keyword));
   } catch (e) {
     console.error("Concurrent", username, e);
+    if (isQuotaError(e)) return NextResponse.json({ error: "EBAY_QUOTA" }, { status: 503 });
     return NextResponse.json({ error: "UPSTREAM" }, { status: 502 });
   }
 }

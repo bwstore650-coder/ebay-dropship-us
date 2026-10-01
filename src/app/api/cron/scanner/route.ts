@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { scanTick } from "@/lib/product-pool";
 import { trendMarkets } from "@/lib/research-service";
 import { HIGH_TICKET_SEEDS } from "@/lib/sniper";
+import { purgeExpiredState } from "@/lib/ebay-quota";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -28,5 +29,6 @@ export async function GET(req: Request) {
     const main = await scanTick(m, until);
     result[m] = { ...main, highTicket: ht.analyzed };
   }
+  result.purged = await purgeExpiredState();
   return NextResponse.json(result);
 }

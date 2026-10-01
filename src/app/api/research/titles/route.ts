@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
+import { isQuotaError } from "@/lib/ebay";
 import { isMarketplaceId, marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import { analyzeTitles } from "@/lib/research-service";
 
@@ -19,6 +20,7 @@ export async function GET(req: Request) {
     return NextResponse.json(await analyzeTitles(keyword, marketplace(market as MarketplaceId).id));
   } catch (e) {
     console.error("Title Builder", keyword, e);
+    if (isQuotaError(e)) return NextResponse.json({ error: "EBAY_QUOTA" }, { status: 503 });
     return NextResponse.json({ error: "UPSTREAM" }, { status: 502 });
   }
 }

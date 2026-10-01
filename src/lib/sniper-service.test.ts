@@ -4,7 +4,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Row = Record<string, unknown>;
-const mem = vi.hoisted(() => ({ runs: [] as Row[], cands: [] as Row[], listings: [] as Row[], users: [] as Row[], insights: [] as Row[], seq: 0 }));
+const mem = vi.hoisted(() => ({ runs: [] as Row[], cands: [] as Row[], listings: [] as Row[], users: [] as Row[], insights: [] as Row[], state: new Map<string, Row>(), seq: 0 }));
 
 function match(row: Row, where: Row = {}): boolean {
   return Object.entries(where).every(([k, cond]) => {
@@ -86,6 +86,15 @@ vi.mock("@/lib/db", () => ({
     listing: model(() => mem.listings, () => ({})),
     user: model(() => mem.users, () => ({})),
     ebayMarketSetup: { findUnique: vi.fn(async () => null) }, // pas de réglages eBay → mise en vente auto arrêtée
+    appState: {
+      findUnique: vi.fn(async ({ where }: { where: { key: string } }) => mem.state.get(where.key) ?? null),
+      upsert: vi.fn(async ({ where, create, update }: { where: { key: string }; create: Row; update: Row }) => {
+        const r = { ...(mem.state.get(where.key) ?? create), ...update, key: where.key };
+        mem.state.set(where.key, r);
+        return r;
+      }),
+      deleteMany: vi.fn(async () => ({ count: 0 })),
+    },
   },
 }));
 vi.mock("@/lib/crypto", () => ({ decrypt: (s: string) => s, encrypt: (s: string) => s }));
@@ -103,6 +112,8 @@ const PRODUCTS: Record<string, { name: string; price: number; stock: number }> =
   "P-GOOD": { name: "2024 New Electric Can Opener Automatic", price: 8, stock: 50 },
 };
 let listCalls = 0;
+let ebayQuotaOver = false;
+let resetAt = "";
 
 function router(url: string): Response {
   const u = new URL(url);
@@ -126,6 +137,10 @@ function router(url: string): Response {
     if (path.endsWith("/logistic/freightCalculate")) return cjOk([{ logisticName: "CJPacket", logisticPrice: 4, logisticAging: "2-5" }]);
   }
   if (path === "/identity/v1/oauth2/token") return json({ access_token: "APP", expires_in: 7200, token_type: "Bearer" });
+  if (path === "/developer/analytics/v1_beta/rate_limit/")
+    return json({ rateLimits: [{ apiName: "Browse", resources: [{ name: "buy.browse", rates: [{ limit: 5000, remaining: ebayQuotaOver ? 0 : 5000, reset: resetAt }] }] }] });
+  if (ebayQuotaOver && path.startsWith("/buy/browse/"))
+    return json({ errors: [{ errorId: 2001, domain: "ACCESS", message: "Too many requests." }] }, 429);
   if (path === "/buy/browse/v1/item_summary/search")
     return json({
       total: 3,
@@ -158,6 +173,7 @@ beforeEach(() => {
   vi.stubEnv("EBAY_CLIENT_SECRET", "secret");
   vi.stubEnv("ANTHROPIC_API_KEY", "");
   mem.runs = []; mem.cands = []; mem.listings = []; mem.insights = []; mem.users = [baseUser()]; mem.seq = 0; listCalls = 0;
+  mem.state = new Map(); ebayQuotaOver = false; resetAt = new Date(Date.now() + 2 * 3600_000).toISOString();
   vi.stubGlobal("fetch", vi.fn(async (url: string) => router(url)));
   vi.spyOn(console, "error").mockImplementation(() => {});
 });
@@ -183,6 +199,31 @@ describe("Sniper", { timeout: 90_000 }, () => {
     expect(by["P-GOOD"].profit).toBeGreaterThan(10);
     expect(s.candidates[0].productId).toBe("P-GOOD"); // les rentables d'abord
     expect(listCalls).toBe(1);
+  });
+
+  it("quota eBay atteint : la recherche se met en pause (sans rien rejeter à tort) puis reprend toute seule", async () => {
+    ebayQuotaOver = true;
+    const run = await createRun(mem.users[0] as never, { mode: "CATALOG", marketId: "EBAY_US", target: 1, seeds: ["kitchen"], autoList: false });
+    await advanceRun(run.id, Date.now() + 80_000);
+    let s = (await runState("U1", run.id))!;
+    expect(s).toMatchObject({ status: "RUNNING", error: "EBAY_QUOTA", found: 0 });
+    // Reprise annoncée à la remise à zéro d'eBay (+1 min).
+    expect(new Date(s.pausedUntil!).getTime()).toBe(Date.parse(resetAt) + 60_000);
+    // Le produit rentable n'a pas été classé « pas de ventes » : il attend.
+    expect(mem.cands.find((c) => c.productId === "P-GOOD")!.status).toBe("PENDING");
+    expect(mem.cands.some((c) => c.status === "ERROR")).toBe(false);
+
+    // Pendant la pause : aucun appel à eBay.
+    const calls = (fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length;
+    await advanceRun(run.id, Date.now() + 80_000);
+    expect((fetch as unknown as { mock: { calls: unknown[] } }).mock.calls.length).toBe(calls);
+
+    // Après la remise à zéro : la recherche continue et se termine normalement.
+    ebayQuotaOver = false;
+    mem.state.delete("ebay:browse:pause");
+    await advanceRun(run.id, Date.now() + 80_000);
+    s = (await runState("U1", run.id))!;
+    expect(s).toMatchObject({ status: "DONE", error: null, found: 1, pausedUntil: null });
   });
 
   it("continuer la recherche : nouveau lot de produits, erreurs réessayées, refus si déjà en cours", async () => {

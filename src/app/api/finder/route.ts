@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
+import { isQuotaError } from "@/lib/ebay";
 import { decrypt } from "@/lib/crypto";
 import { findProduct } from "@/lib/finder";
 import { isMarketplaceId, marketplace } from "@/lib/marketplaces";
@@ -34,6 +35,7 @@ export async function POST(req: Request) {
     } catch (e) {
       if (e instanceof SupplierError) return NextResponse.json({ error: e.code === "SUPPLIER_RECONNECT" ? "SUPPLIER_RECONNECT" : "AE_NOT_CONNECTED" }, { status: 400 });
       console.error("Finder AliExpress", e);
+      if (isQuotaError(e)) return NextResponse.json({ error: "EBAY_QUOTA" }, { status: 503 });
       return NextResponse.json({ error: "UPSTREAM" }, { status: 502 });
     }
   }
@@ -49,6 +51,7 @@ export async function POST(req: Request) {
     return NextResponse.json(result);
   } catch (e) {
     console.error("Finder", e);
+    if (isQuotaError(e)) return NextResponse.json({ error: "EBAY_QUOTA" }, { status: 503 });
     return NextResponse.json({ error: "UPSTREAM" }, { status: 502 });
   }
 }

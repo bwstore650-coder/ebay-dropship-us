@@ -11,6 +11,8 @@ import type { Prisma, SnipeCandidate, SnipeRun, User } from "@prisma/client";
 import { db } from "@/lib/db";
 import { decrypt } from "@/lib/crypto";
 import { findProduct } from "@/lib/finder";
+import { isQuotaError } from "@/lib/ebay";
+import { pauseForQuota, quotaPausedUntil } from "@/lib/ebay-quota";
 import { ListingError, prepareListing, publishListing } from "@/lib/listing-service";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import * as cj from "@/lib/suppliers/cj";
@@ -49,6 +51,8 @@ export interface CreateInput {
 const STOP_AUTO_LIST = new Set(["DAILY_LIMIT", "PLAN_LIMIT", "EBAY_SETUP_REQUIRED", "GPSR_REQUIRED", "EBAY_NOT_CONNECTED", "EBAY_RECONNECT", "PLAN_REQUIRED"]);
 /** Trop d'échecs d'affilée : la recherche s'arrête (fournisseur ou eBay en panne, clé invalide…). */
 const MAX_CONSECUTIVE_ERRORS = 5;
+/** Erreur affichée (recherche en pause) quand le quota eBay du jour est atteint. */
+export const QUOTA_ERROR = "EBAY_QUOTA";
 const LOCK_MS = 90_000;
 
 const cjToken = (user: UserWithAccounts) => {
@@ -335,8 +339,16 @@ export async function advanceRun(runId: string, deadline: number): Promise<boole
     return true;
   }
 
+  // Quota eBay atteint : la recherche attend la remise à zéro (elle reste « en cours » et reprend toute seule).
+  if (await quotaPausedUntil()) {
+    await db.snipeRun.update({ where: { id: runId }, data: { error: QUOTA_ERROR, lockedUntil: null, lastStepAt: new Date() } });
+    return true;
+  }
+  if (run.error === QUOTA_ERROR) run = await db.snipeRun.update({ where: { id: runId }, data: { error: null } });
+
   let errorsInARow = 0;
   let failed: string | null = null;
+  let quotaHit = false;
   try {
     while (Date.now() < deadline && run.found < run.target) {
       const c = await db.snipeCandidate.findFirst({ where: { runId, status: "PENDING" }, orderBy: { createdAt: "asc" } });
@@ -355,6 +367,11 @@ export async function advanceRun(runId: string, deadline: number): Promise<boole
         update = await evaluate(run, c, token);
         errorsInARow = 0;
       } catch (e) {
+        if (isQuotaError(e)) {
+          // Le produit reste à analyser : il sera repris après la pause.
+          quotaHit = true;
+          break;
+        }
         console.error("Sniper", c.keyword, e);
         update = { status: "ERROR", reason: "UPSTREAM" };
         if (++errorsInARow >= MAX_CONSECUTIVE_ERRORS) failed = "UPSTREAM";
@@ -386,8 +403,16 @@ export async function advanceRun(runId: string, deadline: number): Promise<boole
       if (failed) break;
     }
   } catch (e) {
-    console.error("Sniper", runId, e);
-    failed = "UPSTREAM";
+    if (isQuotaError(e)) quotaHit = true;
+    else {
+      console.error("Sniper", runId, e);
+      failed = "UPSTREAM";
+    }
+  }
+  if (quotaHit) {
+    await pauseForQuota();
+    await db.snipeRun.update({ where: { id: runId }, data: { error: QUOTA_ERROR, lockedUntil: null, lastStepAt: new Date() } });
+    return true;
   }
 
   const pending = await db.snipeCandidate.count({ where: { runId, status: "PENDING" } });
@@ -450,6 +475,7 @@ export async function runState(userId: string, runId: string) {
     exhausted: Boolean((run.cursor as Partial<Cursor> | null)?.exhausted),
     autoList: run.autoList,
     error: run.error,
+    pausedUntil: run.status === "RUNNING" && run.error === QUOTA_ERROR ? ((await quotaPausedUntil())?.toISOString() ?? null) : null,
     createdAt: run.createdAt.toISOString(),
     candidates: candidates.map((c) => ({
       id: c.id,

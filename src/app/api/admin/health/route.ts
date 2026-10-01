@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { currentUser } from "@/lib/auth";
 import { isAdminEmail, parseAdminEmails } from "@/lib/admin";
 import { env } from "@/lib/env";
-import { getAppToken } from "@/lib/ebay";
+import { getAppToken, getBrowseQuota } from "@/lib/ebay";
+import { quotaPausedUntil } from "@/lib/ebay-quota";
 import { priceTable, stripe } from "@/lib/stripe";
 import { poolStats } from "@/lib/product-pool";
 import { db } from "@/lib/db";
@@ -29,6 +30,9 @@ export async function GET() {
   try {
     await getAppToken();
     ebay.ok = true;
+    // Quota du jour de l'API Browse (recherches) et pause éventuelle.
+    ebay.browseQuota = await getBrowseQuota().catch((x) => `error: ${String(x).slice(0, 150)}`);
+    ebay.pausedUntil = (await quotaPausedUntil())?.toISOString() ?? null;
   } catch (err) {
     ebay.ok = false;
     ebay.error = String(err).slice(0, 200);
