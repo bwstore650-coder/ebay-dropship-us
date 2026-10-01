@@ -252,9 +252,9 @@ export function parseMaxDays(aging: string | undefined): number {
   return nums.length ? Math.max(...nums) : 99;
 }
 
-/** Solde du portefeuille CJ (USD) : sert à payer les commandes automatiques (payType 2). */
+/** Solde du portefeuille CJ (USD, champ « amount ») : sert à payer les commandes automatiques (payType 2). Doc : Shopping › 2.1 Get Balance. */
 export async function getBalance(token: string): Promise<number> {
-  const d = await cjFetch<{ balance?: number | string; amount?: number | string }>("/shopping/payment/getBalance", { token });
+  const d = await cjFetch<{ balance?: number | string; amount?: number | string }>("/shopping/pay/getBalance", { token });
   const v = Number(d?.balance ?? d?.amount);
   if (!Number.isFinite(v)) throw new Error(`CJ getBalance: unexpected response ${JSON.stringify(d).slice(0, 200)}`);
   return v;
