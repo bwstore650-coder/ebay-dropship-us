@@ -108,6 +108,8 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
       }
       case "ANALYZE":
         return ok(await api("/api/ext/analyze", { method: "POST", body: { productId: msg.productId } }));
+      case "AI_TITLES":
+        return ok(await api("/api/ext/ai-titles", { method: "POST", body: { productId: msg.productId } }));
       case "SAVE":
         return ok(await api("/api/ext/saved", { method: "POST", body: { productId: msg.productId, title: msg.title, image: msg.image } }));
       case "OPEN": {

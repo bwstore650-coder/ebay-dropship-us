@@ -8,6 +8,8 @@ import { marketplace } from "@/lib/marketplaces";
 import { checkNowAction, deleteDraftAction, endListingAction } from "./actions";
 import { Icon } from "@/components/icons";
 import { PageHeader, StatusBadge } from "@/components/ui";
+import ImproveListingButton from "@/components/ai/ImproveListingButton";
+import { aiConfigured } from "@/lib/ai";
 import { LISTING_TONE } from "@/lib/status-tones";
 
 export const dynamic = "force-dynamic";
@@ -100,6 +102,9 @@ export default async function ListingsPage() {
                             <input type="hidden" name="listingId" value={l.id} />
                             <button className="font-medium text-muted hover:text-red-300">{L.removeDraft}</button>
                           </form>
+                        )}
+                        {aiConfigured() && user.plan !== "NONE" && l.ebayOfferId && (l.status === "ACTIVE" || l.status === "PAUSED") && (
+                          <ImproveListingButton listingId={l.id} t={t.listing.ai} errors={t.errors} titleCount={t.listing.titleCount} />
                         )}
                         {(l.status === "ACTIVE" || l.status === "PAUSED") && (
                           <form action={endListingAction}>

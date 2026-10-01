@@ -10,16 +10,17 @@ export interface PlanInfo {
   listingsPerMonth: number | null; // null = illimité
   autoOrdersPerMonth: number | null;
   maxEbayAccounts: number;
+  aiPerMonth: number | null; // rédactions IA par mois (titres, descriptions) ; null = illimité (usage raisonnable)
 }
 
 export const YEARLY_DISCOUNT = 0.2;
 const yearly = (monthly: number) => Math.round(monthly * 12 * (1 - YEARLY_DISCOUNT));
 
 export const PLANS: PlanInfo[] = [
-  { id: "STARTER", priceUsd: 39, yearlyUsd: yearly(39), listingsPerMonth: 150, autoOrdersPerMonth: 150, maxEbayAccounts: 1 },
-  { id: "PRO", priceUsd: 79, yearlyUsd: yearly(79), listingsPerMonth: 500, autoOrdersPerMonth: 500, maxEbayAccounts: 2 },
-  { id: "BUSINESS", priceUsd: 149, yearlyUsd: yearly(149), listingsPerMonth: 3000, autoOrdersPerMonth: 3000, maxEbayAccounts: 5 },
-  { id: "AGENCY", priceUsd: 299, yearlyUsd: yearly(299), listingsPerMonth: null, autoOrdersPerMonth: null, maxEbayAccounts: 15 },
+  { id: "STARTER", priceUsd: 39, yearlyUsd: yearly(39), listingsPerMonth: 150, autoOrdersPerMonth: 150, maxEbayAccounts: 1, aiPerMonth: 300 },
+  { id: "PRO", priceUsd: 79, yearlyUsd: yearly(79), listingsPerMonth: 500, autoOrdersPerMonth: 500, maxEbayAccounts: 2, aiPerMonth: 1000 },
+  { id: "BUSINESS", priceUsd: 149, yearlyUsd: yearly(149), listingsPerMonth: 3000, autoOrdersPerMonth: 3000, maxEbayAccounts: 5, aiPerMonth: 5000 },
+  { id: "AGENCY", priceUsd: 299, yearlyUsd: yearly(299), listingsPerMonth: null, autoOrdersPerMonth: null, maxEbayAccounts: 15, aiPerMonth: null },
 ];
 
 /** Essai : 3 jours pour 0,99 $ (payés à l'inscription, non remboursables), puis la formule choisie. */

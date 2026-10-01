@@ -94,6 +94,9 @@ export function errorKey(code) {
       EXT_UNAUTHORIZED: "errAuth",
       SAVED_FULL: "errFull",
       SNIPE_RUNNING: "errRunning",
+      AI_LIMIT: "errAiLimit",
+      AI_FAILED: "errAiFailed",
+      AI_NOT_CONFIGURED: "errAiOff",
     }[code] ?? "errGeneric"
   );
 }

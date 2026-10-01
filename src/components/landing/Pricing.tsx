@@ -60,6 +60,7 @@ export default function Pricing({
                   p.listingsPerMonth === null ? tp.unlimitedListings : fmt(tp.listings, { n: p.listingsPerMonth }),
                   p.autoOrdersPerMonth === null ? tp.unlimitedOrders : fmt(tp.orders, { n: p.autoOrdersPerMonth }),
                   p.maxEbayAccounts === 1 ? tp.accountsOne : fmt(tp.accountsMany, { n: p.maxEbayAccounts }),
+                  p.aiPerMonth === null ? tp.unlimitedAi : fmt(tp.ai, { n: p.aiPerMonth.toLocaleString("en-US") }),
                   tp.marginFilter,
                 ].map((line) => (
                   <li key={line} className="flex gap-2">

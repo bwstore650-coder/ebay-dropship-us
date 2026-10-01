@@ -49,6 +49,10 @@
     .err{margin-top:10px;padding:8px 10px;border-radius:10px;background:rgba(239,68,68,.12);color:#fca5a5;font-size:12px}
     .small{font-size:11px;margin-top:8px}
     a.link{color:#a5a3ff;text-decoration:underline;cursor:pointer}
+    .ai{margin-top:10px;padding:8px 10px;border-radius:10px;background:rgba(109,106,248,.10);border:1px solid rgba(109,106,248,.3)}
+    .airow{display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid rgba(255,255,255,.06);font-size:12px}
+    .airow:first-child{border-top:0}.airow span{flex:1}
+    .copy{border:0;cursor:pointer;border-radius:7px;padding:4px 8px;background:#2a2a3a;color:#e7e7ee;font-size:11px;font-weight:600}
   </style><div id="app"></div>`;
   const app = root.getElementById("app");
   const el = (tag, cls, text) => {
@@ -64,6 +68,9 @@
   let error = null;
   let busy = false;
   let saved = false;
+  let aiTitles = null;
+  let aiBusy = false;
+  let copiedTitle = null;
 
   function pageProduct() {
     const meta = (p) => document.querySelector(`meta[property="${p}"]`)?.getAttribute("content") || "";
@@ -133,6 +140,29 @@
       b.onclick = () => openUrl(analysis.createUrl);
       panel.append(b);
     }
+    if (analysis && !analysis.vero) {
+      if (aiTitles) {
+        const list = el("div", "ai");
+        for (const title of aiTitles) {
+          const row = el("div", "airow");
+          const txt = el("span", "", title);
+          const copy = el("button", "copy", copiedTitle === title ? T("aiCopied") : T("aiCopy"));
+          copy.onclick = async () => {
+            await navigator.clipboard.writeText(title).catch(() => {});
+            copiedTitle = title;
+            render();
+          };
+          row.append(txt, copy);
+          list.append(row);
+        }
+        panel.append(list);
+      } else {
+        const a = el("button", "btn secondary", aiBusy ? T("aiWriting") : T("aiTitles"));
+        a.disabled = aiBusy;
+        a.onclick = writeTitles;
+        panel.append(a);
+      }
+    }
     const s = el("button", "btn secondary", saved ? T("saved") : T("save"));
     s.disabled = saved;
     s.onclick = save;
@@ -177,6 +207,17 @@
     render();
   }
 
+  async function writeTitles() {
+    aiBusy = true;
+    error = null;
+    render();
+    const r = await send({ type: "AI_TITLES", productId: pid });
+    aiBusy = false;
+    if (r.ok) aiTitles = r.data.titles;
+    else error = r.error;
+    render();
+  }
+
   async function save() {
     const p = pageProduct();
     const r = await send({ type: "SAVE", productId: pid, title: analysis?.title || p.title, image: analysis?.image || p.image });
@@ -194,6 +235,9 @@
     error = null;
     saved = false;
     busy = false;
+    aiTitles = null;
+    aiBusy = false;
+    copiedTitle = null;
     render();
   }
   const st = await send({ type: "STATUS" });

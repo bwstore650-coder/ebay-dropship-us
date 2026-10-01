@@ -392,6 +392,37 @@ export function updateOffer(token: string, offerId: string, o: OfferInput) {
   return api<void>(token, `/sell/inventory/v1/offer/${encodeURIComponent(offerId)}`, { method: "PUT", body: JSON.stringify(offerBody(o)) }, m.id);
 }
 
+/* ---------- Mise à jour du contenu d'une annonce publiée (titre, description) ---------- */
+
+type Json = Record<string, unknown>;
+
+/** Article d'inventaire tel qu'eBay le renvoie. */
+export function getInventoryItem(token: string, sku: string, marketId: MarketplaceId) {
+  return api<Json>(token, `/sell/inventory/v1/inventory_item/${encodeURIComponent(sku)}`, {}, marketId);
+}
+
+/** Remplace l'article (eBay met à jour l'annonce publiée) ; seuls les champs acceptés par eBay sont renvoyés. */
+export function replaceInventoryItem(token: string, sku: string, item: Json, marketId: MarketplaceId) {
+  const keep = ["availability", "condition", "conditionDescription", "conditionDescriptors", "packageWeightAndSize", "product"];
+  const body = Object.fromEntries(Object.entries(item).filter(([k]) => keep.includes(k)));
+  return api<void>(token, `/sell/inventory/v1/inventory_item/${encodeURIComponent(sku)}`, { method: "PUT", body: JSON.stringify(body) }, marketId);
+}
+
+export function getOffer(token: string, offerId: string, marketId: MarketplaceId) {
+  return api<Json>(token, `/sell/inventory/v1/offer/${encodeURIComponent(offerId)}`, {}, marketId);
+}
+
+/** Remplace l'offre (eBay met à jour l'annonce publiée) ; seuls les champs modifiables sont renvoyés. */
+export function replaceOffer(token: string, offerId: string, offer: Json, marketId: MarketplaceId) {
+  const keep = [
+    "availableQuantity", "categoryId", "charity", "extendedProducerResponsibility", "hideBuyerDetails", "includeCatalogProductDetails",
+    "listingDescription", "listingDuration", "listingPolicies", "listingStartDate", "lotSize", "merchantLocationKey", "pricingSummary",
+    "quantityLimitPerBuyer", "regulatory", "secondaryCategoryId", "storeCategoryNames", "tax",
+  ];
+  const body = Object.fromEntries(Object.entries(offer).filter(([k]) => keep.includes(k)));
+  return api<void>(token, `/sell/inventory/v1/offer/${encodeURIComponent(offerId)}`, { method: "PUT", body: JSON.stringify(body) }, marketId);
+}
+
 /** Offre déjà créée pour ce SKU dans ce pays (après un essai qui a échoué à la publication), sinon null. */
 export async function findOfferId(token: string, sku: string, marketId: MarketplaceId): Promise<string | null> {
   const q = new URLSearchParams({ sku, marketplace_id: marketId });

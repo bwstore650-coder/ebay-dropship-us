@@ -8,6 +8,7 @@ export default function PlanFeatures({ plan, t }: { plan: PlanInfo; t: Dict["pla
       <li>{plan.listingsPerMonth === null ? t.unlimitedListings : fmt(t.listings, { n: plan.listingsPerMonth })}</li>
       <li>{plan.autoOrdersPerMonth === null ? t.unlimitedOrders : fmt(t.orders, { n: plan.autoOrdersPerMonth })}</li>
       <li>{plan.maxEbayAccounts === 1 ? t.accountsOne : fmt(t.accountsMany, { n: plan.maxEbayAccounts })}</li>
+      <li>{plan.aiPerMonth === null ? t.unlimitedAi : fmt(t.ai, { n: plan.aiPerMonth.toLocaleString("en-US") })}</li>
       <li>{t.marginFilter}</li>
     </ul>
   );

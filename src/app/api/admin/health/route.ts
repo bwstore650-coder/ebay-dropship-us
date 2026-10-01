@@ -7,6 +7,7 @@ import { quotaPausedUntil } from "@/lib/ebay-quota";
 import { priceTable, stripe } from "@/lib/stripe";
 import { poolStats } from "@/lib/product-pool";
 import { db } from "@/lib/db";
+import { aiConfigured, aiModel } from "@/lib/ai";
 import { decrypt } from "@/lib/crypto";
 import * as cj from "@/lib/suppliers/cj";
 
@@ -69,5 +70,5 @@ export async function GET() {
     }
   }
   const pool = { ...(await poolStats("EBAY_US")), cursor: await db.scanCursor.findUnique({ where: { marketplace: "EBAY_US" } }), trends: await db.trendItem.count() };
-  return NextResponse.json({ ebay, stripe: s, cj: cjInfo, pool });
+  return NextResponse.json({ ebay, stripe: s, cj: cjInfo, ai: { configured: aiConfigured(), model: aiModel() }, pool });
 }

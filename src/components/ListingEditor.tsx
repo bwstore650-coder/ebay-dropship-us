@@ -7,6 +7,8 @@ import { computeMargin } from "@/lib/margin";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import { cleanTitle, isEuMarket, TITLE_MAX } from "@/lib/listing";
 import type { ListingDraft } from "@/lib/listing-service";
+import { AiTitlePicker, AiUsageLine } from "@/components/ai/AiTitlePicker";
+import { useAiGenerate } from "@/components/ai/useAiGenerate";
 
 type Ref = ListingDraft["ref"];
 interface Account { id: string; label: string }
@@ -47,6 +49,9 @@ export default function ListingEditor({
   const [setupLoading, setSetupLoading] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [done, setDone] = useState<{ url: string } | null>(null);
+  const [titleIdeas, setTitleIdeas] = useState<string[]>([]);
+  const ai = useAiGenerate(null);
+  const ta = t.ai;
 
   const showError = (data: { error?: string; detail?: string }) => setError(fmt(errorMessage(errors, data.error), { detail: data.detail ?? "" }));
 
@@ -68,6 +73,8 @@ export default function ListingEditor({
       setQuantity(d.quantity);
       setDescription(d.descriptionHtml);
       setAspects(d.aspects);
+      setTitleIdeas(d.copySource === "ai" ? d.titles : []);
+      ai.setUsage(d.ai.configured ? d.ai : null);
     })();
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -152,7 +159,16 @@ export default function ListingEditor({
         <span className="rounded-full bg-surface-2 px-3 py-1 text-xs font-medium text-muted">{markets[marketId]}</span>
       </div>
 
-      {draft.copySource === "supplier" && <p className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-300">{t.aiFallback}</p>}
+      {draft.copySource === "ai" ? (
+        <p className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-brand-500/10 p-3 text-sm text-brand-200">
+          <span>✦ {ta.writtenByAi}</span>
+          <AiUsageLine t={ta} usage={ai.usage} />
+        </p>
+      ) : (
+        <p className="rounded-lg bg-amber-500/10 p-3 text-sm text-amber-300">
+          {draft.ai.note === "AI_LIMIT" ? fmt(ta.limitNote, { limit: draft.ai.limit.toLocaleString() }) : draft.ai.note === "AI_FAILED" ? ta.failedNote : t.aiFallback}
+        </p>
+      )}
       {draft.vero && <p className="rounded-lg bg-red-500/10 p-3 text-sm text-red-300">{fmt(t.veroWarning, { brand: draft.vero })}</p>}
 
       {/* Compte et réglages eBay */}
@@ -190,6 +206,20 @@ export default function ListingEditor({
         <input value={title} maxLength={TITLE_MAX} onChange={(e) => setTitle(e.target.value)} onBlur={() => setTitle(cleanTitle(title))} className={field} />
         <span className={`mt-1 block text-xs ${title.length > TITLE_MAX ? "text-red-400" : "text-muted"}`}>{fmt(t.titleCount, { n: title.length })}</span>
       </label>
+      {draft.ai.configured && (titleIdeas.length > 0 || draft.ai.note !== "AI_LIMIT") && (
+        <AiTitlePicker
+          t={ta}
+          titles={titleIdeas}
+          current={title}
+          onPick={setTitle}
+          busy={ai.busy === "titles"}
+          onRegenerate={async () => {
+            const r = await ai.run("titles", { ...draft.aiContext, currentTitle: title || undefined });
+            if (r) setTitleIdeas(r.titles);
+          }}
+        />
+      )}
+      {ai.error && <p className="text-sm text-red-400">{errorMessage(errors, ai.error)}</p>}
 
       {/* Prix, quantité, marge */}
       <div className="grid gap-4 sm:grid-cols-3">
@@ -254,9 +284,24 @@ export default function ListingEditor({
       <div>
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold">{t.description}</h3>
-          <button type="button" onClick={() => setEditHtml(!editHtml)} className="text-sm font-medium text-brand-400 hover:underline">
-            {editHtml ? t.preview : t.edit}
-          </button>
+          <span className="flex items-center gap-4">
+            {draft.ai.configured && (
+              <button
+                type="button"
+                disabled={ai.busy === "description"}
+                onClick={async () => {
+                  const r = await ai.run("description", { ...draft.aiContext });
+                  if (r) setDescription(r.descriptionHtml);
+                }}
+                className="text-sm font-medium text-brand-300 hover:underline disabled:opacity-60"
+              >
+                ✦ {ai.busy === "description" ? ta.writing : ta.rewriteDescription}
+              </button>
+            )}
+            <button type="button" onClick={() => setEditHtml(!editHtml)} className="text-sm font-medium text-brand-400 hover:underline">
+              {editHtml ? t.preview : t.edit}
+            </button>
+          </span>
         </div>
         {editHtml ? (
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={12} className={`${field} font-mono text-xs`} />

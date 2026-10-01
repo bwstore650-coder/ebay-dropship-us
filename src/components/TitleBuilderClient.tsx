@@ -7,11 +7,15 @@ import { TITLE_MAX } from "@/lib/research";
 import type { TitleAnalysis } from "@/lib/research-service";
 import { Icon } from "@/components/icons";
 import { Notice, PageHeader } from "@/components/ui";
+import { AiTitlePicker, AiUsageLine } from "@/components/ai/AiTitlePicker";
+import { useAiGenerate, type AiUsage } from "@/components/ai/useAiGenerate";
 
 export default function TitleBuilderClient({
-  t, markets, errors, locale, marketIds, defaultMarket, initialKeyword,
+  t, ta, aiUsage, markets, errors, locale, marketIds, defaultMarket, initialKeyword,
 }: {
   t: Dict["research"];
+  ta: Dict["listing"]["ai"];
+  aiUsage: (AiUsage & { configured: boolean }) | null;
   markets: Dict["markets"];
   errors: Dict["errors"];
   locale: Locale;
@@ -27,6 +31,8 @@ export default function TitleBuilderClient({
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const started = useRef(false);
+  const ai = useAiGenerate(aiUsage);
+  const [aiTitles, setAiTitles] = useState<string[]>([]);
   const nf = (v: number) => new Intl.NumberFormat(LOCALE_TAGS[locale]).format(v);
 
   async function run(k = keyword, m = market) {
@@ -38,6 +44,19 @@ export default function TitleBuilderClient({
     setLoading(false);
     if (!res?.ok) return setError(errorMessage(errors, d.error));
     setData(d as TitleAnalysis);
+    setAiTitles([]);
+  }
+
+  async function generateAi() {
+    if (!data) return;
+    const r = await ai.run("titles", {
+      language: marketplace(data.marketId).listingLanguage,
+      productTitle: data.keyword,
+      keywords: data.keywords.filter((k) => !k.vero).map((k) => k.word).slice(0, 30),
+      comparableTitles: data.topTitles.map((x) => x.title).slice(0, 8),
+      currentTitle: title || undefined,
+    });
+    if (r) setAiTitles(r.titles);
   }
 
   useEffect(() => {
@@ -98,7 +117,15 @@ export default function TitleBuilderClient({
                 <Icon name={copied ? "check" : "copy"} className="h-4 w-4" />{copied ? t.copied : t.copy}
               </button>
               {title && <button type="button" onClick={() => setTitle("")} className="btn-ghost text-sm">{t.clear}</button>}
+              {aiUsage?.configured && (
+                <button type="button" onClick={generateAi} disabled={ai.busy === "titles"} className="btn-secondary px-3 py-1.5 text-sm">
+                  ✦ {ai.busy === "titles" ? ta.writing : ta.generate}
+                </button>
+              )}
             </div>
+            {aiUsage?.configured && <p className="flex flex-wrap justify-between gap-2 text-xs text-subtle"><span>{ta.generateHint}</span><AiUsageLine t={ta} usage={ai.usage} /></p>}
+            {ai.error && <p className="text-sm text-red-400">{errorMessage(errors, ai.error)}</p>}
+            {aiTitles.length > 0 && <AiTitlePicker t={ta} titles={aiTitles} current={title} onPick={setTitle} onRegenerate={generateAi} busy={ai.busy === "titles"} />}
           </section>
 
           <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-5">

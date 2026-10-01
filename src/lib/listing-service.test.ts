@@ -9,12 +9,17 @@ const store = vi.hoisted(() => ({
   listedToday: 0,
   created: [] as Record<string, unknown>[],
   updates: [] as Record<string, unknown>[],
+  aiCount: 0,
 }));
 
 vi.mock("@/lib/db", () => ({
   db: {
     ebayMarketSetup: { findUnique: vi.fn(async () => store.setup), upsert: vi.fn() },
     listing: {
+      findFirst: vi.fn(async ({ where }: { where: { id: string; userId: string } }) =>
+        where.id === "LIVE1" && where.userId === "U1"
+          ? { id: "LIVE1", userId: "U1", status: "ACTIVE", sku: "PL-SKU1", ebayOfferId: "O9", ebayAccountId: "A1", marketplace: "EBAY_US", title: "Old title for can opener", searchKeyword: null }
+          : null),
       count: vi.fn(async () => store.listedToday),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         store.created.push(data);
@@ -26,11 +31,17 @@ vi.mock("@/lib/db", () => ({
       }),
     },
     ebayAccount: { update: vi.fn() },
+    aiUsage: {
+      findUnique: vi.fn(async () => ({ count: store.aiCount })),
+      upsert: vi.fn(async () => ({ count: ++store.aiCount })),
+      update: vi.fn(async () => { store.aiCount--; }),
+      updateMany: vi.fn(async () => { store.aiCount--; return { count: 1 }; }),
+    },
   },
 }));
 vi.mock("@/lib/crypto", () => ({ decrypt: (s: string) => s, encrypt: (s: string) => s }));
 
-import { ListingError, prepareListing, publishListing } from "./listing-service";
+import { ListingError, listingContent, prepareListing, publishListing, updateListingContent } from "./listing-service";
 
 type Call = { method: string; url: string; body: unknown };
 let calls: Call[] = [];
@@ -62,6 +73,12 @@ function router(url: string, init?: RequestInit): Response {
     if (path.endsWith("/logistic/freightCalculate"))
       return json({ code: 200, result: true, message: "ok", data: [{ logisticName: "CJPacket", logisticPrice: 4, logisticAging: "2-5" }] });
   }
+  if (u.hostname === "api.anthropic.com")
+    return json({ content: [{ type: "tool_use", input: {
+      titles: ["Electric Can Opener Automatic Smooth Edge White", "Hands Free Electric Can Opener Battery Powered", "Can Opener Nike Edition Automatic"],
+      description_html: "<h3>Easy</h3><p>Opens standard cans with one touch.</p>",
+      aspects: { Type: ["Electric"], "Power Source": ["Battery"], Brand: ["Acme"] },
+    } }] });
   if (u.hostname === "api.frankfurter.dev") return json({ rates: { EUR: 0.9, CAD: 1.35, GBP: 0.78, AUD: 1.5 } });
   if (path === "/identity/v1/oauth2/token") return json({ access_token: "APP", expires_in: 7200, token_type: "Bearer" });
   if (path === "/buy/browse/v1/item_summary/search")
@@ -76,6 +93,13 @@ function router(url: string, init?: RequestInit): Response {
   if (path.endsWith("/get_default_category_tree_id")) return json({ categoryTreeId: "0" });
   if (path.endsWith("/get_item_aspects_for_category")) return json({ aspects });
   if (path.endsWith("/get_category_subtree")) return json({ categorySubtreeNode: { category: { categoryName: "Can Openers" } } });
+  if (path === "/sell/inventory/v1/inventory_item/PL-SKU1" && (init?.method ?? "GET") === "GET")
+    return json({ sku: "PL-SKU1", locale: "en_US", condition: "NEW", availability: { shipToLocationAvailability: { quantity: 3 } },
+      product: { title: "Old title for can opener", description: "<p>Old</p>", imageUrls: ["https://i/1.jpg"], aspects: { Brand: ["Unbranded"] } } });
+  if (path === "/sell/inventory/v1/offer/O9" && (init?.method ?? "GET") === "GET")
+    return json({ offerId: "O9", sku: "PL-SKU1", marketplaceId: "EBAY_US", status: "PUBLISHED", listing: { listingId: "L9" }, listingDescription: "<p>Old</p>",
+      categoryId: "20667", pricingSummary: { price: { value: "29.99", currency: "USD" } }, listingPolicies: { fulfillmentPolicyId: "F1" }, merchantLocationKey: "K", availableQuantity: 3 });
+  if (path === "/sell/inventory/v1/offer/O9" && init?.method === "PUT") return new Response(null, { status: 204 });
   if (path.startsWith("/sell/inventory/v1/inventory_item/") && init?.method === "PUT") return new Response(null, { status: 204 });
   if (path === "/sell/inventory/v1/offer" && (init?.method ?? "GET") === "GET") return json({ errors: [{ errorId: 25713, message: "Not found" }] }, 404);
   if (path === "/sell/inventory/v1/offer" && init?.method === "POST") return json({ offerId: "O1" });
@@ -114,6 +138,7 @@ beforeEach(() => {
   store.listedToday = 0;
   store.created = [];
   store.updates = [];
+  store.aiCount = 0;
   aspects = [
     { localizedAspectName: "Brand", aspectConstraint: { aspectRequired: true, aspectMode: "FREE_TEXT" }, aspectValues: [] },
     { localizedAspectName: "Type", aspectConstraint: { aspectRequired: true, aspectMode: "SELECTION_ONLY" }, aspectValues: [{ localizedValue: "Electric" }, { localizedValue: "Manual" }] },
@@ -230,7 +255,50 @@ describe("préparation d'une annonce", { timeout: 30_000 }, () => {
     expect(d.quantity).toBe(3);
   });
 
+  it("avec l'IA : 3 titres sans marque, caractéristiques remplies, une génération comptée", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "k");
+    const d = await prepareListing(user(), { keyword: "electric can opener", marketId: "EBAY_US", ref: { supplier: "CJ", productId: "P1", variantId: "V1" } });
+    expect(d.copySource).toBe("ai");
+    expect(d.title).toBe("Electric Can Opener Automatic Smooth Edge White");
+    expect(d.titles).toEqual(["Electric Can Opener Automatic Smooth Edge White", "Hands Free Electric Can Opener Battery Powered"]); // « Nike » écarté
+    expect(d.aspects).toMatchObject({ Brand: ["Unbranded"], Type: ["Electric"], "Power Source": ["Battery"] }); // marque forcée
+    expect(d.ai).toMatchObject({ configured: true, used: 1, limit: 1000, note: null });
+    expect(d.aiContext).toMatchObject({ language: "en", productTitle: "Electric Can Opener", comparableTitles: expect.arrayContaining(["Electric Can Opener Hands Free"]) });
+  });
+
+  it("quota IA atteint : texte du fournisseur, sans appel à l'IA", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "k");
+    store.aiCount = 1000;
+    const d = await prepareListing(user(), { keyword: "electric can opener", marketId: "EBAY_US", ref: { supplier: "CJ", productId: "P1", variantId: "V1" } });
+    expect(d.copySource).toBe("supplier");
+    expect(d.ai).toMatchObject({ note: "AI_LIMIT", used: 1000 });
+    expect(calls.some((c) => c.url.includes("anthropic"))).toBe(false);
+  });
+
   it("refuse sans formule", async () => {
     await expect(prepareListing(user({ plan: "NONE" }), { keyword: "x y", marketId: "EBAY_US", ref: { supplier: "CJ", productId: "P1" } })).rejects.toMatchObject({ code: "PLAN_REQUIRED" });
+  });
+});
+
+describe("amélioration d'une annonce en ligne", { timeout: 30_000 }, () => {
+  it("lit le titre et la description chez eBay, puis envoie les nouveaux (le reste est conservé)", async () => {
+    const c = await listingContent(user(), "LIVE1");
+    expect(c).toMatchObject({ id: "LIVE1", title: "Old title for can opener", descriptionHtml: "<p>Old</p>", aiContext: { language: "en", facts: "Old" } });
+    const r = await updateListingContent(user(), "LIVE1", { title: "Electric Can Opener Automatic Smooth Edge", descriptionHtml: "<h3>Easy</h3><p>Opens standard cans with one touch.</p>" });
+    expect(r.title).toBe("Electric Can Opener Automatic Smooth Edge");
+    const item = calls.find((x) => x.method === "PUT" && x.url.includes("inventory_item/PL-SKU1"))!.body as { product: Record<string, unknown> };
+    expect(item.product).toMatchObject({ title: "Electric Can Opener Automatic Smooth Edge", imageUrls: ["https://i/1.jpg"], aspects: { Brand: ["Unbranded"] } });
+    expect(item).not.toHaveProperty("sku");
+    const offer = calls.find((x) => x.method === "PUT" && x.url.includes("offer/O9"))!.body as { listingDescription: string; pricingSummary: { price: { value: string } } };
+    expect(offer.listingDescription).toContain("Opens standard cans");
+    expect(offer.pricingSummary.price.value).toBe("29.99");
+    expect(offer).not.toHaveProperty("offerId");
+    expect(offer).not.toHaveProperty("status");
+    expect(store.updates.at(-1)).toMatchObject({ title: "Electric Can Opener Automatic Smooth Edge" });
+  });
+  it("refuse une marque protégée, une annonce d'un autre vendeur ou un titre trop court", async () => {
+    await expect(updateListingContent(user(), "LIVE1", { title: "Case for AirPods Pro wireless", descriptionHtml: "<p>Protective case with a clip.</p>" })).rejects.toMatchObject({ code: "LISTING_BLOCKED" });
+    await expect(updateListingContent(user({ id: "U2" }), "LIVE1", { title: "Electric Can Opener Automatic", descriptionHtml: "<p>Opens standard cans easily.</p>" })).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(updateListingContent(user(), "LIVE1", { title: "short", descriptionHtml: "<p>Opens standard cans easily.</p>" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
   });
 });

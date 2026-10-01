@@ -14,8 +14,10 @@ import { computeMargin, landedCost, MAX_DELIVERY_DAYS, median, priceForTargetMar
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import { planInfo } from "@/lib/plans";
 import { openSession, productInfo, quote, SupplierError, type ProductInfo, type SupplierId } from "@/lib/suppliers";
-import { htmlToText, writeListingCopy } from "@/lib/ai";
+import { aiConfigured, htmlToText, supplierCopy, writeListingCopy, type AiLanguage, type ListingCopy } from "@/lib/ai";
+import { AiLimitError, aiUsage, refundAiCredit, takeAiCredit } from "@/lib/ai-quota";
 import { syncAds } from "@/lib/ads-service";
+import { cachedDemand } from "@/lib/ebay-quota";
 import { keywordFromTitle } from "@/lib/sniper";
 import {
   buildAspects, cleanImages, cleanTitle, DEFAULT_QUANTITY, ebayItemUrl, isEuMarket, makeSku, mostCommon,
@@ -25,7 +27,7 @@ import {
 export type ListingErrorCode =
   | "PLAN_REQUIRED" | "PLAN_LIMIT" | "EBAY_NOT_CONNECTED" | "EBAY_RECONNECT" | "EBAY_SETUP_REQUIRED" | "GPSR_REQUIRED"
   | "DAILY_LIMIT" | "SUPPLIER_UNSUPPORTED" | "SUPPLIER_RECONNECT" | "SUPPLIER_UNAVAILABLE" | "MARGIN_TOO_LOW" | "LISTING_BLOCKED"
-  | "ASPECTS_MISSING" | "NO_IMAGES" | "NO_CATEGORY" | "EBAY_REJECTED" | "INVALID_INPUT";
+  | "ASPECTS_MISSING" | "NO_IMAGES" | "NO_CATEGORY" | "EBAY_REJECTED" | "INVALID_INPUT" | "NOT_FOUND";
 
 export class ListingError extends Error {
   constructor(readonly code: ListingErrorCode, readonly detail?: string) {
@@ -102,6 +104,10 @@ export interface ListingDraft {
   minMarginPct: number;
   copySource: "ai" | "supplier";
   vero: string | null;
+  titles: string[];       // titres proposés par l'IA (le premier = title)
+  /** Contexte pour régénérer titres / description sans rappeler le fournisseur ni eBay. */
+  aiContext: { language: AiLanguage; productTitle: string; facts: string; variant?: string; comparableTitles: string[] };
+  ai: { configured: boolean; used: number; limit: number; unlimited: boolean; note: "AI_LIMIT" | "AI_FAILED" | null };
 }
 
 /** Brouillon d'annonce : catégorie, textes rédigés par l'IA, caractéristiques, photos et prix conseillé. */
@@ -127,14 +133,33 @@ export async function prepareListing(user: UserWithAccounts, input: { keyword: s
     htmlToText(info.descriptionHtml),
     ...info.facts,
   ].filter(Boolean).join("\n");
-  const copy = await writeListingCopy({
+  const copyInput = {
     language: m.listingLanguage,
     supplierTitle: info.title,
     supplierDescription: facts,
     variant: info.variantLabel,
     comparableTitles: market.items.slice(0, 8).map((i) => i.title),
     aspects: defs,
-  });
+  };
+  // IA : une génération du quota mensuel ; quota atteint ou échec → texte du fournisseur (rendu si l'IA a échoué).
+  let aiNote: ListingDraft["ai"]["note"] = null;
+  let copy: ListingCopy;
+  if (aiConfigured()) {
+    try {
+      await takeAiCredit(user);
+      copy = await writeListingCopy(copyInput);
+      if (copy.source !== "ai") {
+        aiNote = "AI_FAILED";
+        await refundAiCredit(user);
+      }
+    } catch (e) {
+      if (!(e instanceof AiLimitError)) throw e;
+      aiNote = "AI_LIMIT";
+      copy = supplierCopy(copyInput);
+    }
+  } else {
+    copy = await writeListingCopy(copyInput);
+  }
   const title = cleanTitle(copy.title);
   const { aspects, missingRequired } = buildAspects(copy.aspects, defs, m.id);
 
@@ -167,6 +192,15 @@ export async function prepareListing(user: UserWithAccounts, input: { keyword: s
     minMarginPct: user.minMarginPct,
     copySource: copy.source,
     vero: veroIn(title, aspects),
+    titles: copy.titles.map(cleanTitle),
+    aiContext: {
+      language: copyInput.language,
+      productTitle: info.title.slice(0, 300),
+      facts: facts.slice(0, 3000),
+      variant: info.variantLabel,
+      comparableTitles: copyInput.comparableTitles,
+    },
+    ai: aiConfigured() ? { configured: true, ...(await aiUsage(user)), note: aiNote } : { configured: false, used: 0, limit: 0, unlimited: false, note: null },
   };
 }
 
@@ -375,4 +409,71 @@ export async function endListing(user: UserWithAccounts, listingId: string) {
     await ebay.withdrawOffer(await userToken(account), listing.ebayOfferId, marketplace(listing.marketplace).id);
   }
   await db.listing.update({ where: { id: listing.id }, data: { status: "ENDED" } });
+}
+
+
+/* ---------- Amélioration d'une annonce publiée (IA) ---------- */
+
+export interface ListingContent {
+  id: string;
+  title: string;
+  descriptionHtml: string;
+  aiContext: { language: AiLanguage; productTitle: string; facts: string; comparableTitles: string[] };
+}
+
+async function editableListing(user: UserWithAccounts, listingId: string) {
+  const listing = await db.listing.findFirst({ where: { id: listingId, userId: user.id } });
+  if (!listing) throw new ListingError("NOT_FOUND");
+  if (!listing.ebayOfferId || !["ACTIVE", "PAUSED"].includes(listing.status)) throw new ListingError("INVALID_INPUT");
+  const account = user.ebayAccounts.find((a) => a.id === listing.ebayAccountId);
+  if (!account) throw new ListingError("EBAY_NOT_CONNECTED");
+  return { listing, account, m: marketplace(listing.marketplace as MarketplaceId) };
+}
+
+/** Titre et description actuels (chez eBay), et le contexte pour que l'IA les réécrive. */
+export async function listingContent(user: UserWithAccounts, listingId: string): Promise<ListingContent> {
+  const { listing, account, m } = await editableListing(user, listingId);
+  const token = await userToken(account);
+  const [item, offer] = await Promise.all([ebay.getInventoryItem(token, listing.sku, m.id), ebay.getOffer(token, listing.ebayOfferId!, m.id)]);
+  const product = (item.product ?? {}) as { title?: string; description?: string };
+  const descriptionHtml = String(offer.listingDescription ?? product.description ?? "");
+  const title = product.title ?? listing.title;
+  // Annonces comparables (mots-clés que cherchent les acheteurs) : facultatif, depuis le cache partagé.
+  let comparableTitles: string[] = [];
+  if (listing.searchKeyword) {
+    comparableTitles = await cachedDemand(listing.searchKeyword, 10, m.id)
+      .then((d) => d.items.filter((i) => i.title !== title).slice(0, 8).map((i) => i.title))
+      .catch(() => []);
+  }
+  return {
+    id: listing.id,
+    title,
+    descriptionHtml,
+    aiContext: { language: m.listingLanguage, productTitle: title, facts: htmlToText(descriptionHtml).slice(0, 3000) || title, comparableTitles },
+  };
+}
+
+/** Envoie le nouveau titre et la nouvelle description à eBay (l'annonce en ligne est mise à jour). */
+export async function updateListingContent(user: UserWithAccounts, listingId: string, input: { title: string; descriptionHtml: string }) {
+  const { listing, account, m } = await editableListing(user, listingId);
+  const title = cleanTitle(input.title);
+  if (title.length < 10) throw new ListingError("INVALID_INPUT");
+  const description = sanitizeDescription(input.descriptionHtml);
+  if (description.replace(/<[^>]+>/g, "").trim().length < 20) throw new ListingError("INVALID_INPUT");
+  const token = await userToken(account);
+  try {
+    const [item, offer] = await Promise.all([ebay.getInventoryItem(token, listing.sku, m.id), ebay.getOffer(token, listing.ebayOfferId!, m.id)]);
+    const product = (item.product ?? {}) as { aspects?: Record<string, string[]> };
+    const vero = veroIn(title, product.aspects ?? {});
+    if (vero) throw new ListingError("LISTING_BLOCKED", vero);
+    await ebay.replaceInventoryItem(token, listing.sku, { ...item, product: { ...(item.product as object), title, description } }, m.id);
+    await ebay.replaceOffer(token, listing.ebayOfferId!, { ...offer, listingDescription: description }, m.id);
+  } catch (e) {
+    if (e instanceof ListingError) throw e;
+    if (e instanceof EbayReconnectRequired || (e instanceof EbayApiError && e.status === 401)) throw new ListingError("EBAY_RECONNECT");
+    if (e instanceof EbayApiError) throw new ListingError("EBAY_REJECTED", e.readable);
+    throw e;
+  }
+  await db.listing.update({ where: { id: listing.id }, data: { title, errorMessage: null } });
+  return { title };
 }

@@ -103,6 +103,7 @@ model User {
   afterSales         AfterSale[]
   extensionTokens    ExtensionToken[]
   savedProducts      SavedProduct[]
+  aiUsage            AiUsage[]
 
   @@index([googleId])
 }
@@ -539,4 +540,14 @@ model SavedProduct {
 
   @@unique([userId, supplier, productId])
   @@index([userId, createdAt])
+}
+
+/// Rédactions IA utilisées par mois (quota de la formule).
+model AiUsage {
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  month  String // « 2026-10 » (UTC)
+  count  Int    @default(0)
+
+  @@id([userId, month])
 }

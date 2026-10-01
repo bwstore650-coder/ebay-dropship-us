@@ -104,7 +104,14 @@ globalThis.SELLVELA_I18N = {
   "nBrandOk": "No protected brand detected",
   "nNeedConnect": "Connect the extension to Sellvela first.",
   "dataNotice": "Sellvela only receives the CJdropshipping product you choose to analyze or save. The extension never reads eBay, other websites or your browsing history.",
-  "privacy": "Privacy policy"
+  "privacy": "Privacy policy",
+  "aiTitles": "✦ AI eBay titles",
+  "aiWriting": "Writing titles…",
+  "aiCopy": "Copy",
+  "aiCopied": "Copied!",
+  "errAiLimit": "You have used all the AI generations of your plan this month.",
+  "errAiFailed": "The AI could not write titles right now. Try again in a moment.",
+  "errAiOff": "AI writing is not available yet."
  },
  "fr": {
   "connect": "Se connecter à Sellvela",
@@ -208,7 +215,14 @@ globalThis.SELLVELA_I18N = {
   "nBrandOk": "Aucune marque protégée détectée",
   "nNeedConnect": "Connecte d'abord l'extension à Sellvela.",
   "dataNotice": "Sellvela reçoit seulement le produit CJdropshipping que tu choisis d'analyser ou de garder. L'extension ne lit jamais eBay, les autres sites ni ton historique.",
-  "privacy": "Politique de confidentialité"
+  "privacy": "Politique de confidentialité",
+  "aiTitles": "✦ Titres eBay par l'IA",
+  "aiWriting": "Rédaction des titres…",
+  "aiCopy": "Copier",
+  "aiCopied": "Copié !",
+  "errAiLimit": "Tu as utilisé toutes les rédactions IA de ta formule ce mois-ci.",
+  "errAiFailed": "L'IA n'a pas pu rédiger les titres. Réessaie dans un instant.",
+  "errAiOff": "La rédaction par IA n'est pas encore disponible."
  },
  "es": {
   "connect": "Conectar con Sellvela",
@@ -312,7 +326,14 @@ globalThis.SELLVELA_I18N = {
   "nBrandOk": "No se detectó ninguna marca protegida",
   "nNeedConnect": "Primero conecta la extensión a Sellvela.",
   "dataNotice": "Sellvela solo recibe el producto de CJdropshipping que eliges analizar o guardar. La extensión nunca lee eBay, otros sitios ni tu historial.",
-  "privacy": "Política de privacidad"
+  "privacy": "Política de privacidad",
+  "aiTitles": "✦ Títulos de eBay con IA",
+  "aiWriting": "Escribiendo títulos…",
+  "aiCopy": "Copiar",
+  "aiCopied": "¡Copiado!",
+  "errAiLimit": "Has usado todas las redacciones de IA de tu plan este mes.",
+  "errAiFailed": "La IA no pudo escribir los títulos ahora. Inténtalo en un momento.",
+  "errAiOff": "La redacción con IA aún no está disponible."
  },
  "de": {
   "connect": "Mit Sellvela verbinden",
@@ -416,7 +437,14 @@ globalThis.SELLVELA_I18N = {
   "nBrandOk": "Keine geschützte Marke erkannt",
   "nNeedConnect": "Verbinde die Erweiterung zuerst mit Sellvela.",
   "dataNotice": "Sellvela erhält nur das CJdropshipping-Produkt, das du analysieren oder speichern möchtest. Die Erweiterung liest niemals eBay, andere Websites oder deinen Verlauf.",
-  "privacy": "Datenschutzerklärung"
+  "privacy": "Datenschutzerklärung",
+  "aiTitles": "✦ eBay-Titel per KI",
+  "aiWriting": "Titel werden geschrieben…",
+  "aiCopy": "Kopieren",
+  "aiCopied": "Kopiert!",
+  "errAiLimit": "Du hast diesen Monat alle KI-Texte deines Tarifs verbraucht.",
+  "errAiFailed": "Die KI konnte gerade keine Titel schreiben. Versuche es gleich erneut.",
+  "errAiOff": "KI-Texte sind noch nicht verfügbar."
  },
  "it": {
   "connect": "Collega a Sellvela",
@@ -520,7 +548,14 @@ globalThis.SELLVELA_I18N = {
   "nBrandOk": "Nessun marchio protetto rilevato",
   "nNeedConnect": "Collega prima l'estensione a Sellvela.",
   "dataNotice": "Sellvela riceve solo il prodotto CJdropshipping che scegli di analizzare o salvare. L'estensione non legge mai eBay, altri siti né la tua cronologia.",
-  "privacy": "Informativa sulla privacy"
+  "privacy": "Informativa sulla privacy",
+  "aiTitles": "✦ Titoli eBay con l'IA",
+  "aiWriting": "Scrittura dei titoli…",
+  "aiCopy": "Copia",
+  "aiCopied": "Copiato!",
+  "errAiLimit": "Hai usato tutti i testi IA del tuo piano questo mese.",
+  "errAiFailed": "L'IA non è riuscita a scrivere i titoli ora. Riprova tra un momento.",
+  "errAiOff": "La scrittura con IA non è ancora disponibile."
  }
 };
 
