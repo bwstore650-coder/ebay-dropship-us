@@ -49,6 +49,19 @@ function renderConnect() {
   const c = el("button", "btn secondary", T("createAccount"));
   c.onclick = () => openSite("/register");
   box.append(b, c);
+  // Information claire sur les données envoyées (règles du Chrome Web Store).
+  const notice = el("p", "muted");
+  notice.style.cssText = "font-size:11px;margin-top:14px";
+  notice.textContent = `${T("dataNotice")} `;
+  const link = el("a", "", T("privacy"));
+  link.href = "#";
+  link.style.color = "#a5a3ff";
+  link.onclick = (e) => {
+    e.preventDefault();
+    openSite("/privacy");
+  };
+  notice.append(link);
+  box.append(notice);
   main.append(box);
 }
 

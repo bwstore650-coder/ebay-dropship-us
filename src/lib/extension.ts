@@ -225,7 +225,6 @@ function toExt(a: Analysis & { keyword?: string | null }, productId: string, mar
 export async function analyzeForExtension(user: ExtUser, productId: string, marketId?: string | null): Promise<ExtAnalysis> {
   if (user.plan === "NONE") throw new ExtensionError("PLAN_REQUIRED");
   const acc = user.supplierAccounts.find((a) => a.supplier === "CJ");
-  if (!acc) throw new ExtensionError("CJ_REQUIRED");
   const m = marketplace((marketId as MarketplaceId) || user.defaultMarketplace);
   const pooled = await db.productInsight.findUnique({
     where: { marketplace_supplier_productId: { marketplace: m.id, supplier: "CJ", productId } },
@@ -248,6 +247,8 @@ export async function analyzeForExtension(user: ExtUser, productId: string, mark
     };
     return toExt(a, productId, m.id, user.minMarginPct, pooled.analyzedAt);
   }
+  // Analyse en direct : il faut le compte CJ du vendeur (la base commune, elle, est lisible sans).
+  if (!acc) throw new ExtensionError("CJ_REQUIRED");
   if (!(await takeAnalysisSlot(user.id))) throw new ExtensionError("RATE_LIMITED");
   const a = await analyzeCatalogProduct(decrypt(acc.accessToken), m.id, productId, "", null, { minMarginPct: user.minMarginPct });
   if (a.keyword) await savePool(m.id, productId, a.keyword, a).catch((e) => console.error("Pool", e));

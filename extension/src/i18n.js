@@ -102,7 +102,9 @@ globalThis.SELLVELA_I18N = {
   "ctxBrand": "Check brand risk with Sellvela",
   "nBrandRisk": "Risky brand: {brand}",
   "nBrandOk": "No protected brand detected",
-  "nNeedConnect": "Connect the extension to Sellvela first."
+  "nNeedConnect": "Connect the extension to Sellvela first.",
+  "dataNotice": "Sellvela only receives the CJdropshipping product you choose to analyze or save. The extension never reads eBay, other websites or your browsing history.",
+  "privacy": "Privacy policy"
  },
  "fr": {
   "connect": "Se connecter à Sellvela",
@@ -204,7 +206,9 @@ globalThis.SELLVELA_I18N = {
   "ctxBrand": "Vérifier le risque de marque avec Sellvela",
   "nBrandRisk": "Marque risquée : {brand}",
   "nBrandOk": "Aucune marque protégée détectée",
-  "nNeedConnect": "Connecte d'abord l'extension à Sellvela."
+  "nNeedConnect": "Connecte d'abord l'extension à Sellvela.",
+  "dataNotice": "Sellvela reçoit seulement le produit CJdropshipping que tu choisis d'analyser ou de garder. L'extension ne lit jamais eBay, les autres sites ni ton historique.",
+  "privacy": "Politique de confidentialité"
  },
  "es": {
   "connect": "Conectar con Sellvela",
@@ -306,7 +310,9 @@ globalThis.SELLVELA_I18N = {
   "ctxBrand": "Verificar riesgo de marca con Sellvela",
   "nBrandRisk": "Marca de riesgo: {brand}",
   "nBrandOk": "No se detectó ninguna marca protegida",
-  "nNeedConnect": "Primero conecta la extensión a Sellvela."
+  "nNeedConnect": "Primero conecta la extensión a Sellvela.",
+  "dataNotice": "Sellvela solo recibe el producto de CJdropshipping que eliges analizar o guardar. La extensión nunca lee eBay, otros sitios ni tu historial.",
+  "privacy": "Política de privacidad"
  },
  "de": {
   "connect": "Mit Sellvela verbinden",
@@ -408,7 +414,9 @@ globalThis.SELLVELA_I18N = {
   "ctxBrand": "Markenrisiko mit Sellvela prüfen",
   "nBrandRisk": "Riskante Marke: {brand}",
   "nBrandOk": "Keine geschützte Marke erkannt",
-  "nNeedConnect": "Verbinde die Erweiterung zuerst mit Sellvela."
+  "nNeedConnect": "Verbinde die Erweiterung zuerst mit Sellvela.",
+  "dataNotice": "Sellvela erhält nur das CJdropshipping-Produkt, das du analysieren oder speichern möchtest. Die Erweiterung liest niemals eBay, andere Websites oder deinen Verlauf.",
+  "privacy": "Datenschutzerklärung"
  },
  "it": {
   "connect": "Collega a Sellvela",
@@ -510,7 +518,9 @@ globalThis.SELLVELA_I18N = {
   "ctxBrand": "Verifica il rischio di marchio con Sellvela",
   "nBrandRisk": "Marchio a rischio: {brand}",
   "nBrandOk": "Nessun marchio protetto rilevato",
-  "nNeedConnect": "Collega prima l'estensione a Sellvela."
+  "nNeedConnect": "Collega prima l'estensione a Sellvela.",
+  "dataNotice": "Sellvela riceve solo il prodotto CJdropshipping che scegli di analizzare o salvare. L'estensione non legge mai eBay, altri siti né la tua cronologia.",
+  "privacy": "Informativa sulla privacy"
  }
 };
 

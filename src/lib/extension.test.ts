@@ -132,6 +132,9 @@ describe("analyse d'un produit depuis l'extension", () => {
     mem.insight = pooled({ title: "Case for Apple iPhone 15" });
     expect((await analyzeForExtension(user(), "P1")).vero).toBe("apple");
     await expect(analyzeForExtension(user({ plan: "NONE" }), "P1")).rejects.toMatchObject({ code: "PLAN_REQUIRED" });
+    // Sans compte CJ : la base commune reste lisible, l'analyse en direct demande CJ.
+    expect((await analyzeForExtension(user({ supplierAccounts: [] }), "P1")).status).toBe("PROFITABLE");
+    mem.insight = null;
     await expect(analyzeForExtension(user({ supplierAccounts: [] }), "P1")).rejects.toMatchObject({ code: "CJ_REQUIRED" });
   });
 

@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { isComp, isTrialing } from "@/lib/admin";
 import { Card } from "@/components/admin/Kpi";
+import { setCompAccess } from "../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export default async function AdminUsers({ searchParams }: { searchParams: Promi
       skip: (p - 1) * PAGE,
       take: PAGE,
       select: {
-        id: true, email: true, plan: true, billingInterval: true, trialEndsAt: true, createdAt: true,
+        id: true, email: true, plan: true, billingInterval: true, trialEndsAt: true, createdAt: true, stripeSubscriptionId: true,
         referredBy: { select: { email: true } },
         _count: { select: { ebayAccounts: true, listings: true, referrals: true } },
       },
@@ -41,12 +42,12 @@ export default async function AdminUsers({ searchParams }: { searchParams: Promi
       </div>
       <Card title="Derniers inscrits">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-sm">
+          <table className="w-full min-w-[820px] text-sm">
             <thead className="text-left text-muted">
               <tr>
                 <th className="pb-2">Email</th><th className="pb-2">Formule</th><th className="pb-2">Statut</th>
                 <th className="pb-2 text-right">Comptes eBay</th><th className="pb-2 text-right">Annonces</th>
-                <th className="pb-2 text-right">Filleuls</th><th className="pb-2">Parrain</th><th className="pb-2">Inscrit le</th>
+                <th className="pb-2 text-right">Filleuls</th><th className="pb-2">Parrain</th><th className="pb-2">Inscrit le</th><th className="pb-2">Accès offert</th>
               </tr>
             </thead>
             <tbody>
@@ -65,6 +66,19 @@ export default async function AdminUsers({ searchParams }: { searchParams: Promi
                   <td className="py-2 text-right">{u._count.referrals}</td>
                   <td className="py-2 text-muted">{u.referredBy?.email ?? "—"}</td>
                   <td className="py-2 text-muted">{u.createdAt.toLocaleDateString("fr-FR")}</td>
+                  <td className="py-2">
+                    {isComp(u) ? (
+                      <form action={setCompAccess}>
+                        <input type="hidden" name="userId" value={u.id} /><input type="hidden" name="on" value="0" />
+                        <button className="text-xs text-red-300 hover:underline">Retirer</button>
+                      </form>
+                    ) : u.plan === "NONE" && !u.stripeSubscriptionId ? (
+                      <form action={setCompAccess}>
+                        <input type="hidden" name="userId" value={u.id} /><input type="hidden" name="on" value="1" />
+                        <button className="text-xs text-brand-300 hover:underline">Offrir Pro</button>
+                      </form>
+                    ) : <span className="text-xs text-subtle">—</span>}
+                  </td>
                 </tr>
               ))}
             </tbody>
