@@ -159,6 +159,20 @@ describe("commandes automatiques", { timeout: 60_000 }, () => {
     expect(mem.orders).toHaveLength(2);
   });
 
+  it("import : vente d'une annonce créée sur eBay puis liée (retrouvée par son numéro d'annonce)", async () => {
+    mem.listings.push({ id: "EXT", userId: "U1", sku: "EXT-ITEM-A-2", legacy: true, ebayListingId: "ITEM-A-2", status: "ACTIVE", supplierVariantId: "V2", supplier: "CJ", supplierProductId: "P2", marketplace: "EBAY_US", currency: "USD" });
+    expect(await importOrders(user(), account)).toBe(3);
+    const a2 = mem.orders.find((o) => o.ebayOrderId === "A-2")!;
+    expect(a2).toMatchObject({ status: "PENDING", listingId: "EXT" });
+    expect(a2.lines).toEqual([{ lineItemId: "LI-A-2", sku: "SOMEONE-ELSE", quantity: 1, listingId: "EXT", supplier: "CJ", productId: "P2", vid: "V2", title: "Electric Can Opener", legacyItemId: "ITEM-A-2" }]);
+  });
+
+  it("import : une annonce liée puis plus gérée (terminée) ne déclenche plus de commande", async () => {
+    mem.listings.push({ id: "EXT", userId: "U1", sku: "EXT-ITEM-A-2", legacy: true, ebayListingId: "ITEM-A-2", status: "ENDED", supplierVariantId: "V2", supplier: "CJ", supplierProductId: "P2", marketplace: "EBAY_US", currency: "USD" });
+    expect(await importOrders(user(), account)).toBe(2);
+    expect(mem.orders.find((o) => o.ebayOrderId === "A-2")).toBeUndefined();
+  });
+
   it("commande chez CJ : adresse relue chez eBay, numéro unique, paiement par solde, profit enregistré", async () => {
     await importOrders(user(), account);
     const id = mem.orders.find((o) => o.ebayOrderId === "A-1")!.id as string;

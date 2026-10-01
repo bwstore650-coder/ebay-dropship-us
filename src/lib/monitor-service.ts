@@ -35,8 +35,11 @@ export async function monitorUser(user: UserWithAccounts, opts: { now?: number; 
     where: {
       userId: user.id,
       status: { in: ["ACTIVE", "PAUSED"] },
-      ebayOfferId: { not: null },
-      ...(opts.force ? {} : { OR: [{ lastCheckedAt: null }, { lastCheckedAt: { lt: new Date(now - CHECK_EVERY_MS) } }] }),
+      // Annonces publiées par Sellvela (API Inventory) ou créées sur eBay puis liées à un produit (API Trading).
+      AND: [
+        { OR: [{ ebayOfferId: { not: null } }, { legacy: true, ebayListingId: { not: null } }] },
+        ...(opts.force ? [] : [{ OR: [{ lastCheckedAt: null }, { lastCheckedAt: { lt: new Date(now - CHECK_EVERY_MS) } }] }]),
+      ],
     },
     orderBy: { lastCheckedAt: { sort: "asc", nulls: "first" } },
     take: PER_RUN,
@@ -127,15 +130,30 @@ export async function monitorUser(user: UserWithAccounts, opts: { now?: number; 
     let results: { sku: string; ok: boolean; message?: string }[];
     try {
       const qty = (d: MonitorDecision) => (d.action === "PAUSE" ? 0 : "quantity" in d ? d.quantity : 0);
-      results = await ebay.bulkUpdateQuantity(
-        await userToken(account),
-        list.map(({ listing, decision, price }) => ({
-          sku: listing.sku,
-          offerId: listing.ebayOfferId!,
-          quantity: decision.action === "KEEP" ? listing.quantity : qty(decision),
-          ...(price !== undefined ? { price: { value: price, currency: listing.currency } } : {}),
-        })),
-      );
+      const target = (listing: (typeof list)[number]["listing"], decision: MonitorDecision) => (decision.action === "KEEP" ? listing.quantity : qty(decision));
+      const token = await userToken(account);
+      const offers = list.filter(({ listing }) => listing.ebayOfferId);
+      const legacy = list.filter(({ listing }) => !listing.ebayOfferId && listing.legacy && listing.ebayListingId);
+      results = offers.length
+        ? await ebay.bulkUpdateQuantity(
+            token,
+            offers.map(({ listing, decision, price }) => ({
+              sku: listing.sku,
+              offerId: listing.ebayOfferId!,
+              quantity: target(listing, decision),
+              ...(price !== undefined ? { price: { value: price, currency: listing.currency } } : {}),
+            })),
+          )
+        : [];
+      // Annonces créées sur eBay : une mise à jour par annonce (API Trading), une erreur n'arrête pas les autres.
+      for (const { listing, decision, price } of legacy) {
+        try {
+          await ebay.reviseInventoryStatus(token, { itemId: listing.ebayListingId!, quantity: target(listing, decision), ...(price !== undefined ? { price } : {}) }, marketplace(listing.marketplace).id);
+          results.push({ sku: listing.sku, ok: true });
+        } catch (e) {
+          results.push({ sku: listing.sku, ok: false, message: e instanceof Error ? e.message : String(e) });
+        }
+      }
     } catch (e) {
       report.errors += list.length;
       console.error("Surveillance eBay", e);

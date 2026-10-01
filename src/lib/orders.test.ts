@@ -24,9 +24,18 @@ describe("commandes : quelles ventes commander", () => {
   });
   it("relie les lignes à nos annonces CJ, signale les autres", () => {
     const o = order({ lineItems: [{ lineItemId: "L1", sku: "PL-A", quantity: 2, title: "Can opener" }, { lineItemId: "L2", sku: "OTHER", quantity: 1, title: "Old stock" }] });
-    const r = mapLines(o, new Map([["PL-A", { id: "LST", supplierVariantId: "V1", supplierProductId: "P1", supplier: "CJ" }]]));
+    const r = mapLines(o, new Map([["PL-A", { id: "LST", sku: "PL-A", supplierVariantId: "V1", supplierProductId: "P1", supplier: "CJ" }]]));
     expect(r.lines).toEqual([{ lineItemId: "L1", sku: "PL-A", quantity: 2, listingId: "LST", supplier: "CJ", productId: "P1", vid: "V1", title: "Can opener" }]);
     expect(r.unknown).toEqual(["Old stock"]);
+  });
+  it("relie aussi une annonce créée sur eBay puis liée, par son numéro d'annonce (SKU absent ou différent)", () => {
+    const o = order({ lineItems: [
+      { lineItemId: "L1", legacyItemId: "1234567890", quantity: 1, title: "Garlic press" },
+      { lineItemId: "L2", legacyItemId: "999", sku: "MY-SKU", quantity: 1, title: "Not linked" },
+    ] });
+    const r = mapLines(o, new Map(), new Map([["1234567890", { id: "EXT", sku: "EXT-1234567890", supplierVariantId: "V9", supplierProductId: "P9", supplier: "CJ" }]]));
+    expect(r.lines).toEqual([{ lineItemId: "L1", sku: "EXT-1234567890", quantity: 1, listingId: "EXT", supplier: "CJ", productId: "P9", vid: "V9", title: "Garlic press", legacyItemId: "1234567890" }]);
+    expect(r.unknown).toEqual(["Not linked"]);
   });
 });
 

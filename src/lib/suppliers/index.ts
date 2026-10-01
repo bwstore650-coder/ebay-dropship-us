@@ -213,3 +213,52 @@ export async function supplierOrderState(s: Session, orderId: string): Promise<S
   if (d.status === "PLACE_ORDER_SUCCESS") return { state: "UNPAID" };
   return { state: "PENDING" };
 }
+
+/* ---------- Liaison d'une annonce eBay existante à un produit fournisseur ---------- */
+
+export interface SupplierVariantOption { id: string; label: string; price: number; stock: number; image?: string }
+export interface SupplierProductOptions { productId: string; title: string; image: string | null; variants: SupplierVariantOption[] }
+
+/** Lien ou numéro de produit collé par le vendeur → fournisseur + identifiant (CJ par défaut pour un numéro seul). */
+export function parseSupplierInput(input: string, preferred: SupplierId = "CJ"): { supplier: SupplierId; productId: string } | null {
+  const t = input.trim();
+  if (!t) return null;
+  if (/aliexpress\./i.test(t) || preferred === "ALIEXPRESS") {
+    const id = ae.parseProductId(t);
+    return id ? { supplier: "ALIEXPRESS", productId: id } : null;
+  }
+  const url = t.match(/cjdropshipping\.com\/[^\s]*?-p-([A-Za-z0-9-]{6,64})\.html/i) ?? t.match(/cjdropshipping\.com\/[^\s]*?[?&](?:id|pid)=([A-Za-z0-9-]{6,64})/i);
+  if (url) return { supplier: "CJ", productId: url[1] };
+  return /^[A-Za-z0-9-]{6,64}$/.test(t) ? { supplier: "CJ", productId: t } : null;
+}
+
+/** Variantes d'un produit avec prix (USD) et stock dans le pays, pour choisir laquelle correspond à l'annonce. Null : produit introuvable. */
+export async function variantsOf(s: Session, productId: string, country: string): Promise<SupplierProductOptions | null> {
+  try {
+    if (s.supplier === "CJ") {
+      const p = await cj.getProduct(s.token, productId);
+      return {
+        productId: p.pid,
+        title: p.productNameEn,
+        image: cj.productImages(p)[0] ?? null,
+        variants: p.variants.map((v) => ({
+          id: v.vid,
+          label: v.variantKey || v.variantNameEn || v.variantSku || v.vid,
+          price: Number(v.variantSellPrice),
+          stock: v.inventories?.find((i) => i.countryCode === country)?.totalInventory ?? 0,
+          ...(v.variantImage ? { image: v.variantImage } : {}),
+        })),
+      };
+    }
+    const p = await ae.getProduct(s.cfg, s.session, productId, country);
+    return {
+      productId: p.productId,
+      title: p.title,
+      image: p.images[0] ?? null,
+      variants: p.skus.map((v) => ({ id: v.skuId, label: v.label || v.skuId, price: v.price, stock: v.shipsFrom === country ? v.stock : 0, ...(v.image ? { image: v.image } : {}) })),
+    };
+  } catch (e) {
+    if (isGoneMessage(e instanceof Error ? e.message : String(e))) return null;
+    throw e;
+  }
+}

@@ -103,6 +103,7 @@ model User {
   afterSales         AfterSale[]
   extensionTokens    ExtensionToken[]
   savedProducts      SavedProduct[]
+  externalListings   ExternalListing[]
   aiUsage            AiUsage[]
 
   @@index([googleId])
@@ -122,6 +123,7 @@ model EbayAccount {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   listings           Listing[]
+  externalListings   ExternalListing[]
   orders             Order[]
   marketSetups       EbayMarketSetup[]
 
@@ -190,6 +192,8 @@ model Listing {
   adRate           Float?        // taux Promoted Listings en cours (%), null = pas de publicité
   adId             String?
   publishedAt      DateTime?
+  /// Annonce créée en dehors de Sellvela (sur eBay) puis liée à un produit fournisseur : mises à jour par l'API Trading.
+  legacy           Boolean       @default(false)
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   orders           Order[]
@@ -562,4 +566,28 @@ model AiUsage {
   count  Int    @default(0)
 
   @@id([userId, month])
+}
+
+/// Annonce eBay active créée en dehors de Sellvela (détectée sur le compte du vendeur).
+model ExternalListing {
+  id            String      @id @default(cuid())
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ebayAccountId String
+  ebayAccount   EbayAccount @relation(fields: [ebayAccountId], references: [id], onDelete: Cascade)
+  marketplace   String
+  itemId        String
+  title         String
+  price         Float
+  currency      String
+  quantity      Int
+  sku           String?
+  image         String?
+  hasVariations Boolean     @default(false)
+  startedAt     DateTime?
+  syncedAt      DateTime
+  listingId     String?     // annonce gérée par Sellvela après liaison à un produit fournisseur
+
+  @@unique([ebayAccountId, itemId])
+  @@index([userId])
 }

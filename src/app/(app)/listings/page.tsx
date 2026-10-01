@@ -11,6 +11,9 @@ import { PageHeader, StatusBadge } from "@/components/ui";
 import ImproveListingButton from "@/components/ai/ImproveListingButton";
 import { aiConfigured } from "@/lib/ai";
 import { LISTING_TONE } from "@/lib/status-tones";
+import { lastSync } from "@/lib/external-listings";
+import { aeConfig } from "@/lib/suppliers";
+import ExternalListings from "@/components/ExternalListings";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +22,14 @@ export default async function ListingsPage() {
   const user = await requireUser();
   const { locale, t } = await getI18n();
   const L = t.listings;
-  const listings = await db.listing.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 200 });
+  const [listings, externals, synced] = await Promise.all([
+    db.listing.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 200 }),
+    db.externalListing.findMany({ where: { userId: user.id }, orderBy: { startedAt: "desc" }, take: 500 }),
+    lastSync(user.id),
+  ]);
+  const managedIds = new Set(
+    (await db.listing.findMany({ where: { id: { in: externals.map((e) => e.listingId).filter((x): x is string => Boolean(x)) }, status: { not: "ENDED" } }, select: { id: true } })).map((l) => l.id),
+  );
   const status = { DRAFT: L.statusDRAFT, ACTIVE: L.statusACTIVE, PAUSED: L.statusPAUSED, ENDED: L.statusENDED };
 
   return (
@@ -65,6 +75,7 @@ export default async function ListingsPage() {
                   <tr key={l.id} className="align-top transition hover:bg-surface-2/60">
                     <td className="max-w-sm px-4 py-3">
                       <p className="font-medium text-fg">{l.title}</p>
+                      {l.legacy && <p className="mt-1"><span className="badge bg-surface-3 text-muted">{L.createdOnEbay}</span></p>}
                       {l.status === "PAUSED" && l.pauseReason && (
                         <p className="mt-1 text-xs text-amber-300">
                           {fmt((L.pause as Record<string, string>)[l.pauseReason] ?? L.pause.OUT_OF_STOCK, { detail: l.pauseDetail ? `${l.pauseDetail} ${m.symbol}` : "" })}
@@ -109,7 +120,7 @@ export default async function ListingsPage() {
                         {(l.status === "ACTIVE" || l.status === "PAUSED") && (
                           <form action={endListingAction}>
                             <input type="hidden" name="listingId" value={l.id} />
-                            <button className="font-medium text-muted hover:text-red-300">{L.end}</button>
+                            <button className="font-medium text-muted hover:text-red-300">{l.legacy ? L.unmanage : L.end}</button>
                           </form>
                         )}
                       </div>
@@ -121,6 +132,20 @@ export default async function ListingsPage() {
           </table>
         </div>
       )}
+      <ExternalListings
+        rows={externals.map((e) => ({
+          id: e.id, itemId: e.itemId, title: e.title, price: e.price, quantity: e.quantity, image: e.image, hasVariations: e.hasVariations,
+          marketId: marketplace(e.marketplace).id, managed: Boolean(e.listingId && managedIds.has(e.listingId)),
+        }))}
+        lastSync={synced?.toISOString() ?? null}
+        t={t.external}
+        errors={t.errors}
+        locale={LOCALE_TAGS[locale]}
+        minMargin={user.minMarginPct}
+        hasPlan={user.plan !== "NONE"}
+        hasEbay={user.ebayAccounts.length > 0}
+        hasAe={Boolean(aeConfig()) && user.supplierAccounts.some((a) => a.supplier === "ALIEXPRESS")}
+      />
     </div>
   );
 }

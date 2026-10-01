@@ -409,6 +409,8 @@ export async function endListing(user: UserWithAccounts, listingId: string) {
     await ebay.withdrawOffer(await userToken(account), listing.ebayOfferId, marketplace(listing.marketplace).id);
   }
   await db.listing.update({ where: { id: listing.id }, data: { status: "ENDED" } });
+  // Annonce créée sur eBay : elle y reste, Sellvela arrête seulement de la gérer.
+  if (listing.legacy) await db.externalListing.updateMany({ where: { listingId: listing.id }, data: { listingId: null } });
 }
 
 

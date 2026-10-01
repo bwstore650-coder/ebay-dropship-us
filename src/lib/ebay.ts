@@ -841,6 +841,90 @@ export async function sendBuyerMessage(
   );
 }
 
+/* ---------- Annonces créées en dehors de l'outil (API Trading) ---------- */
+
+export interface ActiveItem {
+  itemId: string;
+  title: string;
+  sku: string | null;
+  price: number;
+  currency: string;
+  quantity: number; // quantité disponible
+  image: string | null;
+  url: string | null;
+  startedAt: string | null;
+  hasVariations: boolean;
+  fixedPrice: boolean; // false : enchère (non gérée)
+}
+
+const xmlDecode = (s: string) =>
+  s.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
+    .replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n))).replace(/&amp;/g, "&");
+
+/** Premier contenu d'une balise (sans ses attributs) dans un fragment XML. */
+function xtag(xml: string, name: string): string | null {
+  const m = xml.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`));
+  return m ? xmlDecode(m[1].trim()) : null;
+}
+
+/** Annonces actives d'une page GetMyeBaySelling (bloc ActiveList uniquement). */
+export function parseActiveList(xml: string): { items: ActiveItem[]; totalPages: number } {
+  const block = xml.match(/<ActiveList>([\s\S]*?)<\/ActiveList>/)?.[1] ?? "";
+  const totalPages = Number(xtag(block.match(/<PaginationResult>[\s\S]*?<\/PaginationResult>/)?.[0] ?? "", "TotalNumberOfPages") ?? 1) || 1;
+  const items: ActiveItem[] = [];
+  for (const m of block.matchAll(/<Item>([\s\S]*?)<\/Item>/g)) {
+    const x = m[1];
+    const itemId = xtag(x, "ItemID");
+    const title = xtag(x, "Title");
+    const priceTag = x.match(/<CurrentPrice currencyID="([A-Z]{3})">([\d.]+)<\/CurrentPrice>/) ?? x.match(/<BuyItNowPrice currencyID="([A-Z]{3})">([\d.]+)<\/BuyItNowPrice>/);
+    if (!itemId || !title || !priceTag) continue;
+    const listingType = xtag(x, "ListingType");
+    items.push({
+      itemId,
+      title,
+      sku: xtag(x.replace(/<Variations>[\s\S]*?<\/Variations>/, ""), "SKU"),
+      price: Number(priceTag[2]),
+      currency: priceTag[1],
+      quantity: Math.max(0, Number(xtag(x, "QuantityAvailable") ?? xtag(x, "Quantity") ?? 0) || 0),
+      image: xtag(x, "GalleryURL"),
+      url: xtag(x, "ViewItemURL"),
+      startedAt: xtag(x, "StartTime"),
+      hasVariations: /<Variations>/.test(x),
+      fixedPrice: !listingType || listingType === "FixedPriceItem" || listingType === "StoresFixedPrice",
+    });
+  }
+  return { items, totalPages };
+}
+
+/** Toutes les annonces actives du compte (200 par page, 25 pages au plus). */
+export async function getActiveListings(token: string): Promise<ActiveItem[]> {
+  const all: ActiveItem[] = [];
+  for (let page = 1; page <= 25; page++) {
+    const xml = await trading(
+      token,
+      "GetMyeBaySelling",
+      `<ActiveList><Include>true</Include><Pagination><EntriesPerPage>200</EntriesPerPage><PageNumber>${page}</PageNumber></Pagination></ActiveList>` +
+        "<SoldList><Include>false</Include></SoldList><UnsoldList><Include>false</Include></UnsoldList><ScheduledList><Include>false</Include></ScheduledList>" +
+        "<DeletedFromSoldList><Include>false</Include></DeletedFromSoldList><DeletedFromUnsoldList><Include>false</Include></DeletedFromUnsoldList>",
+      "EBAY_US",
+    );
+    const { items, totalPages } = parseActiveList(xml);
+    all.push(...items);
+    if (page >= totalPages) break;
+  }
+  return all;
+}
+
+/** Quantité (et prix) d'une annonce créée hors de l'outil (API Trading ReviseInventoryStatus). */
+export async function reviseInventoryStatus(token: string, u: { itemId: string; quantity: number; price?: number }, marketId: MarketplaceId): Promise<void> {
+  await trading(
+    token,
+    "ReviseInventoryStatus",
+    `<InventoryStatus><ItemID>${xmlEscape(u.itemId)}</ItemID><Quantity>${Math.max(0, Math.floor(u.quantity))}</Quantity>${u.price !== undefined ? `<StartPrice>${u.price.toFixed(2)}</StartPrice>` : ""}</InventoryStatus>`,
+    marketId,
+  );
+}
+
 /* ---------- Retours et annulations (API Post-Order v2) ---------- */
 
 async function postOrder<T>(token: string, path: string, init: RequestInit = {}, marketId: MarketplaceId = "EBAY_US"): Promise<T> {

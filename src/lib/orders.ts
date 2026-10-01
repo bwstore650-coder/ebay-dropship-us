@@ -38,20 +38,24 @@ export function shipTo(o: EbayOrder) {
 }
 
 /** Relie les lignes de la commande eBay à nos annonces (par SKU). */
+type LineListing = { id: string; sku: string; supplierVariantId: string | null; supplierProductId: string; supplier: string };
+
 export function mapLines(
   o: EbayOrder,
-  listingsBySku: Map<string, { id: string; supplierVariantId: string | null; supplierProductId: string; supplier: string }>,
+  listingsBySku: Map<string, LineListing>,
+  /** Annonces créées sur eBay puis liées (sans SKU ou avec un autre SKU) : retrouvées par leur numéro d'annonce. */
+  listingsByItemId: Map<string, LineListing> = new Map(),
 ): { lines: OrderLine[]; unknown: string[] } {
   const lines: OrderLine[] = [];
   const unknown: string[] = [];
   for (const li of o.lineItems) {
-    const l = li.sku ? listingsBySku.get(li.sku) : undefined;
+    const l = (li.sku ? listingsBySku.get(li.sku) : undefined) ?? (li.legacyItemId ? listingsByItemId.get(li.legacyItemId) : undefined);
     if (!l || (l.supplier !== "CJ" && l.supplier !== "ALIEXPRESS") || !l.supplierVariantId) {
       unknown.push(li.title || li.lineItemId);
       continue;
     }
     lines.push({
-      lineItemId: li.lineItemId, sku: li.sku!, quantity: li.quantity, listingId: l.id,
+      lineItemId: li.lineItemId, sku: li.sku || l.sku, quantity: li.quantity, listingId: l.id,
       supplier: l.supplier, productId: l.supplierProductId, vid: l.supplierVariantId, title: li.title,
       ...(li.legacyItemId ? { legacyItemId: li.legacyItemId } : {}),
     });

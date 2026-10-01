@@ -9,6 +9,7 @@ const mem = vi.hoisted(() => ({ listings: [] as Row[] }));
 function match(row: Row, where: Row = {}): boolean {
   return Object.entries(where).every(([k, cond]) => {
     if (k === "OR") return (cond as Row[]).some((c) => match(row, c));
+    if (k === "AND") return (cond as Row[]).every((c) => match(row, c));
     const v = row[k];
     if (cond && typeof cond === "object" && !(cond instanceof Date)) {
       const c = cond as Record<string, unknown>;
@@ -40,6 +41,7 @@ import { monitorUser } from "./monitor-service";
 type Call = { method: string; url: string; body: unknown };
 let calls: Call[] = [];
 let ebayFailSku: string | null = null;
+let tradingFail = false;
 
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 const cjOk = (data: unknown) => json({ code: 200, result: true, message: "ok", data });
@@ -81,13 +83,17 @@ function router(url: string, init?: RequestInit): Response {
       ),
     });
   }
+  if (u.pathname === "/ws/api.dll") {
+    const ok = !tradingFail;
+    return new Response(`<?xml version="1.0"?><ReviseInventoryStatusResponse><Ack>${ok ? "Success" : "Failure"}</Ack>${ok ? "" : "<Errors><LongMessage>Item ended</LongMessage></Errors>"}</ReviseInventoryStatusResponse>`, { status: 200 });
+  }
   return json({ errors: [{ message: `route inconnue ${url}` }] }, 500);
 }
 
 const listing = (id: string, pid: string, over: Row = {}): Row => ({
   id, userId: "U1", sku: `SKU-${id}`, status: "ACTIVE", supplier: "CJ", supplierProductId: pid, supplierVariantId: `V-${pid}`,
   ebayOfferId: `OF-${id}`, ebayAccountId: "ACC", marketplace: "EBAY_US", currency: "USD", price: 30.75, quantity: 3,
-  lastCheckedAt: null, pauseReason: null, pauseDetail: null, errorMessage: null, ...over,
+  lastCheckedAt: null, pauseReason: null, pauseDetail: null, errorMessage: null, legacy: false, ebayListingId: null, ...over,
 });
 
 const user = () =>
@@ -105,6 +111,7 @@ beforeEach(() => {
   vi.stubEnv("ENCRYPTION_KEY", "0".repeat(64));
   calls = [];
   ebayFailSku = null;
+  tradingFail = false;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     let body: unknown;
     try {
@@ -187,6 +194,33 @@ describe("surveillance du stock et des prix", { timeout: 60_000 }, () => {
     calls = [];
     await monitorUser({ ...(user() as object), repriceEnabled: true, repriceUndercutPct: 1 } as never, { force: true });
     expect(calls.some((c) => c.url.includes("item_summary/search"))).toBe(false); // repricé il y a moins de 6 h
+  });
+
+  it("annonce créée sur eBay puis liée : mise à jour par l'API Trading (pas d'offre Inventory)", async () => {
+    mem.listings = [
+      listing("EXT", "P-OUT", { ebayOfferId: null, legacy: true, ebayListingId: "1234567890", sku: "MY-SKU" }),
+      listing("BACK", "P-OK", { ebayOfferId: null, legacy: true, ebayListingId: "999", status: "PAUSED", pauseReason: "OUT_OF_STOCK" }),
+      listing("NOID", "P-OUT", { ebayOfferId: null, legacy: false }), // brouillon jamais publié : ignoré
+    ];
+    const r = await monitorUser(user());
+    expect(r).toMatchObject({ checked: 2, paused: 1, resumed: 1, errors: 0 });
+    expect(calls.some((c) => c.url.includes("bulk_update"))).toBe(false);
+    const trading = calls.filter((c) => c.url.endsWith("/ws/api.dll")).map((c) => String(c.body));
+    expect(trading).toHaveLength(2);
+    expect(trading.some((b) => b.includes("<ItemID>1234567890</ItemID><Quantity>0</Quantity>"))).toBe(true);
+    expect(trading.some((b) => b.includes("<ItemID>999</ItemID><Quantity>3</Quantity>"))).toBe(true);
+    expect(get("EXT")).toMatchObject({ status: "PAUSED", pauseReason: "OUT_OF_STOCK" });
+    expect(get("BACK")).toMatchObject({ status: "ACTIVE", quantity: 3 });
+    expect(get("NOID").lastCheckedAt).toBeNull();
+  });
+
+  it("annonce créée sur eBay : refus d'eBay enregistré, statut inchangé", async () => {
+    mem.listings = [listing("EXT", "P-OUT", { ebayOfferId: null, legacy: true, ebayListingId: "1234567890" })];
+    tradingFail = true;
+    const r = await monitorUser(user());
+    expect(r).toMatchObject({ paused: 0, errors: 1 });
+    expect(get("EXT").status).toBe("ACTIVE");
+    expect(String(get("EXT").errorMessage)).toContain("Item ended");
   });
 
   it("déjà en pause et toujours en rupture : pas d'appel eBay", async () => {

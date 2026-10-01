@@ -37,11 +37,13 @@ export async function importOrders(user: UserWithAccounts, account: Account): Pr
   if (!orders.length) return 0;
 
   const skus = [...new Set(orders.flatMap((o) => o.lineItems.map((l) => l.sku).filter((s): s is string => Boolean(s))))];
+  const itemIds = [...new Set(orders.flatMap((o) => o.lineItems.map((l) => l.legacyItemId).filter((s): s is string => Boolean(s))))];
   const listings = await db.listing.findMany({
-    where: { userId: user.id, sku: { in: skus } },
-    select: { id: true, sku: true, supplierVariantId: true, supplierProductId: true, supplier: true, marketplace: true, currency: true },
+    where: { userId: user.id, OR: [{ sku: { in: skus } }, { legacy: true, ebayListingId: { in: itemIds }, status: { in: ["ACTIVE", "PAUSED"] } }] },
+    select: { id: true, sku: true, supplierVariantId: true, supplierProductId: true, supplier: true, marketplace: true, currency: true, legacy: true, ebayListingId: true },
   });
-  const bySku = new Map(listings.map((l) => [l.sku, l]));
+  const bySku = new Map(listings.filter((l) => skus.includes(l.sku)).map((l) => [l.sku, l]));
+  const byItemId = new Map(listings.filter((l) => l.legacy && l.ebayListingId).map((l) => [l.ebayListingId!, l]));
   const known = await db.order.findMany({ where: { ebayOrderId: { in: orders.map((o) => o.orderId) } }, select: { ebayOrderId: true, status: true, id: true } });
   const knownIds = new Map(known.map((k) => [k.ebayOrderId, k]));
 
@@ -55,9 +57,9 @@ export async function importOrders(user: UserWithAccounts, account: Account): Pr
         await db.order.update({ where: { id: existing.id }, data: { status: "CANCELLED", errorCode: "CANCELLED_BY_BUYER" } });
       continue;
     }
-    const { lines, unknown } = mapLines(o, bySku);
+    const { lines, unknown } = mapLines(o, bySku, byItemId);
     if (!lines.length) continue; // vente d'une annonce qui ne vient pas de l'outil : on n'y touche pas
-    const first = bySku.get(lines[0].sku)!;
+    const first = listings.find((l) => l.id === lines[0].listingId)!;
     const partial = unknown.length > 0;
     await db.order.create({
       data: {
