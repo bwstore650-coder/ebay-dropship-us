@@ -19,6 +19,11 @@ export async function POST(req: Request) {
   }
   // Trop d'essais : compte bloqué 15 minutes (contre les attaques par force brute).
   if (isLocked(user)) return NextResponse.json({ error: "TOO_MANY_ATTEMPTS" }, { status: 429 });
+  // Compte créé avec Google, sans mot de passe : il faut utiliser le bouton Google (ou « mot de passe oublié » pour en créer un).
+  if (!user.passwordHash) {
+    await checkPassword(parsed.data.password, DUMMY_HASH);
+    return NextResponse.json({ error: "USE_GOOGLE" }, { status: 401 });
+  }
   if (!(await checkPassword(parsed.data.password, user.passwordHash))) {
     const next = afterFailedLogin(user.failedLogins);
     await db.user.update({ where: { id: user.id }, data: next });

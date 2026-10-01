@@ -8,8 +8,8 @@ import { errorMessage } from "@/lib/i18n/errors";
 type Mode = "login" | "register" | "forgot" | "reset";
 
 /** Remplace {terms} et {privacy} par des liens. */
-function TermsLabel({ t }: { t: Dict["auth"] }) {
-  const parts = t.acceptTerms.split(/(\{terms\}|\{privacy\})/);
+function TermsLabel({ t, text }: { t: Dict["auth"]; text?: string }) {
+  const parts = (text ?? t.acceptTerms).split(/(\{terms\}|\{privacy\})/);
   return (
     <>
       {parts.map((p, i) =>
@@ -25,9 +25,12 @@ function TermsLabel({ t }: { t: Dict["auth"] }) {
   );
 }
 
-export default function AuthForm({ mode, t, errors, token }: { mode: Mode; t: Dict["auth"]; errors: Dict["errors"]; token?: string }) {
+export default function AuthForm({
+  mode, t, errors, token, google = false, initialError,
+}: { mode: Mode; t: Dict["auth"]; errors: Dict["errors"]; token?: string; google?: boolean; initialError?: string | null }) {
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(initialError ? errorMessage(errors, initialError) : null);
+  const withGoogle = google && (mode === "login" || mode === "register");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
 
@@ -61,6 +64,17 @@ export default function AuthForm({ mode, t, errors, token }: { mode: Mode; t: Di
         {sent ? (
           <p className="mt-6 rounded-lg bg-emerald-500/10 p-3 text-sm text-emerald-300">{t.forgotSent}</p>
         ) : (
+          <>
+          {withGoogle && (
+            <div className="mt-6 space-y-3">
+              {/* Lien classique (pas de JavaScript) : le serveur redirige vers la page de connexion Google. */}
+              <a href="/api/auth/google" className="btn-secondary flex w-full items-center justify-center gap-2">{t.continueGoogle}</a>
+              {mode === "register" && <p className="text-xs text-muted"><TermsLabel t={t} text={t.googleTerms} /></p>}
+              <div className="flex items-center gap-3 text-xs text-subtle" aria-hidden="true">
+                <span className="h-px flex-1 bg-line" />{t.or}<span className="h-px flex-1 bg-line" />
+              </div>
+            </div>
+          )}
           <form onSubmit={onSubmit} className="mt-6 space-y-4">
             {mode !== "reset" && <input name="email" type="email" required autoComplete="email" placeholder={t.email} aria-label={t.email} className="input" />}
             {mode !== "forgot" && (
@@ -89,6 +103,7 @@ export default function AuthForm({ mode, t, errors, token }: { mode: Mode; t: Di
             {error && <p className="text-sm text-red-400">{error}</p>}
             <button disabled={loading} className="btn-primary w-full">{loading ? "…" : button}</button>
           </form>
+          </>
         )}
         <p className="mt-6 text-center text-sm text-muted">
           {mode === "login" ? (

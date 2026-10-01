@@ -14,6 +14,10 @@ const schema = z.object({
   // Jeton de vérification déclaré chez eBay pour les notifications de suppression de compte (32 à 80 caractères).
   EBAY_DELETION_TOKEN: z.string().default(""),
 
+  // Connexion avec Google (OAuth 2.0) : bouton masqué tant que ces deux valeurs sont vides.
+  GOOGLE_CLIENT_ID: z.string().default(""),
+  GOOGLE_CLIENT_SECRET: z.string().default(""),
+
   ALIEXPRESS_APP_KEY: z.string().default(""),
   ALIEXPRESS_APP_SECRET: z.string().default(""),
 
