@@ -344,6 +344,9 @@ model SnipeRun {
   minProfit     Float?      // « High ticket » : profit minimum par vente (devise du pays)
   priceMin      Float?
   priceMax      Float?
+  costMin       Float?      // prix d'achat fournisseur minimum (devise du pays)
+  costMax       Float?      // prix d'achat fournisseur maximum
+  categories    Json?       // catégories choisies par le vendeur (identifiants, voir PRODUCT_CATEGORIES)
   autoList      Boolean     @default(false)
   ebayAccountId String?
   seeds         Json        // mots-clés (thèmes du catalogue, ou liste à tester)
@@ -368,6 +371,7 @@ model SnipeCandidate {
   id              String               @id @default(cuid())
   runId           String
   run             SnipeRun             @relation(fields: [runId], references: [id], onDelete: Cascade)
+  seed            String?              // thème de recherche CJ qui a trouvé le produit (catégorie)
   keyword         String               // recherche eBay utilisée
   supplier        Supplier?
   productId       String?
@@ -477,6 +481,7 @@ model ProductInsight {
   supplier        Supplier
   productId       String
   variantId       String?
+  seed            String?  // thème de recherche CJ (catégorie) ; null pour les analyses plus anciennes
   keyword         String
   title           String?
   image           String?

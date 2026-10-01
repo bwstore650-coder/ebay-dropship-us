@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classify, isFinished, keywordFromTitle, maxScan, parseKeywords } from "./sniper";
+import { CATEGORY_IDS, classify, inCostRange, isCategoryId, isFinished, keywordFromTitle, maxScan, parseKeywords, PRODUCT_CATEGORIES, SCANNER_SEEDS, seedsForCategories } from "./sniper";
 import type { Evaluation } from "./margin";
 
 const ev = (over: Partial<Evaluation> = {}): Evaluation => ({
@@ -61,3 +61,28 @@ describe("fin de la recherche", () => {
     expect(isFinished({ mode: "CATALOG", target: 5, found: 1, scanned: maxScan(5) * 2, pending: 0, exhausted: false, scanLimit: maxScan(5) * 2 })).toBe(true);
   });
 });
+
+describe("catégories et prix d'achat", () => {
+  it("thèmes des catégories choisies, sans doublon ; catégories inconnues ignorées", () => {
+    expect(seedsForCategories(["pets", "kitchen"])).toEqual(["kitchen gadget", "kitchen tools", "kitchen storage", "pet supplies", "dog toys", "cat toys"]);
+    expect(seedsForCategories(["inconnue"])).toEqual([]);
+    expect(isCategoryId("garden")).toBe(true);
+    expect(isCategoryId("weapons")).toBe(false);
+    expect(new Set(CATEGORY_IDS).size).toBe(PRODUCT_CATEGORIES.length);
+    // Le scanner de fond couvre toutes les catégories.
+    for (const c of PRODUCT_CATEGORIES) for (const seed of c.seeds) expect(SCANNER_SEEDS).toContain(seed);
+  });
+  it("fourchette de prix d'achat : bornes facultatives", () => {
+    expect(inCostRange(8, null, null)).toBe(true);
+    expect(inCostRange(8, 5, 10)).toBe(true);
+    expect(inCostRange(4.99, 5, null)).toBe(false);
+    expect(inCostRange(10.01, null, 10)).toBe(false);
+    expect(inCostRange(null, 5, 10)).toBe(false);
+  });
+  it("produit hors de la fourchette d'achat : rejeté (avant marge et demande)", () => {
+    expect(classify(ev(), { unitsSold: 12, costMin: 10 })).toEqual({ status: "REJECTED", reason: "COST_RANGE" });
+    expect(classify(ev(), { unitsSold: 12, costMax: 5 })).toEqual({ status: "REJECTED", reason: "COST_RANGE" });
+    expect(classify(ev(), { unitsSold: 12, costMin: 5, costMax: 10 })).toEqual({ status: "PROFITABLE" });
+  });
+});
+

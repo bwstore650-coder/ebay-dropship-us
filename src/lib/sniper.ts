@@ -41,12 +41,58 @@ export const HIGH_TICKET_SEEDS = [
   "hot tub", "sauna", "air conditioner", "generator", "solar panel", "projector", "espresso machine", "robot vacuum",
 ];
 
+/**
+ * Catégories proposées au vendeur dans le Sniper : chacune correspond à des thèmes de recherche dans le catalogue CJ.
+ * Sans catégorie choisie, le Sniper parcourt les thèmes populaires (DEFAULT_SEEDS).
+ */
+export const PRODUCT_CATEGORIES = [
+  { id: "kitchen", seeds: ["kitchen gadget", "kitchen tools", "kitchen storage"] },
+  { id: "home", seeds: ["home organization", "storage box", "home decor"] },
+  { id: "pets", seeds: ["pet supplies", "dog toys", "cat toys"] },
+  { id: "car", seeds: ["car accessories", "car organizer", "car cleaning"] },
+  { id: "phone", seeds: ["phone accessories", "phone holder", "charging cable"] },
+  { id: "electronics", seeds: ["smart gadget", "bluetooth speaker", "wireless charger"] },
+  { id: "fitness", seeds: ["fitness equipment", "yoga mat", "resistance bands"] },
+  { id: "beauty", seeds: ["beauty tools", "makeup brush", "hair styling tool"] },
+  { id: "lighting", seeds: ["led lights", "night light", "solar lights"] },
+  { id: "garden", seeds: ["garden tools", "plant pot", "garden decor"] },
+  { id: "baby", seeds: ["baby products", "baby toys", "baby feeding"] },
+  { id: "office", seeds: ["office supplies", "desk organizer", "stationery"] },
+  { id: "bathroom", seeds: ["bathroom accessories", "shower organizer", "bath mat"] },
+  { id: "outdoor", seeds: ["camping gear", "hiking accessories", "outdoor tools"] },
+  { id: "cleaning", seeds: ["cleaning tools", "cleaning brush", "mop"] },
+  { id: "travel", seeds: ["travel accessories", "travel organizer", "luggage accessories"] },
+  { id: "toys", seeds: ["toys", "educational toys", "puzzle"] },
+  { id: "tools", seeds: ["hand tools", "tool organizer", "measuring tools"] },
+  { id: "sports", seeds: ["sports accessories", "cycling accessories", "fishing accessories"] },
+] as const;
+export type CategoryId = (typeof PRODUCT_CATEGORIES)[number]["id"];
+export const CATEGORY_IDS = PRODUCT_CATEGORIES.map((c) => c.id) as CategoryId[];
+export const isCategoryId = (v: unknown): v is CategoryId => typeof v === "string" && (CATEGORY_IDS as string[]).includes(v);
+
+/** Thèmes de recherche des catégories choisies (sans doublon, dans l'ordre des catégories). */
+export function seedsForCategories(ids: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const c of PRODUCT_CATEGORIES) if (ids.includes(c.id)) for (const s of c.seeds) if (!out.includes(s)) out.push(s);
+  return out;
+}
+
+/** Prix d'achat fournisseur dans la fourchette du vendeur ? (bornes facultatives) */
+export function inCostRange(cost: number | null | undefined, min?: number | null, max?: number | null): boolean {
+  if (min == null && max == null) return true;
+  if (cost == null || !Number.isFinite(cost)) return false;
+  return (min == null || cost >= min) && (max == null || cost <= max);
+}
+
 /** Thèmes utilisés quand le vendeur n'en donne pas : catégories « evergreen » qui se vendent toute l'année. */
 export const DEFAULT_SEEDS = [
   "kitchen gadget", "pet supplies", "car accessories", "home organization", "phone accessories",
   "fitness equipment", "beauty tools", "led lights", "garden tools", "baby products",
   "office supplies", "bathroom accessories", "camping gear", "cleaning tools", "travel accessories",
 ];
+
+/** Thèmes parcourus par le scanner de fond : thèmes populaires + toutes les catégories (chaque catégorie a des produits prêts). */
+export const SCANNER_SEEDS: string[] = [...new Set<string>([...DEFAULT_SEEDS, ...PRODUCT_CATEGORIES.flatMap((c) => c.seeds)])];
 
 export function maxScan(target: number): number {
   return Math.min(MAX_SCAN, Math.max(20, target * SCAN_FACTOR));
@@ -94,7 +140,7 @@ export function keywordFromTitle(title: string, maxWords = 5): string {
   return kept.join(" ");
 }
 
-export type Reason = "LOW_MARGIN" | "LOW_PROFIT" | "NO_DEMAND" | "NO_PRICE" | "NO_SUPPLIER" | "VERO" | "PRICE_RANGE" | "ALREADY_LISTED" | "NO_KEYWORD";
+export type Reason = "LOW_MARGIN" | "LOW_PROFIT" | "COST_RANGE" | "NO_DEMAND" | "NO_PRICE" | "NO_SUPPLIER" | "VERO" | "PRICE_RANGE" | "ALREADY_LISTED" | "NO_KEYWORD";
 
 export interface Classification {
   status: "PROFITABLE" | "REJECTED";
@@ -107,11 +153,16 @@ export interface Classification {
  */
 export function classify(
   e: Evaluation,
-  o: { unitsSold: number; priceMin?: number | null; priceMax?: number | null; title?: string | null; minUnits?: number; minProfit?: number | null },
+  o: {
+    unitsSold: number; priceMin?: number | null; priceMax?: number | null; title?: string | null; minUnits?: number; minProfit?: number | null;
+    costMin?: number | null; costMax?: number | null;
+  },
 ): Classification {
   if (o.title && findVeroBrand(o.title)) return { status: "REJECTED", reason: "VERO" };
-  if (e.verdict === "PAS_DE_PRIX") return { status: "REJECTED", reason: "NO_PRICE" };
   if (e.verdict === "PAS_DE_FOURNISSEUR") return { status: "REJECTED", reason: "NO_SUPPLIER" };
+  // Prix d'achat chez le fournisseur (sans la livraison) hors de la fourchette choisie.
+  if (e.best && !inCostRange(e.best.price, o.costMin, o.costMax)) return { status: "REJECTED", reason: "COST_RANGE" };
+  if (e.verdict === "PAS_DE_PRIX") return { status: "REJECTED", reason: "NO_PRICE" };
   if (e.marketPrice !== null) {
     if (o.priceMin != null && e.marketPrice < o.priceMin) return { status: "REJECTED", reason: "PRICE_RANGE" };
     if (o.priceMax != null && e.marketPrice > o.priceMax) return { status: "REJECTED", reason: "PRICE_RANGE" };

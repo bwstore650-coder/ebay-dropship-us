@@ -19,7 +19,8 @@ import * as cj from "@/lib/suppliers/cj";
 import { analyzeCatalogProduct, minPriceFor, pickFromPool, POOL_FRESH_MS, savePool } from "@/lib/product-pool";
 import {
   type CandidateDetails,
-  classify, DEFAULT_SEEDS, HIGH_TICKET_PROFIT, HIGH_TICKET_SEEDS, isFinished, keywordFromTitle, MAX_TARGET, maxScan, RESUME_AFTER_MS,
+  classify, DEFAULT_SEEDS, HIGH_TICKET_PROFIT, HIGH_TICKET_SEEDS, isCategoryId, isFinished, keywordFromTitle, MAX_TARGET, maxScan, RESUME_AFTER_MS,
+  seedsForCategories,
 } from "@/lib/sniper";
 
 export type UserWithAccounts = User & {
@@ -45,6 +46,9 @@ export interface CreateInput {
   autoList: boolean;
   ebayAccountId?: string | null;
   highTicket?: boolean;     // produits chers : au moins HIGH_TICKET_PROFIT de profit par vente
+  costMin?: number | null;  // prix d'achat fournisseur (sans livraison), devise du pays
+  costMax?: number | null;
+  categories?: string[];    // catégories choisies (PRODUCT_CATEGORIES) ; leurs thèmes s'ajoutent aux thèmes libres
   /** Produits précis à analyser (liste d'idées de l'extension) : pas de parcours du catalogue. */
   products?: { productId: string; title?: string | null }[];
 }
@@ -74,6 +78,10 @@ export async function createRun(user: UserWithAccounts, input: CreateInput) {
   const target = products ? products.length : Math.max(1, Math.min(MAX_TARGET, Math.floor(input.target)));
   if (input.mode === "KEYWORDS" && input.seeds.length === 0) throw new SnipeError("INVALID_INPUT");
   if (input.priceMin != null && input.priceMax != null && input.priceMin > input.priceMax) throw new SnipeError("INVALID_INPUT");
+  if (input.costMin != null && input.costMax != null && input.costMin > input.costMax) throw new SnipeError("INVALID_INPUT");
+  const categories = (input.categories ?? []).filter(isCategoryId);
+  // Catalogue : thèmes des catégories choisies, puis thèmes libres (sans doublon).
+  const seeds = input.mode === "CATALOG" ? [...new Set([...seedsForCategories(categories), ...input.seeds])] : input.seeds;
   const account = input.autoList ? user.ebayAccounts.find((a) => a.id === input.ebayAccountId) ?? user.ebayAccounts[0] : null;
   if (input.autoList && !account) throw new SnipeError("EBAY_NOT_CONNECTED");
   const running = await db.snipeRun.count({ where: { userId: user.id, status: "RUNNING" } });
@@ -90,9 +98,12 @@ export async function createRun(user: UserWithAccounts, input: CreateInput) {
       minProfit: input.highTicket ? HIGH_TICKET_PROFIT : null,
       priceMin: input.priceMin ?? null,
       priceMax: input.priceMax ?? null,
+      costMin: input.costMin ?? null,
+      costMax: input.costMax ?? null,
+      categories: categories.length ? categories : undefined,
       autoList: Boolean(account),
       ebayAccountId: account?.id ?? null,
-      seeds: input.seeds,
+      seeds,
       // Liste de produits précis : rien d'autre à parcourir (« exhausted »).
       ...(input.mode === "CATALOG" ? { cursor: { round: 1, seed: 0, exhausted: Boolean(products) } } : {}),
     },
@@ -130,6 +141,8 @@ async function prefillFromPool(run: SnipeRun): Promise<number> {
       minProfit: run.minProfit,
       priceMin: run.priceMin,
       priceMax: run.priceMax,
+      costMin: run.costMin,
+      costMax: run.costMax,
       themes: custom,
       exclude: [...listed.map((l) => l.supplierProductId), ...seen.map((c) => c.productId).filter((x): x is string => Boolean(x))],
       limit: need,
@@ -249,6 +262,7 @@ async function gather(run: RunRow, token: string): Promise<Cursor> {
             productId: String(it.id ?? it.pid),
             title: title.slice(0, 300) || null,
             keyword: keyword || "—",
+            seed: seeds[cur.seed],
             ...(keyword ? {} : { status: "REJECTED" as const, reason: "NO_KEYWORD" }),
           };
         }),
@@ -267,7 +281,7 @@ async function evaluate(run: RunRow, c: SnipeCandidate, token: string): Promise<
   const m = marketplace(run.marketplace);
   if (run.mode === "KEYWORDS") {
     const r = await findProduct(c.keyword, { cjToken: token, minMarginPct: run.minMarginPct, marketId: m.id });
-    const k = classify(r, { unitsSold: r.unitsSold, priceMin: run.priceMin, priceMax: run.priceMax, title: r.best?.title, minProfit: run.minProfit });
+    const k = classify(r, { unitsSold: r.unitsSold, priceMin: run.priceMin, priceMax: run.priceMax, title: r.best?.title, minProfit: run.minProfit, costMin: run.costMin, costMax: run.costMax });
     return {
       status: k.status,
       reason: k.reason ?? null,
@@ -293,9 +307,11 @@ async function evaluate(run: RunRow, c: SnipeCandidate, token: string): Promise<
   }
 
   // CATALOG : analyse complète, enregistrée aussi dans la base commune (sert aux recherches suivantes).
-  const a = await analyzeCatalogProduct(token, m.id, c.productId!, c.keyword, c.title, { minMarginPct: run.minMarginPct, minProfit: run.minProfit, priceMin: run.priceMin, priceMax: run.priceMax });
+  const a = await analyzeCatalogProduct(token, m.id, c.productId!, c.keyword, c.title, {
+    minMarginPct: run.minMarginPct, minProfit: run.minProfit, priceMin: run.priceMin, priceMax: run.priceMax, costMin: run.costMin, costMax: run.costMax,
+  });
   const keyword = a.keyword || c.keyword;
-  if (keyword) await savePool(m.id, c.productId!, keyword, a).catch((e) => console.error("Pool", e));
+  if (keyword) await savePool(m.id, c.productId!, keyword, a, c.seed).catch((e) => console.error("Pool", e));
   return {
     keyword,
     title: a.title,
@@ -485,6 +501,11 @@ export async function runState(userId: string, runId: string) {
     target: run.target,
     minMarginPct: run.minMarginPct,
     minProfit: run.minProfit,
+    priceMin: run.priceMin,
+    priceMax: run.priceMax,
+    costMin: run.costMin,
+    costMax: run.costMax,
+    categories: Array.isArray(run.categories) ? (run.categories as string[]).filter(isCategoryId) : [],
     scanned: run.scanned,
     found: run.found,
     listed: run.listed,

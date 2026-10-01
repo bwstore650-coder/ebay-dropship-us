@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/auth";
 import { isMarketplaceId, type MarketplaceId } from "@/lib/marketplaces";
-import { MAX_KEYWORDS, MAX_TARGET, parseKeywords } from "@/lib/sniper";
+import { CATEGORY_IDS, MAX_KEYWORDS, MAX_TARGET, parseKeywords } from "@/lib/sniper";
 import { createRun, SnipeError } from "@/lib/sniper-service";
 
 const body = z.object({
@@ -12,6 +12,9 @@ const body = z.object({
   minMarginPct: z.number().min(0).max(90).optional(),
   priceMin: z.number().min(0).max(100000).nullable().optional(),
   priceMax: z.number().min(0).max(100000).nullable().optional(),
+  costMin: z.number().min(0).max(100000).nullable().optional(), // prix d'achat fournisseur
+  costMax: z.number().min(0).max(100000).nullable().optional(),
+  categories: z.array(z.enum(CATEGORY_IDS as [string, ...string[]])).max(CATEGORY_IDS.length).default([]),
   seeds: z.string().max(10000).default(""), // un mot-clé par ligne
   autoList: z.boolean().default(false),
   ebayAccountId: z.string().max(64).nullable().optional(),

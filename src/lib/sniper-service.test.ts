@@ -251,6 +251,56 @@ describe("Sniper", { timeout: 90_000 }, () => {
     expect(by["P-OUT"]).toMatchObject({ status: "REJECTED", reason: "NO_SUPPLIER" });
   });
 
+  it("catégories : thèmes de recherche CJ, catégorie gardée sur le produit et dans la base commune", async () => {
+    const run = await createRun(mem.users[0] as never, { mode: "CATALOG", marketId: "EBAY_US", target: 1, seeds: ["custom theme"], categories: ["kitchen", "nope"], autoList: false });
+    const r = mem.runs.find((x) => x.id === run.id)!;
+    expect(r.seeds).toEqual(["kitchen gadget", "kitchen tools", "kitchen storage", "custom theme"]);
+    expect(r.categories).toEqual(["kitchen"]);
+    await advanceRun(run.id, Date.now() + 80_000);
+    expect(mem.cands.find((c) => c.productId === "P-GOOD")).toMatchObject({ seed: "kitchen gadget" });
+    expect(mem.insights.find((i) => i.productId === "P-GOOD")).toMatchObject({ seed: "kitchen gadget" });
+    expect((await runState("U1", run.id))!.categories).toEqual(["kitchen"]);
+
+    // 2e vendeur, autre catégorie : le produit de cuisine ne lui est pas proposé ; en cuisine, oui.
+    mem.users.push(baseUser({ id: "U2", email: "u2@x.io" }));
+    const pets = await createRun(mem.users[1] as never, { mode: "CATALOG", marketId: "EBAY_US", target: 1, seeds: [], categories: ["pets"], autoList: false });
+    expect((await runState("U2", pets.id))!.found).toBe(0);
+    mem.runs.find((x) => x.id === pets.id)!.status = "DONE";
+    const kitchen = await createRun(mem.users[1] as never, { mode: "CATALOG", marketId: "EBAY_US", target: 1, seeds: [], categories: ["kitchen"], autoList: false });
+    expect((await runState("U2", kitchen.id))!.found).toBe(1);
+  });
+
+  it("prix d'achat : hors fourchette, rejeté sans aucune recherche eBay ; dans la fourchette, analysé", async () => {
+    const run = await createRun(mem.users[0] as never, { mode: "CATALOG", marketId: "EBAY_US", target: 1, seeds: ["kitchen"], autoList: false, costMin: 10, costMax: 30 });
+    await advanceRun(run.id, Date.now() + 80_000);
+    const s = (await runState("U1", run.id))!;
+    const by = Object.fromEntries(s.candidates.map((c) => [c.productId, c]));
+    // P-GOOD (8 $) et P-NIKE (2 $) sont sous 10 $ ; P-LOW (20 $) est dans la fourchette.
+    expect(by["P-GOOD"]).toMatchObject({ status: "REJECTED", reason: "COST_RANGE" });
+    expect(by["P-GOOD"].details?.supplierPrice).toBe(8);
+    expect(by["P-LOW"].reason).not.toBe("COST_RANGE");
+    const searches = (fetch as unknown as { mock: { calls: [string][] } }).mock.calls.filter(([u]) => String(u).includes("item_summary/search"));
+    expect(searches.some(([u]) => String(u).includes("garlic"))).toBe(true); // P-LOW analysé sur eBay
+    expect(searches.some(([u]) => String(u).includes("can+opener"))).toBe(false); // P-GOOD jamais cherché sur eBay
+    // Une analyse incomplète (rejet sur le prix d'achat) ne remplace pas la base commune.
+    expect(mem.insights.find((i) => i.productId === "P-GOOD")).toBeUndefined();
+    expect(s).toMatchObject({ costMin: 10, costMax: 30 });
+
+    // Fourchette impossible : refusée.
+    await expect(createRun(mem.users[0] as never, { mode: "CATALOG", marketId: "EBAY_US", target: 1, seeds: [], autoList: false, costMin: 30, costMax: 10 })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  });
+
+  it("base commune : la fourchette d'achat s'applique aussi aux produits déjà analysés", async () => {
+    const r1 = await createRun(mem.users[0] as never, { mode: "CATALOG", marketId: "EBAY_US", target: 1, seeds: ["kitchen"], autoList: false });
+    await advanceRun(r1.id, Date.now() + 80_000);
+    mem.users.push(baseUser({ id: "U2", email: "u2@x.io" }));
+    const cheap = await createRun(mem.users[1] as never, { mode: "CATALOG", marketId: "EBAY_US", target: 1, seeds: [], autoList: false, costMax: 5 });
+    expect((await runState("U2", cheap.id))!.found).toBe(0); // P-GOOD coûte 8 $
+    mem.runs.find((x) => x.id === cheap.id)!.status = "DONE";
+    const ok = await createRun(mem.users[1] as never, { mode: "CATALOG", marketId: "EBAY_US", target: 1, seeds: [], autoList: false, costMin: 5, costMax: 10 });
+    expect((await runState("U2", ok.id))!.found).toBe(1);
+  });
+
   it("continuer la recherche : nouveau lot de produits, erreurs réessayées, refus si déjà en cours", async () => {
     const run = await createRun(mem.users[0] as never, { mode: "CATALOG", marketId: "EBAY_US", target: 1, seeds: ["kitchen"], autoList: false });
     expect(await continueRun("U1", run.id)).toBe("NOT_FOUND"); // encore en cours

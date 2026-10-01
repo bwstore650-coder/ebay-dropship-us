@@ -5,6 +5,7 @@ import { fmt, type Dict } from "@/lib/i18n";
 import { errorMessage } from "@/lib/i18n/errors";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import type { RunState } from "@/lib/sniper-service";
+import { CATEGORY_IDS, type CategoryId } from "@/lib/sniper";
 import ListingEditor from "@/components/ListingEditor";
 import SniperProductCard from "@/components/SniperProductCard";
 import { Icon } from "@/components/icons";
@@ -36,6 +37,8 @@ export default function SniperClient({
   const [error, setError] = useState<string | null>(null);
   const [autoList, setAutoList] = useState(false);
   const [highTicket, setHighTicket] = useState(startHighTicket);
+  const [categories, setCategories] = useState<CategoryId[]>([]);
+  const toggleCategory = (id: CategoryId) => setCategories((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
   const [tab, setTab] = useState<"good" | "bad">("good");
   const [sort, setSort] = useState<"profit" | "margin" | "price">("profit");
   const [editing, setEditing] = useState<Candidate | null>(null);
@@ -80,6 +83,9 @@ export default function SniperClient({
         minMarginPct: Number(f.get("minMarginPct")),
         priceMin: num("priceMin"),
         priceMax: num("priceMax"),
+        costMin: num("costMin"),
+        costMax: num("costMax"),
+        categories: mode === "CATALOG" ? categories : [],
         seeds: String(f.get("seeds") ?? ""),
         autoList,
         ebayAccountId: f.get("ebayAccountId") || null,
@@ -95,6 +101,8 @@ export default function SniperClient({
       id: data.id, mode, marketId: String(f.get("marketId")) as MarketplaceId, status: "RUNNING", target: Number(f.get("target")),
       minMarginPct: Math.max(minMargin, Number(f.get("minMarginPct")) || 0),
       minProfit: highTicket ? 100 : null,
+      priceMin: num("priceMin"), priceMax: num("priceMax"), costMin: num("costMin"), costMax: num("costMax"),
+      categories: mode === "CATALOG" ? categories : [],
       scanned: 0, found: 0, listed: 0, maxScan: 0, exhausted: false, autoList, error: null, pausedUntil: null, createdAt: new Date().toISOString(), candidates: [],
     });
     alive.current = true;
@@ -208,6 +216,17 @@ export default function SniperClient({
             </div>
             <p className="-mt-2 text-xs text-subtle">{fmt(t.marginHint, { min: minMargin })}</p>
 
+            {/* Prix d'achat chez le fournisseur */}
+            <fieldset>
+              <legend className="text-sm font-medium text-fg-2">{t.costRange}</legend>
+              <div className="mt-1.5 flex items-center gap-2">
+                <input name="costMin" type="number" min={0} step="0.01" placeholder={t.priceMin} aria-label={`${t.costRange} ${t.priceMin}`} className="input py-2" />
+                <span className="text-subtle">–</span>
+                <input name="costMax" type="number" min={0} step="0.01" placeholder={t.priceMax} aria-label={`${t.costRange} ${t.priceMax}`} className="input py-2" />
+              </div>
+              <span className="mt-1.5 block text-xs text-subtle">{t.costRangeHint}</span>
+            </fieldset>
+
             <fieldset>
               <legend className="text-sm font-medium text-fg-2">{t.priceRange}</legend>
               <div className="mt-1.5 flex items-center gap-2">
@@ -216,6 +235,35 @@ export default function SniperClient({
                 <input name="priceMax" type="number" min={0} step="0.01" placeholder={t.priceMax} aria-label={t.priceMax} className="input py-2" />
               </div>
             </fieldset>
+
+            {/* Catégories (catalogue) */}
+            {mode === "CATALOG" && (
+              <fieldset>
+                <legend className="flex w-full items-center justify-between text-sm font-medium text-fg-2">
+                  <span>{t.categories}</span>
+                  {categories.length > 0 && (
+                    <button type="button" onClick={() => setCategories([])} className="text-xs font-normal text-brand-300 hover:underline">{t.categoriesClear}</button>
+                  )}
+                </legend>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {CATEGORY_IDS.map((id) => {
+                    const on = categories.includes(id);
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        aria-pressed={on}
+                        onClick={() => toggleCategory(id)}
+                        className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${on ? "bg-brand-500/20 text-fg ring-1 ring-brand-500/50" : "bg-surface-2 text-muted ring-1 ring-line hover:text-fg"}`}
+                      >
+                        {on ? "✓ " : ""}{t.categoryNames[id]}
+                      </button>
+                    );
+                  })}
+                </div>
+                <span className="mt-1.5 block text-xs text-subtle">{categories.length ? fmt(t.categoriesCount, { n: categories.length }) : t.categoriesHint}</span>
+              </fieldset>
+            )}
 
             <label className="block text-sm font-medium text-fg-2">
               {mode === "CATALOG" ? t.themes : t.keywords}
@@ -297,6 +345,13 @@ export default function SniperClient({
                 <div>
                   <p className="font-semibold text-fg">{t[`status${run.status}` as "statusRUNNING"]}</p>
                   <p className="text-xs text-subtle">{markets[run.marketId]} · {run.mode === "CATALOG" ? t.modeCatalog : t.modeKeywords}{run.minProfit != null && <> · <span className="font-medium text-amber-300">{t.highTicketBadge}</span></>}</p>
+                  {(run.categories.length > 0 || run.costMin != null || run.costMax != null) && (
+                    <p className="mt-0.5 text-xs text-subtle">
+                      {run.categories.map((c) => t.categoryNames[c as CategoryId] ?? c).join(", ")}
+                      {run.categories.length > 0 && (run.costMin != null || run.costMax != null) ? " · " : ""}
+                      {(run.costMin != null || run.costMax != null) && fmt(t.costRangeBadge, { min: run.costMin != null ? money(run.costMin) : "—", max: run.costMax != null ? money(run.costMax) : "—" })}
+                    </p>
+                  )}
                 </div>
               </div>
               {running && <button onClick={stop} className="btn-secondary px-4 py-2 text-sm">{t.stop}</button>}

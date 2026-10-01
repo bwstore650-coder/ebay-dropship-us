@@ -20,7 +20,7 @@ import { DEFAULT_MIN_MARGIN_PCT, evaluateProduct, priceForTargetMargin, weighted
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import { marketInsights } from "@/lib/market-insights";
 import * as cj from "@/lib/suppliers/cj";
-import { type CandidateDetails, classify, DEFAULT_SEEDS, keywordFromTitle, MAX_VARIANTS, MIN_UNITS_SOLD } from "@/lib/sniper";
+import { type CandidateDetails, classify, inCostRange, SCANNER_SEEDS, keywordFromTitle, MAX_VARIANTS, MIN_UNITS_SOLD } from "@/lib/sniper";
 
 /** Un produit n'est plus proposé au-delà de ce nombre de vendeurs. */
 export const MAX_SELLERS_PER_PRODUCT = 5;
@@ -54,6 +54,8 @@ export interface AnalyzeOptions {
   minProfit?: number | null;
   priceMin?: number | null;
   priceMax?: number | null;
+  costMin?: number | null; // prix d'achat fournisseur (sans livraison) minimum
+  costMax?: number | null;
 }
 
 /** Offres pour un produit CJ : les variantes en stock dans le pays (les moins chères), avec la livraison la moins chère. */
@@ -112,6 +114,10 @@ export async function analyzeCatalogProduct(
   // Prix fournisseur (sans la livraison) dans la devise du pays, connu même quand le produit est rejeté plus loin.
   const [cheapest] = await toMarket([{ supplier: "CJ", productId: product.pid, variantId: stocked[0].v.vid, title: title ?? "", price: Number(stocked[0].v.variantSellPrice), shipping: 0, stockUs: stocked[0].stock, deliveryDaysMax: 0 }]);
   const supplierInfo: CandidateDetails = { supplierPrice: cheapest.price, stock: stocked[0].stock };
+  // Prix d'achat hors de la fourchette du vendeur : rejeté avant toute recherche eBay (aucun quota dépensé).
+  if (!inCostRange(cheapest.price, o.costMin, o.costMax)) {
+    return { ...base, ...empty, status: "REJECTED", reason: "COST_RANGE", details: supplierInfo, keyword: kw };
+  }
 
   const market = await cachedDemand(kw, 10, m.id);
   const insights = marketInsights(market);
@@ -131,7 +137,7 @@ export async function analyzeCatalogProduct(
   }
   const offers = await toMarket(await cjOffersFor(token, product, m.country));
   const e = evaluateProduct(prices, offers, o.minMarginPct, { market: m });
-  const k = classify(e, { unitsSold: market.unitsSold, priceMin: o.priceMin, priceMax: o.priceMax, title, minProfit: o.minProfit });
+  const k = classify(e, { unitsSold: market.unitsSold, priceMin: o.priceMin, priceMax: o.priceMax, title, minProfit: o.minProfit, costMin: o.costMin, costMax: o.costMax });
   return {
     ...base,
     keyword: kw,
@@ -156,7 +162,9 @@ export async function analyzeCatalogProduct(
 }
 
 /** Enregistre (ou rafraîchit) l'analyse d'un produit dans la base commune. */
-export async function savePool(marketId: MarketplaceId, productId: string, keyword: string, a: Analysis) {
+export async function savePool(marketId: MarketplaceId, productId: string, keyword: string, a: Analysis, seed?: string | null) {
+  // Rejeté sur le prix d'achat avant l'analyse eBay : analyse incomplète, on ne remplace pas celle de la base.
+  if (a.reason === "COST_RANGE" && a.marketPrice === null) return;
   // Seuls les rejets valables pour tout le monde sont gardés comme rejet ; une marge trop faible pour un vendeur
   // peut suffire à un autre (le filtre de marge est appliqué à la lecture).
   const reason = a.reason && HARD_REJECTS.has(a.reason) ? a.reason : null;
@@ -174,6 +182,7 @@ export async function savePool(marketId: MarketplaceId, productId: string, keywo
     deliveryDaysMax: a.deliveryDaysMax,
     details: a.details as unknown as Prisma.InputJsonValue,
     analyzedAt: new Date(),
+    ...(seed ? { seed } : {}), // une réanalyse sans thème garde la catégorie connue
   };
   await db.productInsight.upsert({
     where: { marketplace_supplier_productId: { marketplace: marketId, supplier: "CJ", productId } },
@@ -227,7 +236,9 @@ export interface PoolQuery {
   minProfit?: number | null;
   priceMin?: number | null;
   priceMax?: number | null;
-  themes?: string[];       // thèmes choisis par le vendeur (filtre sur le titre / la recherche)
+  costMin?: number | null; // prix d'achat fournisseur (sans livraison)
+  costMax?: number | null;
+  themes?: string[];       // thèmes choisis par le vendeur (catégories et thèmes libres)
   exclude?: string[];      // produits déjà vus dans cette recherche ou déjà en vente chez lui
   limit: number;
 }
@@ -246,7 +257,10 @@ export async function pickFromPool(q: PoolQuery): Promise<ProductInsight[]> {
       analyzedAt: { gt: new Date(Date.now() - POOL_FRESH_MS) },
       ...(q.priceMin != null || q.priceMax != null ? { marketPrice: { ...(q.priceMin != null ? { gte: q.priceMin } : {}), ...(q.priceMax != null ? { lte: q.priceMax } : {}) } } : {}),
       ...(q.exclude?.length ? { productId: { notIn: q.exclude } } : {}),
-      ...(themes.length ? { OR: themes.flatMap((t) => [{ title: { contains: t, mode: "insensitive" as const } }, { keyword: { contains: t, mode: "insensitive" as const } }]) } : {}),
+      // Thèmes : produit trouvé par ce thème (catégorie), ou thème présent dans le titre / la recherche eBay.
+      ...(themes.length
+        ? { OR: [{ seed: { in: themes } }, ...themes.flatMap((t) => [{ title: { contains: t, mode: "insensitive" as const } }, { keyword: { contains: t, mode: "insensitive" as const } }])] }
+        : {}),
     },
     orderBy: { profit: "desc" },
     take: Math.max(q.limit * 4, 40),
@@ -255,6 +269,8 @@ export async function pickFromPool(q: PoolQuery): Promise<ProductInsight[]> {
   const counts = await sellerCounts(rows.map((r) => r.productId), q.userId);
   return rows
     .filter((r) => (counts.get(r.productId) ?? 0) < MAX_SELLERS_PER_PRODUCT)
+    // Prix d'achat dans la fourchette du vendeur (enregistré dans l'analyse).
+    .filter((r) => inCostRange((r.details as CandidateDetails | null)?.supplierPrice, q.costMin, q.costMax))
     // Règles de marque mises à jour depuis l'analyse : jamais de produit de marque ou d'imitation.
     .filter((r) => !findVeroBrand(r.title ?? ""))
     // Les plus rentables restent en tête, mais l'ordre varie d'un vendeur à l'autre à rentabilité proche.
@@ -310,7 +326,7 @@ export async function scanTick(
   deadline: number,
   opts: { seeds?: string[]; cursorKey?: string; refresh?: boolean } = {},
 ): Promise<{ analyzed: number; refreshed: number; skipped?: string }> {
-  const seeds = opts.seeds?.length ? opts.seeds : DEFAULT_SEEDS;
+  const seeds = opts.seeds?.length ? opts.seeds : SCANNER_SEEDS;
   const token = await scannerToken();
   if (!token) return { analyzed: 0, refreshed: 0, skipped: "NO_CJ_ACCOUNT" };
   const m = marketplace(marketId);
@@ -324,10 +340,10 @@ export async function scanTick(
   if (!scannerMayRun(quota)) return { analyzed, refreshed, skipped: "EBAY_RESERVE" };
   let budget = scanBudget(quota);
 
-  const one = async (productId: string, keyword: string, title: string | null) => {
+  const one = async (productId: string, keyword: string, title: string | null, seed?: string) => {
     try {
       const a = await analyzeCatalogProduct(token, m.id, productId, keyword, title, { minMarginPct: DEFAULT_MIN_MARGIN_PCT });
-      await savePool(m.id, productId, keyword, a);
+      await savePool(m.id, productId, keyword, a, seed);
       errors = 0;
       budget--;
       return true;
@@ -368,7 +384,7 @@ export async function scanTick(
       const title = it.nameEn ?? it.productNameEn ?? it.productName ?? "";
       const keyword = keywordFromTitle(title);
       if (!keyword) continue;
-      if (await one(pid, keyword, title)) analyzed++;
+      if (await one(pid, keyword, title, seed)) analyzed++;
     }
     if (!items.length && cur.round > 1) continue; // page vide : on passe au thème suivant
   }
