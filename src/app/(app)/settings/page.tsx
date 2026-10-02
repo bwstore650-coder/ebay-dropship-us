@@ -7,7 +7,9 @@ import CjConnectForm from "@/components/CjConnectForm";
 import { EU_COUNTRIES } from "@/lib/eu";
 import { aeConfig } from "@/lib/suppliers";
 import { LOCALE_TAGS } from "@/lib/i18n";
-import { saveGpsr, saveGrowth, saveMessages, setAutoOrder } from "./actions";
+import { saveGpsr, saveGrowth, saveMessages, saveNotifications, setAutoOrder } from "./actions";
+import PushToggle from "@/components/PushToggle";
+import { vapidPublicKey } from "@/lib/notify";
 import { canAdvertise } from "@/lib/ebay";
 import { Icon, type IconName } from "@/components/icons";
 import { Notice, Switch } from "@/components/ui";
@@ -87,6 +89,19 @@ export default async function Settings({ searchParams }: { searchParams: Promise
             {user.autoOrder ? s.autoOrderDisable : s.autoOrderEnable}
           </button>
         </form>
+      </section>
+
+      <section id="notifications" className="card scroll-mt-24">
+        <h2 className="flex items-center gap-2.5 font-semibold text-fg"><SectionIcon name="alert" />{s.notifyTitle}</h2>
+        <p className="mt-2 text-sm text-muted">{s.notifyHelp}</p>
+        {saved === "notifications" && <Notice tone="emerald" className="mt-3">{s.saved}</Notice>}
+        <form action={saveNotifications} className="mt-4 space-y-3">
+          <Switch name="notifySales" defaultChecked={user.notifySales} label={s.notifySales} hint={s.notifySalesHelp} />
+          <button className="btn-primary px-4 py-2 text-sm">{s.save}</button>
+        </form>
+        <div className="mt-4">
+          <PushToggle t={s} publicKey={vapidPublicKey()} />
+        </div>
       </section>
 
       <section id="messages" className="card scroll-mt-24">

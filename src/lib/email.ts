@@ -77,3 +77,13 @@ export function ordersAttentionEmail(to: string, locale: string, n: number): Ema
   const t = dictFor(locale);
   return { to, subject: fmt(t.attentionSubject, { n }), ...layout(t, { heading: fmt(t.attentionSubject, { n }), paragraphs: [t.attentionBody], cta: t.attentionCta, url: `${appUrl()}/orders` }) };
 }
+
+/** Nouvelles ventes (une ou plusieurs dans le même passage). */
+export function newSalesEmail(to: string, locale: string, o: { sales: { title: string; total: string }[]; total: string; autoOrder: boolean }): Email {
+  const t = dictFor(locale);
+  const one = o.sales.length === 1;
+  const subject = one ? fmt(t.saleSubject, { total: o.total }) : fmt(t.saleSubjectMany, { n: o.sales.length, total: o.total });
+  const items = o.sales.slice(0, 5).map((s) => `${s.title} (${s.total})`).join(", ");
+  const first = one ? fmt(t.saleBody, { item: `${o.sales[0].title} (${o.sales[0].total})` }) : fmt(t.saleBodyMany, { items });
+  return { to, subject, ...layout(t, { heading: subject, paragraphs: [first, o.autoOrder ? t.saleAuto : t.saleManual], cta: t.saleCta, url: `${appUrl()}/orders` }) };
+}

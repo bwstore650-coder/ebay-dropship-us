@@ -13,6 +13,7 @@ import { landedCost, type SupplierOffer } from "@/lib/margin";
 import { marketplace } from "@/lib/marketplaces";
 import { planInfo } from "@/lib/plans";
 import { ordersAttentionEmail, sendEmail } from "@/lib/email";
+import { notifyNewSales } from "@/lib/notify";
 import { MAX_MESSAGE_FAILURES, nextMessage, renderMessage } from "@/lib/messages";
 import { syncAfterSales } from "@/lib/aftersale-service";
 import { openSession, placeSupplierOrder, quote, supplierOrderState, SupplierError, type Session, type SupplierId } from "@/lib/suppliers";
@@ -56,6 +57,7 @@ export async function importOrders(user: UserWithAccounts, account: Account): Pr
   const knownIds = new Map(known.map((k) => [k.ebayOrderId, k]));
 
   let created = 0;
+  const sales: { title: string; total: number; currency: string }[] = [];
   for (const o of orders) {
     const existing = knownIds.get(o.orderId);
     const check = checkOrderable(o);
@@ -88,7 +90,11 @@ export async function importOrders(user: UserWithAccounts, account: Account): Pr
       },
     });
     created++;
+    if (check.ok || check.code !== "CANCELLED_BY_BUYER")
+      sales.push({ title: lines[0].title ?? "eBay", total: Number(o.pricingSummary.total.value), currency: o.pricingSummary.total.currency ?? first.currency });
   }
+  // Alerte de vente (email + appareils) : une seule pour le lot, jamais bloquante.
+  await notifyNewSales(user, sales).catch((e) => console.error("Alerte ventes", e));
   return created;
 }
 

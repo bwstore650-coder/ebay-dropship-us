@@ -55,6 +55,14 @@ export async function saveMessages(formData: FormData) {
   redirect("/settings?saved=messages#messages");
 }
 
+/** Alertes de vente par email. */
+export async function saveNotifications(formData: FormData) {
+  const user = await requireUser();
+  await db.user.update({ where: { id: user.id }, data: { notifySales: checked(formData, "notifySales") } });
+  revalidatePath("/settings");
+  redirect("/settings?saved=notifications#notifications");
+}
+
 /** Publicité automatique (Promoted Listings) et repricing. */
 export async function saveGrowth(formData: FormData) {
   const user = await requireUser();

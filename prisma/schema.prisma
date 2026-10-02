@@ -108,6 +108,8 @@ model User {
 
   @@index([googleId])
   buyerMessages      BuyerMessage[]
+  notifySales        Boolean  @default(true) // email à chaque nouvelle vente
+  pushSubscriptions  PushSubscription[]
 }
 
 model EbayAccount {
@@ -648,4 +650,17 @@ model BuyerMessage {
 
   @@unique([ebayAccountId, messageId])
   @@index([userId, status])
+}
+
+/// Notifications du navigateur (Web Push) : un abonnement par appareil.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
