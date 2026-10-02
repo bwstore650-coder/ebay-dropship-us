@@ -225,8 +225,8 @@ export async function publishListing(user: UserWithAccounts, input: PublishInput
   const m = marketplace(input.marketId);
   const account = user.ebayAccounts.find((a) => a.id === input.ebayAccountId);
   if (!account) throw new ListingError("EBAY_NOT_CONNECTED");
-  const setup = await db.ebayMarketSetup.findUnique({ where: { ebayAccountId_marketplaceId: { ebayAccountId: account.id, marketplaceId: m.id } } });
-  if (!setup) throw new ListingError("EBAY_SETUP_REQUIRED");
+  const saved = await db.ebayMarketSetup.findUnique({ where: { ebayAccountId_marketplaceId: { ebayAccountId: account.id, marketplaceId: m.id } } });
+  if (!saved) throw new ListingError("EBAY_SETUP_REQUIRED");
 
   const eu = isEuMarket(m.id);
   if (eu && !(user.euRpCompany && user.euRpAddress && user.euRpCity && user.euRpPostalCode && user.euRpCountry && user.euRpEmail))
@@ -290,6 +290,9 @@ export async function publishListing(user: UserWithAccounts, input: PublishInput
 
   try {
     const token = await userToken(account);
+    // Politiques toujours présentes sur le compte eBay (réparées si possible), sinon le vendeur les rechoisit.
+    const setup = await checkedSetup(saved, await ebay.getPolicies(token, m.id));
+    if (!setup) throw new ListingError("EBAY_SETUP_REQUIRED");
     // Le lieu d'expédition peut avoir disparu chez eBay (compte eBay reconnecté, lieu supprimé dans Seller Hub) :
     // il est recréé à l'identique, sinon eBay refuse l'annonce (« Location information not found »).
     await ebay.ensureLocation(token, setup.merchantLocationKey, shipFromOf(setup, m.country));
@@ -328,7 +331,7 @@ export async function publishListing(user: UserWithAccounts, input: PublishInput
     return { id: listing.id, listingId, url: ebayItemUrl(m.id, listingId) };
   } catch (e) {
     const message = e instanceof EbayApiError ? e.readable : e instanceof Error ? e.message : String(e);
-    await db.listing.update({ where: { id: listing.id }, data: { errorMessage: message.slice(0, 1000) } });
+    if (!(e instanceof ListingError)) await db.listing.update({ where: { id: listing.id }, data: { errorMessage: message.slice(0, 1000) } });
     if (e instanceof EbayReconnectRequired) throw new ListingError("EBAY_RECONNECT");
     if (e instanceof EbayApiError) {
       if (e.status === 401) throw new ListingError("EBAY_RECONNECT");
@@ -345,11 +348,30 @@ export async function setupOptions(user: UserWithAccounts, accountId: string, ma
   if (!account) throw new ListingError("EBAY_NOT_CONNECTED");
   const token = await userToken(account);
   await ebay.optInBusinessPolicies(token);
-  const [policies, existing] = await Promise.all([
+  const [policies, saved] = await Promise.all([
     ebay.getPolicies(token, marketId),
     db.ebayMarketSetup.findUnique({ where: { ebayAccountId_marketplaceId: { ebayAccountId: account.id, marketplaceId: marketId } } }),
   ]);
+  // Réglage qui pointe vers des politiques disparues : réparé si possible, sinon le vendeur les rechoisit.
+  const existing = saved ? await checkedSetup(saved, policies) : null;
   return { policies, existing };
+}
+
+type MarketSetup = NonNullable<Awaited<ReturnType<typeof db.ebayMarketSetup.findUnique>>>;
+
+/**
+ * Les politiques enregistrées existent-elles encore sur le compte eBay ? (Compte reconnecté, politique supprimée
+ * dans Seller Hub… : eBay refuse alors l'annonce, « invalid shipping policy ».) Une politique disparue est remplacée
+ * par la seule politique de ce type du compte ; s'il y en a plusieurs, le vendeur doit choisir (null).
+ */
+export async function checkedSetup(setup: MarketSetup, policies: ebay.SellerPolicies): Promise<MarketSetup | null> {
+  const pick = (list: ebay.PolicyOption[], id: string) => (list.some((x) => x.id === id) ? id : list.length === 1 ? list[0].id : null);
+  const f = pick(policies.fulfillment, setup.fulfillmentPolicyId);
+  const p = pick(policies.payment, setup.paymentPolicyId);
+  const r = pick(policies.returns, setup.returnPolicyId);
+  if (!f || !p || !r) return null;
+  if (f === setup.fulfillmentPolicyId && p === setup.paymentPolicyId && r === setup.returnPolicyId) return setup;
+  return db.ebayMarketSetup.update({ where: { id: setup.id }, data: { fulfillmentPolicyId: f, paymentPolicyId: p, returnPolicyId: r } });
 }
 
 /** Crée les politiques standard qui manquent au vendeur pour ce pays, puis renvoie les réglages à jour. */

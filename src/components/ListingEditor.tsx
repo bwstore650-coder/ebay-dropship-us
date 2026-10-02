@@ -127,7 +127,11 @@ export default function ListingEditor({
     });
     const data = await res.json().catch(() => ({}));
     setPublishing(false);
-    if (!res.ok) return showError(data);
+    if (!res.ok) {
+      // Politiques eBay à rechoisir (disparues du compte) : le formulaire des réglages réapparaît.
+      if (data?.error === "EBAY_SETUP_REQUIRED") loadSetup();
+      return showError(data);
+    }
     setDone({ url: data.url });
   }
 

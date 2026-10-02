@@ -14,7 +14,11 @@ const store = vi.hoisted(() => ({
 
 vi.mock("@/lib/db", () => ({
   db: {
-    ebayMarketSetup: { findUnique: vi.fn(async () => store.setup), upsert: vi.fn() },
+    ebayMarketSetup: {
+      findUnique: vi.fn(async () => store.setup),
+      upsert: vi.fn(),
+      update: vi.fn(async ({ data }: { data: Record<string, string> }) => Object.assign(store.setup!, data)),
+    },
     listing: {
       findFirst: vi.fn(async ({ where }: { where: { id: string; userId: string } }) =>
         where.id === "LIVE1" && where.userId === "U1"
@@ -57,9 +61,13 @@ const parse = (b: unknown) => {
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 
 let locationExists = true;
+let accountPolicies = { f: ["F1"], p: ["PAY1"], r: ["R1"] };
 function router(url: string, init?: RequestInit): Response {
   const u = new URL(url);
   const path = u.pathname;
+  if (path === "/sell/account/v1/fulfillment_policy") return json({ fulfillmentPolicies: accountPolicies.f.map((id) => ({ fulfillmentPolicyId: id, name: id })) });
+  if (path === "/sell/account/v1/payment_policy") return json({ paymentPolicies: accountPolicies.p.map((id) => ({ paymentPolicyId: id, name: id })) });
+  if (path === "/sell/account/v1/return_policy") return json({ returnPolicies: accountPolicies.r.map((id) => ({ returnPolicyId: id, name: id })) });
   if (path.startsWith("/sell/inventory/v1/location/")) {
     if ((init?.method ?? "GET") === "GET")
       return locationExists ? json({ merchantLocationKey: path.split("/").pop() }) : json({ errors: [{ errorId: 25805, message: "merchantLocationKey not found." }] }, 404);
@@ -136,6 +144,7 @@ const baseInput = {
 
 beforeEach(() => {
   locationExists = true;
+  accountPolicies = { f: ["F1"], p: ["PAY1"], r: ["R1"] };
   vi.stubEnv("DATABASE_URL", "postgresql://x");
   vi.stubEnv("SESSION_SECRET", "x".repeat(32));
   vi.stubEnv("ENCRYPTION_KEY", "0".repeat(64));
@@ -194,6 +203,19 @@ describe("publication d'une annonce", { timeout: 30_000 }, () => {
     const created = find("POST", "/sell/inventory/v1/location/PL-US-90001")!;
     expect(created.body).toMatchObject({ locationTypes: ["WAREHOUSE"], merchantLocationStatus: "ENABLED", location: { address: { postalCode: "90001", country: "US" } } });
     expect(calls.findIndex((c) => c.url.includes("/location/")) < calls.findIndex((c) => c.url.includes("/offer"))).toBe(true);
+  });
+
+  it("politiques disparues du compte eBay : remplacées par la seule de chaque type, sinon le vendeur doit rechoisir", async () => {
+    accountPolicies = { f: ["F-NEW"], p: ["PAY1"], r: ["R-NEW"] };
+    await publishListing(user(), baseInput);
+    const offer = find("POST", "/sell/inventory/v1/offer")!.body as { listingPolicies: Record<string, string> };
+    expect(offer.listingPolicies).toEqual({ fulfillmentPolicyId: "F-NEW", paymentPolicyId: "PAY1", returnPolicyId: "R-NEW" });
+    expect(store.setup).toMatchObject({ fulfillmentPolicyId: "F-NEW", returnPolicyId: "R-NEW" }); // réglage réparé
+
+    calls.length = 0;
+    accountPolicies = { f: ["A", "B"], p: ["PAY1"], r: ["R-NEW"] };
+    await expect(publishListing(user(), baseInput)).rejects.toMatchObject({ code: "EBAY_SETUP_REQUIRED" });
+    expect(find("POST", "/sell/inventory/v1/offer")).toBeUndefined();
   });
 
   it("refuse un prix sous la marge minimum (prix minimum indiqué)", async () => {
