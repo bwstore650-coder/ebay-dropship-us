@@ -114,6 +114,15 @@ Rules:
 
 /* ---------- Outils de lecture ---------- */
 
+/** Sens de chaque alerte, pour que l'IA l'explique sans deviner. */
+const ALERT_MEANING: Record<string, string> = {
+  BELOW_STANDARD: "eBay seller level is Below Standard: eBay may limit listings. Ship fast, upload tracking, answer buyers.",
+  NOT_ORDERED: "Sales not yet ordered from the supplier more than 12 hours after the sale (risk of late shipment). Fix them on the Orders page.",
+  NO_TRACKING: "Orders without a tracking number 3 days after being placed with the supplier. Check them on the Orders page.",
+  LIMIT: "More than 80 % of the eBay selling limit is used: new listings may be refused. The seller can ask eBay for a higher limit.",
+  RECONNECT: "Not a problem with the account: Sellvela needs a new read-only permission to show the eBay seller standards. Reconnect eBay from the Account protection page.",
+};
+
 async function runReadTool(user: UserWithAccounts, name: string, input: Record<string, unknown>): Promise<unknown> {
   switch (name) {
     case "store_summary": {
@@ -162,7 +171,7 @@ async function runReadTool(user: UserWithAccounts, name: string, input: Record<s
       const out = [];
       for (const a of user.ebayAccounts) {
         const h = await accountHealth(user.id, a, m.id);
-        out.push({ account: a.id, sellerLevel: h.standards?.level ?? null, alerts: h.alerts, sellingLimitUsage: h.usage, salesAtRisk: h.risks.slice(0, 10) });
+        out.push({ account: a.id, sellerLevel: h.standards?.level ?? null, alerts: h.alerts.map((x) => ({ ...x, meaning: ALERT_MEANING[x.kind] })), sellingLimitUsage: h.usage, salesAtRisk: h.risks.slice(0, 10) });
       }
       return out.length ? out : { error: "NO_EBAY_ACCOUNT" };
     }

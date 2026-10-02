@@ -9,6 +9,13 @@ type Msg = { role: "user" | "assistant"; content: string };
 type Pending = { tool: "start_product_search" | "end_listing" | "check_listings_now"; args: Record<string, unknown> };
 type Item = Msg & { pending?: Pending; done?: { ok: boolean; text: string; link?: string } };
 
+/** Texte de l'IA : les **mots** deviennent du gras, rien d'autre n'est interprété (pas de HTML). */
+function richText(text: string) {
+  return text.split(/(\*\*[^*\n]+\*\*)/g).map((part, i) =>
+    part.startsWith("**") && part.endsWith("**") && part.length > 4 ? <strong key={i} className="font-semibold text-fg">{part.slice(2, -2)}</strong> : part,
+  );
+}
+
 /** Chat de l'assistant Sellvela (bouton flottant). Les actions proposées par l'IA attendent la confirmation du vendeur. */
 export default function AssistantChat({ t, errors, categoryNames }: { t: Dict["assistant"]; errors: Dict["errors"]; categoryNames: Record<string, string> }) {
   const [open, setOpen] = useState(false);
@@ -105,7 +112,7 @@ export default function AssistantChat({ t, errors, categoryNames }: { t: Dict["a
             {items.map((m, i) => (
               <div key={i} className={m.role === "user" ? "flex justify-end" : ""}>
                 <div className={`max-w-[90%] whitespace-pre-wrap rounded-2xl px-3 py-2 ${m.role === "user" ? "bg-brand-500/20 text-fg" : "bg-surface-2 text-fg-2"}`}>
-                  {m.content}
+                  {m.role === "assistant" ? richText(m.content) : m.content}
                   {m.pending && (
                     <div className="mt-2 space-y-2 rounded-xl border border-brand-500/40 bg-brand-500/10 p-2.5">
                       <p className="text-xs font-semibold text-fg">{describe(m.pending)}</p>
