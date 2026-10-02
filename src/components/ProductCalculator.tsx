@@ -37,7 +37,7 @@ export default function ProductCalculator({ t, marketId, price, cost, shipping, 
     () => quantityProfit({ saleTotal: num(sale), supplierCost: num(supplier), supplierShipping: num(ship), promotedRate: Math.min(num(ads), 100) / 100, market: m, quantity: num(qty) }),
     [sale, supplier, ship, ads, qty, m],
   );
-  const money = (v: number) => `${v < 0 ? "−" : ""}${Math.abs(v).toFixed(2)} ${m.symbol}`;
+  const money = (v: number) => `${v < 0 ? "−" : ""}${Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${m.symbol}`;
   const tone = r.unit.profit <= 0 ? "text-red-300" : r.unit.marginPct >= minMargin ? "text-emerald-300" : "text-amber-300";
   const ready = num(sale) > 0;
 
