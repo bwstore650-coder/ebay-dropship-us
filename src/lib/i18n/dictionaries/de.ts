@@ -784,6 +784,8 @@ export const de: Dict = {
     card: {
       expired: "Die eBay-Preise dieser Analyse sind älter als 24 Std. und werden ausgeblendet. Starte eine neue Suche für aktuelle Preise.",
       viewEbay: "Auf eBay ansehen",
+      viewSearch: "eBay-Suche",
+      viewEbayHint: "Öffnet das ähnlichste eBay-Angebot (per Produktfoto gefunden)",
       viewCj: "Bei CJ ansehen",
       ebayPrice: "eBay-Preis (Markt)",
       fees: "eBay-Gebühren",

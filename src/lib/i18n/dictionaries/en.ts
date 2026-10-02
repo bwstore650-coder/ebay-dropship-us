@@ -783,6 +783,8 @@ export const en = {
     card: {
       expired: "eBay prices from this analysis are more than 24 h old and are hidden. Run a new search to see up-to-date prices.",
       viewEbay: "View on eBay",
+      viewSearch: "eBay search",
+      viewEbayHint: "Opens the closest eBay listing (found by the product photo)",
       viewCj: "View on CJ",
       ebayPrice: "eBay price (market)",
       fees: "eBay fees",

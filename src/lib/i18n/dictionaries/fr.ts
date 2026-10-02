@@ -784,6 +784,8 @@ export const fr: Dict = {
     card: {
       expired: "Les prix eBay de cette analyse ont plus de 24 h et sont masqués. Lance une nouvelle recherche pour voir les prix à jour.",
       viewEbay: "Voir sur eBay",
+      viewSearch: "Recherche eBay",
+      viewEbayHint: "Ouvre l'annonce eBay la plus proche (trouvée par la photo du produit)",
       viewCj: "Voir sur CJ",
       ebayPrice: "Prix eBay (marché)",
       fees: "Frais eBay",

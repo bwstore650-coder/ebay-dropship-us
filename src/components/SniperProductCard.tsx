@@ -93,6 +93,23 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
   const k = t.card;
   const d: CandidateDetails = c.details ?? {};
   const m = d.market;
+  const searchUrl = m?.search ? ebayPreciseSearchUrl(marketId, m.search) : ebaySearchUrl(marketId, c.keyword);
+  /**
+   * « Voir sur eBay » : l'annonce la plus proche, trouvée par la photo (le site eBay n'accepte pas de recherche
+   * par image dans un lien). L'onglet est ouvert tout de suite (sinon bloqué), puis dirigé vers l'annonce ;
+   * à défaut, vers la recherche précise.
+   */
+  async function openClosest(e: React.MouseEvent<HTMLAnchorElement>) {
+    if (!c.image || c.expired || e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+    e.preventDefault();
+    const win = window.open("about:blank", "_blank");
+    if (!win) return void (window.location.href = searchUrl);
+    win.opener = null;
+    const q = new URLSearchParams({ image: c.image, kw: c.keyword, m: marketId, ...(m?.search?.cost ? { cost: String(m.search.cost) } : {}) });
+    const data = await fetch(`/api/comparables?${q}`).then((r) => (r.ok ? r.json() : null)).catch(() => null) as { items?: { url: string | null }[] } | null;
+    const url = data?.items?.find((i) => i.url && /^https:\/\/(www\.)?ebay\./.test(i.url))?.url;
+    win.location.href = url ?? searchUrl;
+  }
   const good = c.status === "PROFITABLE" || c.status === "LISTED";
   const marginTone = c.marginPct === null ? "text-muted" : c.marginPct >= minMargin ? "text-emerald-300" : "text-amber-300";
   const num = (v: number | null | undefined, suffix = "") => (v === null || v === undefined ? "—" : `${v.toLocaleString("en-US", { maximumFractionDigits: 1 })}${suffix}`);
@@ -154,9 +171,15 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
           )}
           {reason && <p className="mt-1.5 text-xs"><span className="inline-block rounded-md bg-surface-3 px-2 py-0.5 font-medium leading-snug text-muted">{reason}</span></p>}
           <p className="mt-2 flex flex-wrap gap-2 text-xs">
-            <a href={m?.search ? ebayPreciseSearchUrl(marketId, m.search) : ebaySearchUrl(marketId, c.keyword)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface-2 px-2.5 py-1 font-medium text-fg-2 hover:border-brand-500/50 hover:text-fg">
+            <a href={searchUrl} target="_blank" rel="noopener noreferrer" onClick={openClosest} title={c.image && !c.expired ? k.viewEbayHint : undefined}
+              className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface-2 px-2.5 py-1 font-medium text-fg-2 hover:border-brand-500/50 hover:text-fg">
               {k.viewEbay} <span aria-hidden="true">↗</span>
             </a>
+            {c.image && !c.expired && (
+              <a href={searchUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg px-1.5 py-1 font-medium text-muted hover:text-fg">
+                {k.viewSearch} <span aria-hidden="true">↗</span>
+              </a>
+            )}
             <button type="button" onClick={() => setCalc((v) => !v)} aria-expanded={calc}
               className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 font-medium transition ${calc ? "border-brand-500/50 bg-brand-500/15 text-fg" : "border-line bg-surface-2 text-fg-2 hover:border-brand-500/50 hover:text-fg"}`}>
               <Icon name="dollar" className="h-3.5 w-3.5" />{t.calc.open}

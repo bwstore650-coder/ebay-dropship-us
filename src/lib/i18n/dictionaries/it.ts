@@ -784,6 +784,8 @@ export const it: Dict = {
     card: {
       expired: "I prezzi eBay di questa analisi hanno più di 24 h e sono nascosti. Avvia una nuova ricerca per vedere i prezzi aggiornati.",
       viewEbay: "Vedi su eBay",
+      viewSearch: "Ricerca eBay",
+      viewEbayHint: "Apre l'inserzione eBay più simile (trovata dalla foto del prodotto)",
       viewCj: "Vedi su CJ",
       ebayPrice: "Prezzo eBay (mercato)",
       fees: "Commissioni eBay",
