@@ -4,7 +4,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Row = Record<string, unknown>;
-const mem = vi.hoisted(() => ({ orders: [] as Row[], listings: [] as Row[], seq: 0 }));
+const mem = vi.hoisted(() => ({ orders: [] as Row[], listings: [] as Row[], variants: [] as Row[], seq: 0 }));
 
 /** Filtre minimal façon Prisma : égalité, { in }, { not: null }, { lt }, { gte }. */
 function match(row: Row, where: Row = {}): boolean {
@@ -35,6 +35,13 @@ vi.mock("@/lib/db", () => ({
     listing: {
       findMany: vi.fn(async ({ where }: { where: Row }) => mem.listings.filter((l) => match(l, where))),
       findUnique: vi.fn(async ({ where }: { where: Row }) => mem.listings.find((l) => match(l, where)) ?? null),
+    },
+    listingVariant: {
+      findMany: vi.fn(async ({ where }: { where: { sku: { in: string[] }; listing: { userId: string } } }) =>
+        mem.variants
+          .filter((v) => where.sku.in.includes(v.sku as string))
+          .map((v) => ({ ...v, listing: mem.listings.find((l) => l.id === v.listingId && l.userId === where.listing.userId) }))
+          .filter((v) => v.listing)),
     },
     order: {
       findMany: vi.fn(async ({ where }: { where: Row }) => mem.orders.filter((o) => match(o, where))),
@@ -130,6 +137,7 @@ beforeEach(() => {
   vi.stubEnv("SESSION_SECRET", "x".repeat(32));
   vi.stubEnv("ENCRYPTION_KEY", "0".repeat(64));
   mem.orders = [];
+  mem.variants = [];
   mem.listings = [{ id: "LST", userId: "U1", sku: "PL-OURS", supplierVariantId: "V1", supplier: "CJ", supplierProductId: "P1", marketplace: "EBAY_US", currency: "USD" }];
   calls = [];
   cjStock = 50;
@@ -165,6 +173,21 @@ describe("commandes automatiques", { timeout: 60_000 }, () => {
     const a2 = mem.orders.find((o) => o.ebayOrderId === "A-2")!;
     expect(a2).toMatchObject({ status: "PENDING", listingId: "EXT" });
     expect(a2.lines).toEqual([{ lineItemId: "LI-A-2", sku: "SOMEONE-ELSE", quantity: 1, listingId: "EXT", supplier: "CJ", productId: "P2", vid: "V2", title: "Electric Can Opener", legacyItemId: "ITEM-A-2" }]);
+  });
+
+  it("import : vente d'une variante (taille / quantité) d'une annonce à variantes", async () => {
+    mem.listings.push({ id: "GRP", userId: "U1", sku: "PL-GRP", groupKey: "PL-GRP", supplierVariantId: "V1", supplier: "CJ", supplierProductId: "P9", marketplace: "EBAY_US", currency: "USD" });
+    mem.variants.push({ id: "VAR2", listingId: "GRP", sku: "SOMEONE-ELSE", supplierVariantId: "V9-L" });
+    expect(await importOrders(user(), account)).toBe(3);
+    const a2 = mem.orders.find((o) => o.ebayOrderId === "A-2")!;
+    expect(a2).toMatchObject({ status: "PENDING", listingId: "GRP" });
+    expect(a2.lines).toEqual([{ lineItemId: "LI-A-2", sku: "SOMEONE-ELSE", quantity: 1, listingId: "GRP", supplier: "CJ", productId: "P9", vid: "V9-L", title: "Electric Can Opener", legacyItemId: "ITEM-A-2" }]);
+  });
+
+  it("import : variante d'une annonce d'un autre utilisateur ignorée", async () => {
+    mem.listings.push({ id: "OTHER", userId: "U2", sku: "PL-X", supplier: "CJ", supplierProductId: "P9", marketplace: "EBAY_US", currency: "USD" });
+    mem.variants.push({ id: "VARX", listingId: "OTHER", sku: "SOMEONE-ELSE", supplierVariantId: "V9-L" });
+    expect(await importOrders(user(), account)).toBe(2);
   });
 
   it("import : une annonce liée puis plus gérée (terminée) ne déclenche plus de commande", async () => {

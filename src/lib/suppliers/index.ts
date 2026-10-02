@@ -262,3 +262,77 @@ export async function variantsOf(s: Session, productId: string, country: string)
     throw e;
   }
 }
+
+/* ---------- Toutes les variantes vendables d'un produit (annonce à variantes) ---------- */
+
+export interface VariantQuote {
+  variantId: string;
+  label: string;
+  options: Record<string, string>; // ex. { Size: "L", Quantity: "1PCS" }
+  image?: string;
+  unitPrice: number; // USD
+  shipping: number;  // USD
+  taxRate?: number;
+  stock: number;
+  deliveryDaysMax: number;
+}
+
+/**
+ * Variantes en stock dans le pays et livrables rapidement, avec leur coût (USD).
+ * CJ : la livraison est calculée une fois par poids (les tailles d'un même modèle pèsent pareil), pour limiter
+ * les appels (1 par seconde chez CJ).
+ */
+export async function variantQuotes(s: Session, productId: string, country: string, max: number, optionsOf: (keyNames: string | undefined, variantKey: string | undefined, label: string) => Record<string, string>): Promise<VariantQuote[]> {
+  if (s.supplier === "CJ") {
+    const p = await cj.getProduct(s.token, productId);
+    const inStock = p.variants
+      .map((v) => ({ v, stock: v.inventories?.find((i) => i.countryCode === country)?.totalInventory ?? 0 }))
+      .filter((x) => x.stock > 0)
+      .slice(0, max);
+    const byWeight = new Map<string, Promise<cj.CjFreightOption[]>>();
+    const out: VariantQuote[] = [];
+    for (const { v, stock } of inStock) {
+      const w = Number(v.variantWeight);
+      const key = Number.isFinite(w) && w > 0 ? String(Math.round(w / 10)) : v.vid;
+      if (!byWeight.has(key)) byWeight.set(key, cj.freightCalculate(s.token, v.vid, 1, country));
+      const options = await byWeight.get(key)!;
+      if (!options.length) continue;
+      const best = options.reduce((a, b) => (b.logisticPrice < a.logisticPrice ? b : a));
+      const days = cj.parseMaxDays(best.logisticAging);
+      if (days > MAX_DELIVERY_DAYS) continue;
+      const label = v.variantKey || v.variantNameEn || v.variantSku || v.vid;
+      out.push({
+        variantId: v.vid,
+        label,
+        options: optionsOf(p.productKeyEn, v.variantKey, label),
+        ...(v.variantImage && /^https:\/\//.test(v.variantImage) ? { image: v.variantImage } : {}),
+        unitPrice: Number(v.variantSellPrice),
+        shipping: Number(best.logisticPrice),
+        stock,
+        deliveryDaysMax: days,
+      });
+    }
+    return out;
+  }
+  const p = await ae.getProduct(s.cfg, s.session, productId, country);
+  const out: VariantQuote[] = [];
+  for (const v of p.skus.filter((x) => x.stock > 0 && x.shipsFrom === country).slice(0, max)) {
+    const options = await ae.shipping(s.cfg, s.session, { productId, skuId: v.skuId, quantity: 1, country, sendFrom: country });
+    if (!options.length) continue;
+    const best = options.reduce((a, b) => (b.amountUsd < a.amountUsd ? b : a));
+    if (best.deliveryDaysMax > MAX_DELIVERY_DAYS) continue;
+    const parts = v.label.split(/\s*\/\s*/).filter(Boolean);
+    out.push({
+      variantId: v.skuId,
+      label: v.label,
+      options: parts.length ? Object.fromEntries(parts.map((x, i) => [parts.length === 1 ? "Option" : `Option ${i + 1}`, x.slice(0, 65)])) : { Option: v.skuId },
+      ...(v.image ? { image: v.image } : {}),
+      unitPrice: v.price,
+      shipping: best.amountUsd,
+      taxRate: ae.AE_TAX_ESTIMATE[country],
+      stock: v.stock,
+      deliveryDaysMax: best.deliveryDaysMax,
+    });
+  }
+  return out;
+}

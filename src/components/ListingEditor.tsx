@@ -50,6 +50,8 @@ export default function ListingEditor({
   const [publishing, setPublishing] = useState(false);
   const [done, setDone] = useState<{ url: string } | null>(null);
   const [titleIdeas, setTitleIdeas] = useState<string[]>([]);
+  // Annonce à variantes : chaque variante (taille, couleur, lot…) avec son prix et sa quantité.
+  const [vrows, setVrows] = useState<{ variantId: string; include: boolean; price: string; quantity: number }[]>([]);
   const ai = useAiGenerate(null);
   const ta = t.ai;
 
@@ -74,6 +76,7 @@ export default function ListingEditor({
       setDescription(d.descriptionHtml);
       setAspects(d.aspects);
       setTitleIdeas(d.copySource === "ai" ? d.titles : []);
+      setVrows((d.variants ?? []).map((v) => ({ variantId: v.variantId, include: true, price: v.suggestedPrice.toFixed(2), quantity: v.quantity })));
       ai.setUsage(d.ai.configured ? d.ai : null);
     })();
     return () => { cancelled = true; };
@@ -100,8 +103,17 @@ export default function ListingEditor({
     () => (draft && priceNum > 0 ? computeMargin({ saleTotal: priceNum, supplierCost: draft.cost, market: m }) : null),
     [draft, priceNum, m],
   );
-  const missing = draft ? draft.aspectDefs.filter((d) => d.required && !aspects[d.name]?.length).map((d) => d.name) : [];
-  const tooLow = !!draft && !!margin && margin.marginPct < draft.minMarginPct;
+  const included = vrows.filter((r) => r.include);
+  const useVariants = included.length >= 2;
+  const variantMargin = (variantId: string, priceText: string) => {
+    const v = draft?.variants.find((x) => x.variantId === variantId);
+    const p = Number(priceText.replace(",", "."));
+    return v && p > 0 ? computeMargin({ saleTotal: p, supplierCost: v.cost, market: m }) : null;
+  };
+  const variantsTooLow = useVariants && included.some((r) => (variantMargin(r.variantId, r.price)?.marginPct ?? -1) < (draft?.minMarginPct ?? 0));
+  const varying = new Set(useVariants ? (draft?.variationNames ?? []).map((n) => n.toLowerCase()) : []);
+  const missing = draft ? draft.aspectDefs.filter((d) => d.required && !aspects[d.name]?.length && !varying.has(d.name.toLowerCase())).map((d) => d.name) : [];
+  const tooLow = useVariants ? variantsTooLow : !!draft && !!margin && margin.marginPct < draft.minMarginPct;
   const needsGpsr = isEuMarket(marketId) && !hasGpsr;
   const ready = !!draft && !!setup?.existing && !tooLow && missing.length === 0 && !needsGpsr && title.trim().length >= 10 && !!accountId;
 
@@ -115,14 +127,15 @@ export default function ListingEditor({
       body: JSON.stringify({
         ebayAccountId: accountId,
         marketId,
-        ref: draft.ref,
+        ref: useVariants ? { ...draft.ref, variantId: included[0].variantId } : draft.ref,
         categoryId: draft.categoryId,
         title,
         descriptionHtml: description,
         aspects,
-        price: priceNum,
-        quantity,
+        price: useVariants ? Number(included[0].price.replace(",", ".")) : priceNum,
+        quantity: useVariants ? included[0].quantity : quantity,
         keyword: keyword.slice(0, 120),
+        ...(useVariants ? { variants: included.map((r) => ({ variantId: r.variantId, price: Number(r.price.replace(",", ".")), quantity: r.quantity })) } : {}),
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -225,8 +238,71 @@ export default function ListingEditor({
       )}
       {ai.error && <p className="text-sm text-red-400">{errorMessage(errors, ai.error)}</p>}
 
+      {/* Variantes (tailles, couleurs, lots…) : une seule annonce eBay */}
+      {vrows.length >= 2 && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="text-sm font-semibold">{fmt(t.variantsTitle, { n: included.length, total: vrows.length })}</h3>
+            <span className="text-xs text-muted">{draft.variationNames.join(" · ")}</span>
+          </div>
+          <p className="text-xs text-muted">{fmt(t.variantsHelp, { pct: draft.minMarginPct })}</p>
+          <div className="overflow-x-auto rounded-xl border border-line">
+            <table className="w-full min-w-[560px] text-left text-sm">
+              <thead className="border-b border-line text-xs text-subtle">
+                <tr>
+                  <th className="px-3 py-2 font-medium" />
+                  <th className="px-3 py-2 font-medium">{t.variantCol}</th>
+                  <th className="px-3 py-2 font-medium">{t.variantStock}</th>
+                  <th className="px-3 py-2 font-medium">{fmt(t.price, { currency: draft.currency })}</th>
+                  <th className="px-3 py-2 font-medium">{t.quantity}</th>
+                  <th className="px-3 py-2 font-medium">{t.variantProfit}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-line">
+                {vrows.map((r, i) => {
+                  const v = draft.variants.find((x) => x.variantId === r.variantId)!;
+                  const mg = variantMargin(r.variantId, r.price);
+                  const low = r.include && (!mg || mg.marginPct < draft.minMarginPct);
+                  const set = (patch: Partial<typeof r>) => setVrows((rows) => rows.map((x, k) => (k === i ? { ...x, ...patch } : x)));
+                  return (
+                    <tr key={r.variantId} className={r.include ? "" : "opacity-50"}>
+                      <td className="px-3 py-2">
+                        <input type="checkbox" checked={r.include} onChange={(e) => set({ include: e.target.checked })} aria-label={v.label} />
+                      </td>
+                      <td className="px-3 py-2">
+                        <span className="flex items-center gap-2">
+                          {v.image && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={v.image} alt="" className="h-8 w-8 shrink-0 rounded bg-white object-contain" />
+                          )}
+                          <span className="text-fg-2">{Object.values(v.options).join(" · ")}</span>
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 tabular-nums text-muted">{v.stock}</td>
+                      <td className="px-3 py-2">
+                        <input inputMode="decimal" value={r.price} onChange={(e) => set({ price: e.target.value })} disabled={!r.include} className="input w-24 py-1 text-sm tabular-nums" aria-label={`${t.variantCol} ${v.label}`} />
+                        <span className="mt-0.5 block text-[11px] text-subtle">{fmt(t.variantMin, { min: money(v.minPrice) })}</span>
+                      </td>
+                      <td className="px-3 py-2">
+                        <input type="number" min={1} max={Math.min(10, v.stock)} value={r.quantity} disabled={!r.include}
+                          onChange={(e) => set({ quantity: Math.max(1, Math.min(10, v.stock, Number(e.target.value) || 1)) })} className="input w-16 py-1 text-sm" aria-label={t.quantity} />
+                      </td>
+                      <td className={`px-3 py-2 text-xs font-medium tabular-nums ${low ? "text-red-300" : "text-emerald-300"}`}>
+                        {mg ? `${money(mg.profit)} · ${mg.marginPct} %` : "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {!useVariants && <p className="text-xs text-amber-300">{t.variantsSingle}</p>}
+          {variantsTooLow && <p className="text-xs text-red-300">{fmt(t.variantsTooLow, { pct: draft.minMarginPct })}</p>}
+        </div>
+      )}
+
       {/* Prix, quantité, marge */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      {!useVariants && <div className="grid gap-4 sm:grid-cols-3">
         <label className="block text-sm font-medium">
           {fmt(t.price, { currency: draft.currency })}
           <input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} className={field} />
@@ -240,7 +316,7 @@ export default function ListingEditor({
           {margin && <p className="font-semibold">{fmt(t.profit, { profit: money(margin.profit), pct: margin.marginPct })}</p>}
           {tooLow && <p className="mt-1">{fmt(t.tooLow, { pct: draft.minMarginPct, min: money(draft.minPrice) })}</p>}
         </div>
-      </div>
+      </div>}
 
       {/* Caractéristiques */}
       <div>

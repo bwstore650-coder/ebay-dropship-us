@@ -4,7 +4,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Row = Record<string, unknown>;
-const mem = vi.hoisted(() => ({ listings: [] as Row[] }));
+const mem = vi.hoisted(() => ({ listings: [] as Row[], variants: [] as Row[] }));
 
 function match(row: Row, where: Row = {}): boolean {
   return Object.entries(where).every(([k, cond]) => {
@@ -31,6 +31,14 @@ vi.mock("@/lib/db", () => ({
         return l;
       }),
     },
+    listingVariant: {
+      findMany: vi.fn(async ({ where }: { where: Row }) => mem.variants.filter((v) => v.listingId === where.listingId).map((v) => ({ ...v }))),
+      update: vi.fn(async ({ where, data }: { where: Row; data: Row }) => {
+        const v = mem.variants.find((x) => x.id === where.id)!;
+        Object.assign(v, data);
+        return v;
+      }),
+    },
     ebayAccount: { update: vi.fn() },
   },
 }));
@@ -55,6 +63,11 @@ function router(url: string, init?: RequestInit): Response {
       const pid = u.searchParams.get("pid")!;
       if (pid === "P-GONE") return cjErr("Product does not exist");
       if (pid === "P-DOWN") return cjErr("System busy, try later");
+      if (pid === "P-GRP")
+        return cjOk({ pid, productNameEn: pid, sellPrice: 8, variants: [
+          { vid: "V-S", variantSku: "S", variantSellPrice: 8, inventories: [{ countryCode: "US", totalInventory: 50 }] },
+          { vid: "V-M", variantSku: "M", variantSellPrice: 8, inventories: [{ countryCode: "US", totalInventory: 0 }] },
+        ] });
       const stock = pid === "P-OUT" ? 0 : pid === "P-LOW" ? 2 : 50;
       const price = pid === "P-UP" ? 14 : 8;
       return cjOk({ pid, productNameEn: pid, sellPrice: price, variants: [{ vid: `V-${pid}`, variantSku: "S", variantSellPrice: price, inventories: [{ countryCode: "US", totalInventory: stock }, { countryCode: "DE", totalInventory: stock }] }] });
@@ -123,6 +136,7 @@ beforeEach(() => {
     return router(url, init);
   }));
   vi.spyOn(console, "error").mockImplementation(() => {});
+  mem.variants = [];
 });
 
 describe("surveillance du stock et des prix", { timeout: 60_000 }, () => {
@@ -228,5 +242,28 @@ describe("surveillance du stock et des prix", { timeout: 60_000 }, () => {
     await monitorUser(user());
     expect(calls.some((c) => c.url.includes("bulk_update"))).toBe(false);
     expect(get("OUT").lastCheckedAt).toBeInstanceOf(Date);
+  });
+
+  it("annonce à variantes : la variante en rupture passe à 0 chez eBay, l'annonce reste en ligne", async () => {
+    mem.listings = [listing("GRP", "P-GRP", { sku: "PL-G", groupKey: "PL-G", ebayOfferId: null, ebayListingId: "1234", supplierVariantId: "V-S", quantity: 6 })];
+    const variant = (id: string, vid: string, over: Row = {}): Row => ({
+      id, listingId: "GRP", sku: `PL-G-${id}`, supplierVariantId: vid, label: id, price: 30.75, quantity: 3, status: "ACTIVE",
+      pauseReason: null, lastMarginPct: null, supplierCost: 11, ebayOfferId: `OF-${id}`, ...over,
+    });
+    mem.variants = [variant("S", "V-S"), variant("M", "V-M")];
+    await monitorUser(user());
+    const bulk = calls.find((c) => c.url.includes("bulk_update"))!;
+    expect(bulk.body).toEqual({ requests: [{ sku: "PL-G-M", shipToLocationAvailability: { quantity: 0 }, offers: [{ offerId: "OF-M", availableQuantity: 0 }] }] });
+    expect(mem.variants.find((v) => v.id === "M")).toMatchObject({ status: "PAUSED", pauseReason: "OUT_OF_STOCK" });
+    expect(mem.variants.find((v) => v.id === "S")).toMatchObject({ status: "ACTIVE", quantity: 3 });
+    expect(get("GRP")).toMatchObject({ status: "ACTIVE", quantity: 3 });
+    expect(get("GRP").lastCheckedAt).toBeInstanceOf(Date);
+  });
+
+  it("annonce à variantes : toutes en rupture = annonce en pause", async () => {
+    mem.listings = [listing("GRP", "P-GRP", { sku: "PL-G", groupKey: "PL-G", ebayOfferId: null, ebayListingId: "1234", supplierVariantId: "V-M" })];
+    mem.variants = [{ id: "M", listingId: "GRP", sku: "PL-G-M", supplierVariantId: "V-M", label: "M", price: 30.75, quantity: 3, status: "ACTIVE", pauseReason: null, lastMarginPct: null, supplierCost: 11, ebayOfferId: "OF-M" }];
+    await monitorUser(user());
+    expect(get("GRP")).toMatchObject({ status: "PAUSED", quantity: 0, pauseReason: "OUT_OF_STOCK" });
   });
 });

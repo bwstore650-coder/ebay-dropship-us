@@ -23,7 +23,7 @@ export default async function ListingsPage() {
   const { locale, t } = await getI18n();
   const L = t.listings;
   const [listings, externals, synced] = await Promise.all([
-    db.listing.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 200 }),
+    db.listing.findMany({ where: { userId: user.id }, orderBy: { createdAt: "desc" }, take: 200, include: { _count: { select: { variants: true } } } }),
     db.externalListing.findMany({ where: { userId: user.id }, orderBy: { startedAt: "desc" }, take: 500 }),
     lastSync(user.id),
   ]);
@@ -76,6 +76,7 @@ export default async function ListingsPage() {
                     <td className="max-w-sm px-4 py-3">
                       <p className="font-medium text-fg">{l.title}</p>
                       {l.legacy && <p className="mt-1"><span className="badge bg-surface-3 text-muted">{L.createdOnEbay}</span></p>}
+                      {l.groupKey && <p className="mt-1"><span className="badge bg-brand-500/15 text-brand-300">{fmt(L.variantsBadge, { n: l._count.variants })}</span></p>}
                       {l.status === "PAUSED" && l.pauseReason && (
                         <p className="mt-1 text-xs text-amber-300">
                           {fmt((L.pause as Record<string, string>)[l.pauseReason] ?? L.pause.OUT_OF_STOCK, { detail: l.pauseDetail ? `${l.pauseDetail} ${m.symbol}` : "" })}

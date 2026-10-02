@@ -459,7 +459,8 @@ function offerBody(o: OfferInput) {
     listingDuration: "GTC",
     availableQuantity: o.quantity,
     categoryId: o.categoryId,
-    listingDescription: o.description,
+    // Annonce à variantes : la description vient du groupe d'articles (pas de l'offre de chaque variante).
+    ...(o.description ? { listingDescription: o.description } : {}),
     merchantLocationKey: o.merchantLocationKey,
     pricingSummary: { price: { value: o.price.toFixed(2), currency: m.currency } },
     listingPolicies: {
@@ -525,26 +526,94 @@ export async function findOfferId(token: string, sku: string, marketId: Marketpl
 }
 
 /** Crée l'offre, ou met à jour celle qui existe déjà pour ce SKU, puis la publie. */
-export async function createOrUpdateAndPublish(token: string, o: OfferInput, wait = (ms: number) => new Promise((r) => setTimeout(r, ms))): Promise<{ offerId: string; listingId: string }> {
-  const m = marketplace(o.marketId);
-  // Fiche article tout juste créée : eBay met parfois quelques secondes à la rendre disponible
-  // (« <SKU> could not be found or is not available in the system », errorId 25702) → on réessaie.
+/** eBay n'a pas encore rendu disponible une fiche article tout juste créée (errorId 25702) : on peut réessayer. */
+const notYetAvailable = (e: unknown) =>
+  e instanceof EbayApiError && (e.errors.some((x) => x.errorId === 25702) || /could not be found or is not available/i.test(e.readable));
+
+type Wait = (ms: number) => Promise<unknown>;
+const sleep: Wait = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Réessaie l'appel quand eBay n'a pas encore rendu la fiche article disponible (2, 4 puis 6 s). */
+async function whenAvailable<T>(call: () => Promise<T>, wait: Wait): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     try {
-      let offerId = await findOfferId(token, o.sku, m.id);
-      if (offerId) await updateOffer(token, offerId, o);
-      else offerId = (await createOffer(token, o)).offerId;
-      const { listingId } = await publishOffer(token, offerId, m.id);
-      return { offerId, listingId };
+      return await call();
     } catch (e) {
-      const notYet = e instanceof EbayApiError && (e.errors.some((x) => x.errorId === 25702) || /could not be found or is not available/i.test(e.readable));
-      if (!notYet || attempt >= 3) {
+      if (!notYetAvailable(e) || attempt >= 3) {
         if (e instanceof EbayApiError) console.error("Publication eBay", e.path, e.status, JSON.stringify(e.errors).slice(0, 1500));
         throw e;
       }
       await wait(2000 * (attempt + 1));
     }
   }
+}
+
+/** Crée l'offre du SKU, ou met à jour celle qui existe déjà ; renvoie son numéro. */
+export function upsertOffer(token: string, o: OfferInput, wait: Wait = sleep): Promise<string> {
+  const m = marketplace(o.marketId);
+  return whenAvailable(async () => {
+    const existing = await findOfferId(token, o.sku, m.id);
+    if (existing) {
+      await updateOffer(token, existing, o);
+      return existing;
+    }
+    return (await createOffer(token, o)).offerId;
+  }, wait);
+}
+
+/**
+ * Crée (ou met à jour) l'offre puis la publie. Une fiche article tout juste créée peut ne pas être encore
+ * disponible chez eBay (« <SKU> could not be found or is not available in the system ») : on réessaie.
+ */
+export async function createOrUpdateAndPublish(token: string, o: OfferInput, wait: Wait = sleep): Promise<{ offerId: string; listingId: string }> {
+  const m = marketplace(o.marketId);
+  const offerId = await upsertOffer(token, o, wait);
+  const { listingId } = await whenAvailable(() => publishOffer(token, offerId, m.id), wait);
+  return { offerId, listingId };
+}
+
+export interface InventoryItemGroupInput {
+  title: string;
+  description: string;
+  imageUrls: string[];
+  aspects: Record<string, string[]>;       // caractéristiques communes
+  variantSkus: string[];
+  specs: { name: string; values: string[] }[]; // ce qui varie (Size : S, M, L…)
+  imageVariesBy?: string;                   // option dont dépend la photo (ex. Color)
+}
+
+/** Groupe d'articles eBay (annonce à variantes) : textes, photos et options communs, et la liste des SKU. */
+export function putInventoryItemGroup(token: string, key: string, g: InventoryItemGroupInput, marketId: MarketplaceId = "EBAY_US") {
+  return api<void>(token, `/sell/inventory/v1/inventory_item_group/${encodeURIComponent(key)}`, {
+    method: "PUT",
+    body: JSON.stringify({
+      title: g.title.slice(0, 80),
+      description: g.description,
+      imageUrls: g.imageUrls.slice(0, 12),
+      aspects: g.aspects,
+      variantSKUs: g.variantSkus,
+      variesBy: { specifications: g.specs, ...(g.imageVariesBy ? { aspectsImageVariesBy: [g.imageVariesBy] } : {}) },
+    }),
+  }, marketId);
+}
+
+/** Publie l'annonce à variantes (toutes les offres du groupe d'un coup). */
+export function publishGroup(token: string, key: string, marketId: MarketplaceId = "EBAY_US", wait: Wait = sleep) {
+  return whenAvailable(
+    () => api<{ listingId: string }>(token, "/sell/inventory/v1/offer/publish_by_inventory_item_group", {
+      method: "POST",
+      body: JSON.stringify({ inventoryItemGroupKey: key, marketplaceId: marketId }),
+    }, marketId),
+    wait,
+  );
+}
+
+/** Retire une annonce à variantes. */
+export function withdrawGroup(token: string, key: string, marketId: MarketplaceId = "EBAY_US") {
+  return api<void>(token, "/sell/inventory/v1/offer/withdraw_by_inventory_item_group", {
+    method: "POST",
+    body: JSON.stringify({ inventoryItemGroupKey: key, marketplaceId: marketId }),
+  }, marketId);
 }
 
 export function publishOffer(token: string, offerId: string, marketId: MarketplaceId = "EBAY_US") {

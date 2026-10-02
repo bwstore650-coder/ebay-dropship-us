@@ -164,3 +164,50 @@ export function cjProductUrl(productId: string, title?: string | null): string {
   const slug = (title ?? "product").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 80).replace(/^-+|-+$/g, "") || "product";
   return `https://cjdropshipping.com/product/${slug}-p-${encodeURIComponent(productId)}.html`;
 }
+
+/* ---------- Annonces à variantes (tailles, couleurs…) ---------- */
+
+/** Variantes publiées au plus dans une même annonce (eBay en accepte 250 ; chacune coûte des appels fournisseur). */
+export const MAX_LISTING_VARIANTS = 20;
+
+const ASPECT_ALIASES: Record<string, string> = { colour: "Color", color: "Color", size: "Size", style: "Style", material: "Material", quantity: "Quantity" };
+
+function aspectName(raw: string): string {
+  const t = raw.replace(/\s+/g, " ").trim();
+  const alias = ASPECT_ALIASES[t.toLowerCase()];
+  return (alias ?? t.charAt(0).toUpperCase() + t.slice(1)).slice(0, 40);
+}
+
+/**
+ * Options d'une variante fournisseur, pour eBay : noms (« Format-Quantity ») et valeurs (« L-1PCS ») de CJ,
+ * associés un à un. Si ça ne colle pas (valeur qui contient un tiret…), une seule option « Option ».
+ */
+export function variantOptions(keyNames: string | undefined | null, variantKey: string | undefined | null, label: string): Record<string, string> {
+  const names = (keyNames ?? "").split("-").map((n) => n.trim()).filter(Boolean);
+  const values = (variantKey ?? "").split("-").map((v) => v.trim());
+  if (names.length && names.length === values.length && values.every(Boolean)) {
+    return Object.fromEntries(names.map((n, i) => [aspectName(n), values[i].slice(0, 65)]));
+  }
+  const value = (variantKey || label || "").replace(/\s+/g, " ").trim().slice(0, 65) || "Default";
+  return { [names.length === 1 ? aspectName(names[0]) : "Option"]: value };
+}
+
+/**
+ * Ce qui varie dans l'annonce (ex. Size : S, M, L), pour le groupe d'articles eBay.
+ * Null si les variantes n'ont pas les mêmes options ou si deux variantes sont identiques.
+ */
+export function variationSpecs(options: Record<string, string>[]): { name: string; values: string[] }[] | null {
+  if (!options.length) return null;
+  const names = Object.keys(options[0]);
+  if (!names.length || names.length > 5) return null;
+  if (options.some((o) => Object.keys(o).length !== names.length || names.some((n) => !o[n]))) return null;
+  const combos = new Set(options.map((o) => names.map((n) => o[n].toLowerCase()).join("\u0000")));
+  if (combos.size !== options.length) return null;
+  return names.map((name) => ({ name, values: [...new Set(options.map((o) => o[name]))] }));
+}
+
+/** Caractéristiques communes à toutes les variantes : sans celles qui varient (eBay refuse les doublons). */
+export function withoutVariationAspects(aspects: Record<string, string[]>, names: string[]): Record<string, string[]> {
+  const drop = new Set(names.map((n) => n.toLowerCase()));
+  return Object.fromEntries(Object.entries(aspects).filter(([k]) => !drop.has(k.toLowerCase())));
+}

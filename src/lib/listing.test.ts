@@ -82,3 +82,25 @@ describe("annonce : divers", () => {
     vi.unstubAllEnvs();
   });
 });
+
+describe("annonces à variantes : options", () => {
+  it("noms et valeurs CJ associés un à un, noms usuels normalisés", async () => {
+    const { variantOptions } = await import("./listing");
+    expect(variantOptions("Format-Quantity", "L-1PCS", "L-1PCS")).toEqual({ Format: "L", Quantity: "1PCS" });
+    expect(variantOptions("colour-size", "Black-XL", "x")).toEqual({ Color: "Black", Size: "XL" });
+    // Valeur qui contient un tiret : une seule option.
+    expect(variantOptions("Size", "1-2 years", "1-2 years")).toEqual({ Size: "1-2 years" });
+    expect(variantOptions(undefined, undefined, "Big pack")).toEqual({ Option: "Big pack" });
+    expect(variantOptions("Color-Size", "Red", "Red")).toEqual({ Option: "Red" });
+  });
+  it("ce qui varie : mêmes options partout, pas de doublon, 5 options au plus", async () => {
+    const { variationSpecs, withoutVariationAspects } = await import("./listing");
+    expect(variationSpecs([{ Size: "S", Pack: "1" }, { Size: "M", Pack: "1" }, { Size: "S", Pack: "2" }])).toEqual([
+      { name: "Size", values: ["S", "M"] }, { name: "Pack", values: ["1", "2"] },
+    ]);
+    expect(variationSpecs([{ Size: "S" }, { Size: "s" }])).toBeNull(); // doublon
+    expect(variationSpecs([{ Size: "S" }, { Color: "Red" }])).toBeNull(); // options différentes
+    expect(variationSpecs([])).toBeNull();
+    expect(withoutVariationAspects({ Size: ["M"], Brand: ["Unbranded"], color: ["Red"] }, ["Size", "Color"])).toEqual({ Brand: ["Unbranded"] });
+  });
+});

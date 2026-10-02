@@ -37,7 +37,7 @@ export async function monitorUser(user: UserWithAccounts, opts: { now?: number; 
       status: { in: ["ACTIVE", "PAUSED"] },
       // Annonces publiées par Sellvela (API Inventory) ou créées sur eBay puis liées à un produit (API Trading).
       AND: [
-        { OR: [{ ebayOfferId: { not: null } }, { legacy: true, ebayListingId: { not: null } }] },
+        { OR: [{ ebayOfferId: { not: null } }, { legacy: true, ebayListingId: { not: null } }, { groupKey: { not: null }, ebayListingId: { not: null } }] },
         ...(opts.force ? [] : [{ OR: [{ lastCheckedAt: null }, { lastCheckedAt: { lt: new Date(now - CHECK_EVERY_MS) } }] }]),
       ],
     },
@@ -49,7 +49,26 @@ export async function monitorUser(user: UserWithAccounts, opts: { now?: number; 
   let rates: Rates | null = null;
   const cache = new Map<string, Promise<unknown>>(); // une seule lecture par produit et par passage
   const sessions = new Map<SupplierId, Session | null>();
-  const changes = new Map<string, { listing: (typeof listings)[number]; decision: MonitorDecision; price?: number }[]>(); // par compte eBay
+  type Variant = Awaited<ReturnType<typeof db.listingVariant.findMany>>[number];
+  // Par compte eBay ; `variant` : une variante d'une annonce à variantes (sa propre offre eBay).
+  const changes = new Map<string, { listing: (typeof listings)[number]; decision: MonitorDecision; price?: number; variant?: Variant }[]>();
+  const groups = new Set<string>(); // annonces à variantes vérifiées : statut global recalculé à la fin
+
+  /** Stock et coût livré d'une variante chez le fournisseur (une panne passagère lève une erreur). */
+  async function supplierState(session: Session, productId: string, vid: string, m: ReturnType<typeof marketplace>): Promise<Parameters<typeof decide>[0]["supplier"]> {
+    const q = await quote(session, productId, vid, 1, m.country, cache);
+    if (q.kind === "no_stock") return { found: true, stock: 0, cost: null, deliveryDaysMax: 99 };
+    if (q.kind === "no_route") return { found: true, stock: q.stock, cost: null, deliveryDaysMax: 99 };
+    if (q.kind !== "ok") return { found: false };
+    let price = q.unitPrice;
+    let shipping = q.shipping;
+    if (m.currency !== "USD") {
+      rates ??= await getUsdRates();
+      price = convertFromUsd(price, m.currency, rates);
+      shipping = convertFromUsd(shipping, m.currency, rates);
+    }
+    return { found: true, stock: q.stock, cost: landedCost({ supplierCost: price, supplierShipping: shipping, supplierTaxRate: q.taxRate }), deliveryDaysMax: q.deliveryDaysMax };
+  }
   const markets = new Map<string, Promise<{ id: string; title: string; price: number }[]>>(); // recherches eBay du repricing
 
   for (const l of listings) {
@@ -59,21 +78,41 @@ export async function monitorUser(user: UserWithAccounts, opts: { now?: number; 
       if (!sessions.has(supplierId)) sessions.set(supplierId, await openSession(user.supplierAccounts, supplierId).catch(() => null));
       const session = sessions.get(supplierId);
       if (!session || !l.supplierVariantId) continue; // fournisseur déconnecté : on ne touche à rien
-      // Une panne passagère lève une erreur (comptée, rien n'est modifié) ; « gone » = produit retiré.
-      const q = await quote(session, l.supplierProductId, l.supplierVariantId, 1, m.country, cache);
-      let supplier: Parameters<typeof decide>[0]["supplier"] = { found: false };
-      if (q.kind === "no_stock") supplier = { found: true, stock: 0, cost: null, deliveryDaysMax: 99 };
-      else if (q.kind === "no_route") supplier = { found: true, stock: q.stock, cost: null, deliveryDaysMax: 99 };
-      else if (q.kind === "ok") {
-        let price = q.unitPrice;
-        let shipping = q.shipping;
-        if (m.currency !== "USD") {
-          rates ??= await getUsdRates();
-          price = convertFromUsd(price, m.currency, rates);
-          shipping = convertFromUsd(shipping, m.currency, rates);
+
+      // Annonce à variantes : chaque variante est vérifiée et mise à jour à part (pas de repricing).
+      if (l.groupKey) {
+        groups.add(l.id);
+        for (const v of await db.listingVariant.findMany({ where: { listingId: l.id } })) {
+          try {
+            const supplier = await supplierState(session, l.supplierProductId, v.supplierVariantId, m);
+            const decision = decide({ status: v.status === "PAUSED" ? "PAUSED" : "ACTIVE", price: v.price, quantity: v.quantity, marketId: m.id, minMarginPct: user.minMarginPct, supplier });
+            report.checked++;
+            const needsEbay = decision.action === "RESUME" || decision.action === "SET_QUANTITY" || (decision.action === "PAUSE" && v.status === "ACTIVE");
+            if (needsEbay && l.ebayAccountId && v.ebayOfferId) {
+              const list = changes.get(l.ebayAccountId) ?? [];
+              list.push({ listing: l, decision, variant: v });
+              changes.set(l.ebayAccountId, list);
+            } else {
+              await db.listingVariant.update({
+                where: { id: v.id },
+                data: {
+                  ...("marginPct" in decision && decision.marginPct !== undefined ? { lastMarginPct: decision.marginPct } : {}),
+                  ...("cost" in decision && decision.cost !== undefined ? { supplierCost: decision.cost } : {}),
+                  ...(decision.action === "PAUSE" ? { pauseReason: decision.reason } : {}),
+                },
+              });
+            }
+          } catch (e) {
+            report.errors++;
+            console.error("Surveillance (variante)", v.sku, e);
+          }
         }
-        supplier = { found: true, stock: q.stock, cost: landedCost({ supplierCost: price, supplierShipping: shipping, supplierTaxRate: q.taxRate }), deliveryDaysMax: q.deliveryDaysMax };
+        await db.listing.update({ where: { id: l.id }, data: { lastCheckedAt: new Date(now) } });
+        continue;
       }
+
+      // Une panne passagère lève une erreur (comptée, rien n'est modifié) ; « gone » = produit retiré.
+      const supplier = await supplierState(session, l.supplierProductId, l.supplierVariantId, m);
       const decision = decide({ status: l.status as "ACTIVE" | "PAUSED", price: l.price, quantity: l.quantity, marketId: m.id, minMarginPct: user.minMarginPct, supplier });
       report.checked++;
 
@@ -132,17 +171,19 @@ export async function monitorUser(user: UserWithAccounts, opts: { now?: number; 
       const qty = (d: MonitorDecision) => (d.action === "PAUSE" ? 0 : "quantity" in d ? d.quantity : 0);
       const target = (listing: (typeof list)[number]["listing"], decision: MonitorDecision) => (decision.action === "KEEP" ? listing.quantity : qty(decision));
       const token = await userToken(account);
-      const offers = list.filter(({ listing }) => listing.ebayOfferId);
-      const legacy = list.filter(({ listing }) => !listing.ebayOfferId && listing.legacy && listing.ebayListingId);
+      const offers = list.filter(({ listing, variant }) => variant?.ebayOfferId || listing.ebayOfferId);
+      const legacy = list.filter(({ listing, variant }) => !variant && !listing.ebayOfferId && listing.legacy && listing.ebayListingId);
       results = offers.length
         ? await ebay.bulkUpdateQuantity(
             token,
-            offers.map(({ listing, decision, price }) => ({
-              sku: listing.sku,
-              offerId: listing.ebayOfferId!,
-              quantity: target(listing, decision),
-              ...(price !== undefined ? { price: { value: price, currency: listing.currency } } : {}),
-            })),
+            offers.map(({ listing, decision, price, variant }) => variant
+              ? { sku: variant.sku, offerId: variant.ebayOfferId!, quantity: decision.action === "KEEP" ? variant.quantity : qty(decision) }
+              : {
+                  sku: listing.sku,
+                  offerId: listing.ebayOfferId!,
+                  quantity: target(listing, decision),
+                  ...(price !== undefined ? { price: { value: price, currency: listing.currency } } : {}),
+                }),
           )
         : [];
       // Annonces créées sur eBay : une mise à jour par annonce (API Trading), une erreur n'arrête pas les autres.
@@ -159,7 +200,30 @@ export async function monitorUser(user: UserWithAccounts, opts: { now?: number; 
       console.error("Surveillance eBay", e);
       continue;
     }
-    for (const { listing, decision, price } of list) {
+    for (const { listing, decision, price, variant } of list) {
+      if (variant) {
+        const r = results.find((x) => x.sku === variant.sku);
+        if (!r?.ok) {
+          report.errors++;
+          await db.listing.update({ where: { id: listing.id }, data: { errorMessage: `${variant.label} : ${r?.message ?? "eBay"}`.slice(0, 1000) } });
+          continue;
+        }
+        const data = {
+          ...("marginPct" in decision && decision.marginPct !== undefined ? { lastMarginPct: decision.marginPct } : {}),
+          ...("cost" in decision && decision.cost !== undefined ? { supplierCost: decision.cost } : {}),
+        };
+        if (decision.action === "PAUSE") {
+          report.paused++;
+          await db.listingVariant.update({ where: { id: variant.id }, data: { ...data, status: "PAUSED", pauseReason: decision.reason } });
+        } else if (decision.action === "RESUME") {
+          report.resumed++;
+          await db.listingVariant.update({ where: { id: variant.id }, data: { ...data, status: "ACTIVE", quantity: decision.quantity, pauseReason: null } });
+        } else if (decision.action === "SET_QUANTITY") {
+          report.updated++;
+          await db.listingVariant.update({ where: { id: variant.id }, data: { ...data, quantity: decision.quantity } });
+        }
+        continue;
+      }
       const r = results.find((x) => x.sku === listing.sku);
       if (!r?.ok) {
         report.errors++;
@@ -188,6 +252,23 @@ export async function monitorUser(user: UserWithAccounts, opts: { now?: number; 
       if (price !== undefined) report.repriced++;
     }
   }
+  // Annonces à variantes : en pause seulement si toutes leurs variantes le sont ; quantité et marge résumées.
+  for (const id of groups) {
+    const vars = await db.listingVariant.findMany({ where: { listingId: id } });
+    if (!vars.length) continue;
+    const active = vars.filter((v) => v.status !== "PAUSED");
+    const margins = vars.map((v) => v.lastMarginPct).filter((x): x is number => x !== null);
+    await db.listing.update({
+      where: { id },
+      data: {
+        status: active.length ? "ACTIVE" : "PAUSED",
+        quantity: active.reduce((s, v) => s + v.quantity, 0),
+        pauseReason: active.length ? null : vars[0].pauseReason,
+        lastMarginPct: margins.length ? Math.min(...margins) : null,
+      },
+    });
+  }
+
   // Publicité : taux ajustés au nouveau coût et aux nouveaux prix.
   try {
     await syncAds(user);

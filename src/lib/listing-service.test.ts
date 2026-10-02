@@ -9,6 +9,7 @@ const store = vi.hoisted(() => ({
   listedToday: 0,
   created: [] as Record<string, unknown>[],
   updates: [] as Record<string, unknown>[],
+  variantUpdates: [] as Record<string, unknown>[],
   aiCount: 0,
 }));
 
@@ -19,6 +20,7 @@ vi.mock("@/lib/db", () => ({
       upsert: vi.fn(),
       update: vi.fn(async ({ data }: { data: Record<string, string> }) => Object.assign(store.setup!, data)),
     },
+    listingVariant: { update: vi.fn(async (args: Record<string, unknown>) => { store.variantUpdates.push(args); return args; }) },
     listing: {
       findFirst: vi.fn(async ({ where }: { where: { id: string; userId: string } }) =>
         where.id === "LIVE1" && where.userId === "U1"
@@ -27,7 +29,8 @@ vi.mock("@/lib/db", () => ({
       count: vi.fn(async () => store.listedToday),
       create: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         store.created.push(data);
-        return { id: "LST1", ...data };
+        const variants = ((data.variants as { create?: Record<string, unknown>[] } | undefined)?.create ?? []).map((v, i) => ({ id: `LV${i + 1}`, ...v }));
+        return { id: "LST1", ...data, variants };
       }),
       update: vi.fn(async ({ data }: { data: Record<string, unknown> }) => {
         store.updates.push(data);
@@ -61,6 +64,8 @@ const parse = (b: unknown) => {
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 
 let locationExists = true;
+let multiVariant = false;
+let freightCalls = 0;
 let offerNotYet = 0;
 let accountPolicies = { f: ["F1"], p: ["PAY1"], r: ["R1"] };
 function router(url: string, init?: RequestInit): Response {
@@ -75,6 +80,20 @@ function router(url: string, init?: RequestInit): Response {
     if (init?.method === "POST") { locationExists = true; return new Response(null, { status: 204 }); }
   }
   if (u.hostname === "developers.cjdropshipping.com") {
+    if (path.endsWith("/product/query") && multiVariant)
+      return json({
+        code: 200, result: true, message: "ok",
+        data: {
+          pid: "P1", productNameEn: "Foot Drop Brace", sellPrice: 8, productKeyEn: "Size-Pack",
+          productImage: '["https://cf.cj.com/1.jpg"]', description: "<p>Material: Neoprene fabric</p>",
+          variants: [
+            { vid: "V1", variantSku: "S1", variantKey: "S-1PCS", variantSellPrice: 8, variantWeight: 80, variantImage: "https://cf.cj.com/s.jpg", inventories: [{ countryCode: "US", totalInventory: 50 }] },
+            { vid: "V2", variantSku: "S2", variantKey: "M-1PCS", variantSellPrice: 8, variantWeight: 82, inventories: [{ countryCode: "US", totalInventory: 20 }] },
+            { vid: "V3", variantSku: "S3", variantKey: "L-2PCS", variantSellPrice: 14, variantWeight: 160, inventories: [{ countryCode: "US", totalInventory: 2 }] },
+            { vid: "V4", variantSku: "S4", variantKey: "XL-1PCS", variantSellPrice: 8, variantWeight: 80, inventories: [{ countryCode: "US", totalInventory: 0 }] },
+          ],
+        },
+      });
     if (path.endsWith("/product/query"))
       return json({
         code: 200, result: true, message: "ok",
@@ -85,7 +104,7 @@ function router(url: string, init?: RequestInit): Response {
           variants: [{ vid: "V1", variantSku: "S1", variantKey: "White", variantSellPrice: 8, inventories: [{ countryCode: "US", totalInventory: 50 }, { countryCode: "DE", totalInventory: 20 }] }],
         },
       });
-    if (path.endsWith("/logistic/freightCalculate"))
+    if (path.endsWith("/logistic/freightCalculate") && ++freightCalls)
       return json({ code: 200, result: true, message: "ok", data: [{ logisticName: "CJPacket", logisticPrice: 4, logisticAging: "2-5" }] });
   }
   if (u.hostname === "api.anthropic.com")
@@ -119,8 +138,11 @@ function router(url: string, init?: RequestInit): Response {
   if (path === "/sell/inventory/v1/offer" && (init?.method ?? "GET") === "GET") return json({ errors: [{ errorId: 25713, message: "Not found" }] }, 404);
   if (path === "/sell/inventory/v1/offer" && init?.method === "POST") {
     if (offerNotYet > 0) { offerNotYet--; return json({ errors: [{ errorId: 25702, message: "PL-X could not be found or is not available in the system" }] }, 400); }
-    return json({ offerId: "O1" });
+    const sku = (JSON.parse(String(init.body)) as { sku: string }).sku;
+    return json({ offerId: multiVariant ? `O-${sku.split("-").pop()}` : "O1" });
   }
+  if (path.startsWith("/sell/inventory/v1/inventory_item_group/") && init?.method === "PUT") return new Response(null, { status: 204 });
+  if (path === "/sell/inventory/v1/offer/publish_by_inventory_item_group") return json({ listingId: "LG1" });
   if (path === "/sell/inventory/v1/offer/O1/publish") return json({ listingId: "L1" });
   return json({ errors: [{ message: `route inconnue ${url}` }] }, 500);
 }
@@ -148,6 +170,9 @@ const baseInput = {
 
 beforeEach(() => {
   locationExists = true;
+  multiVariant = false;
+  freightCalls = 0;
+  store.variantUpdates = [];
   offerNotYet = 0;
   accountPolicies = { f: ["F1"], p: ["PAY1"], r: ["R1"] };
   vi.stubEnv("DATABASE_URL", "postgresql://x");
@@ -350,5 +375,75 @@ describe("amélioration d'une annonce en ligne", { timeout: 30_000 }, () => {
     await expect(updateListingContent(user(), "LIVE1", { title: "Case for AirPods Pro wireless", descriptionHtml: "<p>Protective case with a clip.</p>" })).rejects.toMatchObject({ code: "LISTING_BLOCKED" });
     await expect(updateListingContent(user({ id: "U2" }), "LIVE1", { title: "Electric Can Opener Automatic", descriptionHtml: "<p>Opens standard cans easily.</p>" })).rejects.toMatchObject({ code: "NOT_FOUND" });
     await expect(updateListingContent(user(), "LIVE1", { title: "short", descriptionHtml: "<p>Opens standard cans easily.</p>" })).rejects.toMatchObject({ code: "INVALID_INPUT" });
+  });
+});
+
+
+describe("annonce à variantes (tailles, lots…)", { timeout: 60_000 }, () => {
+  const variantInput = (variants: { variantId: string; price: number; quantity: number }[]) => ({
+    ...baseInput,
+    title: "Foot Drop Brace Ankle Support Adjustable Night Splint",
+    aspects: { Type: ["Electric"], "Power Source": ["Battery"] },
+    variants,
+  });
+
+  it("brouillon : variantes en stock avec leurs options, prix conseillé proportionnel au coût, livraison calculée une fois par poids", async () => {
+    multiVariant = true;
+    const d = await prepareListing(user(), { keyword: "foot drop brace", marketId: "EBAY_US", ref: { supplier: "CJ", productId: "P1", variantId: "V1" } });
+    expect(d.variationNames).toEqual(["Size", "Pack"]);
+    expect(d.variants.map((v) => v.variantId)).toEqual(["V1", "V2", "V3"]); // XL en rupture : absente
+    expect(d.variants[0]).toMatchObject({ options: { Size: "S", Pack: "1PCS" }, image: "https://cf.cj.com/s.jpg", stock: 50, cost: 12, quantity: 3 });
+    expect(d.variants[2]).toMatchObject({ options: { Size: "L", Pack: "2PCS" }, cost: 18, quantity: 2 });
+    expect(d.variants[2].suggestedPrice).toBeGreaterThan(d.variants[0].suggestedPrice); // le lot de 2 coûte plus cher
+    expect(d.variants.every((v) => v.suggestedPrice >= v.minPrice)).toBe(true);
+    expect(freightCalls).toBe(1 + 2); // variante du brouillon + 2 poids (80-82 g, 160 g)
+  });
+
+  it("publie une seule annonce : une fiche par variante, le groupe (ce qui varie), une offre par variante, puis le groupe", async () => {
+    multiVariant = true;
+    const r = await publishListing(user(), variantInput([
+      { variantId: "V1", price: 29.99, quantity: 3 },
+      { variantId: "V2", price: 29.99, quantity: 3 },
+      { variantId: "V3", price: 44.99, quantity: 5 },
+    ]));
+    expect(r).toEqual({ id: "LST1", listingId: "LG1", url: "https://www.ebay.com/itm/LG1" });
+
+    const created = store.created.at(-1)!;
+    const key = created.groupKey as string;
+    expect(created).toMatchObject({ sku: key, status: "DRAFT", price: 29.99, quantity: 3 + 3 + 2, supplierVariantId: "V1" });
+    const rows = (created.variants as { create: Record<string, unknown>[] }).create;
+    expect(rows.map((v) => [v.sku, v.supplierVariantId, v.price, v.quantity])).toEqual([[`${key}-1`, "V1", 29.99, 3], [`${key}-2`, "V2", 29.99, 3], [`${key}-3`, "V3", 44.99, 2]]);
+
+    const items = calls.filter((c) => c.method === "PUT" && c.url.includes("/inventory_item/"));
+    expect(items).toHaveLength(3);
+    const third = items[2].body as { product: { aspects: Record<string, string[]>; imageUrls: string[] } };
+    expect(third.product.aspects).toMatchObject({ Size: ["L"], Pack: ["2PCS"], Type: ["Electric"] });
+
+    const group = calls.find((c) => c.method === "PUT" && c.url.includes(`/inventory_item_group/${key}`))!.body as Record<string, unknown>;
+    expect(group).toMatchObject({
+      title: "Foot Drop Brace Ankle Support Adjustable Night Splint",
+      variantSKUs: [`${key}-1`, `${key}-2`, `${key}-3`],
+      variesBy: { specifications: [{ name: "Size", values: ["S", "M", "L"] }, { name: "Pack", values: ["1PCS", "2PCS"] }] },
+    });
+    expect((group.aspects as Record<string, unknown>).Size).toBeUndefined(); // ce qui varie n'est pas dans les caractéristiques communes
+
+    const offers = calls.filter((c) => c.method === "POST" && c.url.endsWith("/sell/inventory/v1/offer")).map((c) => c.body as Record<string, unknown>);
+    expect(offers.map((o) => [o.sku, (o.pricingSummary as { price: { value: string } }).price.value])).toEqual([[`${key}-1`, "29.99"], [`${key}-2`, "29.99"], [`${key}-3`, "44.99"]]);
+    expect(offers[0].listingDescription).toBeUndefined(); // la description vient du groupe
+    const publish = calls.find((c) => c.url.endsWith("/publish_by_inventory_item_group"))!.body;
+    expect(publish).toEqual({ inventoryItemGroupKey: key, marketplaceId: "EBAY_US" });
+    expect(calls.findIndex((c) => c.url.includes("/inventory_item_group/")) < calls.findIndex((c) => c.url.endsWith("/sell/inventory/v1/offer") && c.method === "POST")).toBe(true);
+
+    expect(store.updates.at(-1)).toMatchObject({ status: "ACTIVE", ebayListingId: "LG1" });
+    expect(store.variantUpdates.map((u) => (u as { data: { ebayOfferId: string } }).data.ebayOfferId)).toEqual(["O-1", "O-2", "O-3"]);
+  });
+
+  it("refuse une variante sous la marge minimum (prix minimum de cette variante indiqué) et une variante inconnue", async () => {
+    multiVariant = true;
+    await expect(publishListing(user(), variantInput([{ variantId: "V1", price: 29.99, quantity: 1 }, { variantId: "V3", price: 20, quantity: 1 }])))
+      .rejects.toMatchObject({ code: "MARGIN_TOO_LOW", detail: expect.stringContaining("L-2PCS") });
+    await expect(publishListing(user(), variantInput([{ variantId: "V1", price: 29.99, quantity: 1 }, { variantId: "V4", price: 29.99, quantity: 1 }])))
+      .rejects.toMatchObject({ code: "SUPPLIER_UNAVAILABLE" });
+    expect(calls.some((c) => c.url.includes("/inventory_item_group/"))).toBe(false);
   });
 });

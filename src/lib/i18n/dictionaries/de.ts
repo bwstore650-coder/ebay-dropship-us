@@ -325,6 +325,14 @@ export const de: Dict = {
     leadDone: "Du bist dabei. Die nächste Liste mit Gewinnerprodukten landet in deinem Postfach.",
   },
   listing: {
+    variantsTitle: "Varianten: {n} von {total} im Angebot",
+    variantsHelp: "Ein einziges eBay-Angebot mit allen markierten Optionen (Größe, Farbe, Set…). Jede Variante hat ihren eigenen Preis und muss mindestens {pct} % Marge behalten.",
+    variantCol: "Variante",
+    variantStock: "Bestand",
+    variantProfit: "Gewinn / Verkauf",
+    variantMin: "min. {min}",
+    variantsSingle: "Weniger als 2 Varianten markiert: Das Angebot wird mit nur einer Variante eingestellt.",
+    variantsTooLow: "Mindestens eine Variante liegt unter {pct} % Marge: Preis erhöhen oder abwählen.",
     ai: {
       writtenByAi: "Titel, Beschreibung und Artikelmerkmale von der KI geschrieben. Prüfe sie vor dem Veröffentlichen.",
       usage: "{used} / {limit} KI-Texte diesen Monat",
@@ -404,6 +412,7 @@ export const de: Dict = {
     settingsLink: "Einstellungen öffnen",
   },
   listings: {
+    variantsBadge: "{n} Varianten",
     unmanage: "Nicht mehr verwalten",
     createdOnEbay: "Auf eBay erstellt",
     title: "Meine Angebote",

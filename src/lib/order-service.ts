@@ -42,6 +42,14 @@ export async function importOrders(user: UserWithAccounts, account: Account): Pr
     where: { userId: user.id, OR: [{ sku: { in: skus } }, { legacy: true, ebayListingId: { in: itemIds }, status: { in: ["ACTIVE", "PAUSED"] } }] },
     select: { id: true, sku: true, supplierVariantId: true, supplierProductId: true, supplier: true, marketplace: true, currency: true, legacy: true, ebayListingId: true },
   });
+  // Annonces à variantes : chaque taille / couleur a son propre SKU, rattaché à l'annonce.
+  const variants = await db.listingVariant.findMany({
+    where: { sku: { in: skus }, listing: { userId: user.id } },
+    include: { listing: { select: { id: true, supplierProductId: true, supplier: true, marketplace: true, currency: true, legacy: true, ebayListingId: true } } },
+  });
+  for (const v of variants) {
+    listings.push({ ...v.listing, sku: v.sku, supplierVariantId: v.supplierVariantId });
+  }
   const bySku = new Map(listings.filter((l) => skus.includes(l.sku)).map((l) => [l.sku, l]));
   const byItemId = new Map(listings.filter((l) => l.legacy && l.ebayListingId).map((l) => [l.ebayListingId!, l]));
   const known = await db.order.findMany({ where: { ebayOrderId: { in: orders.map((o) => o.orderId) } }, select: { ebayOrderId: true, status: true, id: true } });

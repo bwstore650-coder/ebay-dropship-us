@@ -325,6 +325,14 @@ export const es: Dict = {
     leadDone: "¡Listo! La próxima lista de productos ganadores llegará a tu bandeja de entrada.",
   },
   listing: {
+    variantsTitle: "Variantes: {n} de {total} en el anuncio",
+    variantsHelp: "Un solo anuncio de eBay con todas las opciones marcadas (talla, color, lote…). Cada variante tiene su precio y debe mantener al menos un {pct} % de margen.",
+    variantCol: "Variante",
+    variantStock: "Stock",
+    variantProfit: "Beneficio / venta",
+    variantMin: "mín. {min}",
+    variantsSingle: "Menos de 2 variantes marcadas: el anuncio se publicará con una sola variante.",
+    variantsTooLow: "Al menos una variante está por debajo del {pct} % de margen: sube su precio o desmárcala.",
     ai: {
       writtenByAi: "Título, descripción y características escritos por la IA. Revísalos antes de publicar.",
       usage: "{used} / {limit} redacciones de IA este mes",
@@ -404,6 +412,7 @@ export const es: Dict = {
     settingsLink: "Abrir Ajustes",
   },
   listings: {
+    variantsBadge: "{n} variantes",
     unmanage: "Dejar de gestionar",
     createdOnEbay: "Creado en eBay",
     title: "Mis anuncios",

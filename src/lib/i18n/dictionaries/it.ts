@@ -325,6 +325,14 @@ export const it: Dict = {
     leadDone: "Fatto. La prossima lista di prodotti vincenti arriverà nella tua casella email.",
   },
   listing: {
+    variantsTitle: "Varianti: {n} su {total} nell'inserzione",
+    variantsHelp: "Una sola inserzione eBay con tutte le opzioni selezionate (taglia, colore, confezione…). Ogni variante ha il suo prezzo e deve mantenere almeno il {pct}% di margine.",
+    variantCol: "Variante",
+    variantStock: "Stock",
+    variantProfit: "Profitto / vendita",
+    variantMin: "min. {min}",
+    variantsSingle: "Meno di 2 varianti selezionate: l'inserzione sarà pubblicata con una sola variante.",
+    variantsTooLow: "Almeno una variante è sotto il {pct}% di margine: alza il prezzo o deselezionala.",
     ai: {
       writtenByAi: "Titolo, descrizione e specifiche scritti dall'IA. Controllali prima di pubblicare.",
       usage: "{used} / {limit} testi IA questo mese",
@@ -404,6 +412,7 @@ export const it: Dict = {
     settingsLink: "Apri le Impostazioni",
   },
   listings: {
+    variantsBadge: "{n} varianti",
     unmanage: "Non gestire più",
     createdOnEbay: "Creata su eBay",
     title: "Le mie inserzioni",

@@ -12,6 +12,8 @@ const body = z.object({
 });
 
 /** Brouillon d'annonce (titre et description rédigés par l'IA, catégorie, caractéristiques, prix conseillé). */
+export const maxDuration = 60;
+
 export async function POST(req: Request) {
   const user = await currentUser();
   if (!user) return NextResponse.json({ error: "UNAUTHORIZED" }, { status: 401 });

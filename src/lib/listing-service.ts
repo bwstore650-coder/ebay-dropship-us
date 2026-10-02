@@ -9,19 +9,19 @@ import { dailyListingLimit } from "@/lib/compliance";
 import * as ebay from "@/lib/ebay";
 import { EbayApiError } from "@/lib/ebay";
 import { EbayReconnectRequired, userToken } from "@/lib/ebay-account";
-import { getUsdRates, offersToCurrency } from "@/lib/fx";
+import { convertFromUsd, getUsdRates, offersToCurrency } from "@/lib/fx";
 import { computeMargin, landedCost, MAX_DELIVERY_DAYS, median, priceForTargetMargin, type SupplierOffer } from "@/lib/margin";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import { planInfo } from "@/lib/plans";
-import { openSession, productInfo, quote, SupplierError, type ProductInfo, type SupplierId } from "@/lib/suppliers";
+import { openSession, productInfo, quote, SupplierError, variantQuotes, type ProductInfo, type Session, type SupplierId, type VariantQuote } from "@/lib/suppliers";
 import { aiConfigured, htmlToText, supplierCopy, writeListingCopy, type AiLanguage, type ListingCopy } from "@/lib/ai";
 import { AiLimitError, aiUsage, refundAiCredit, takeAiCredit } from "@/lib/ai-quota";
 import { syncAds } from "@/lib/ads-service";
 import { cachedDemand } from "@/lib/ebay-quota";
 import { keywordFromTitle } from "@/lib/sniper";
 import {
-  buildAspects, cleanImages, cleanTitle, DEFAULT_QUANTITY, ebayItemUrl, isEuMarket, makeSku, mostCommon,
-  sanitizeDescription, startOfUtcDay, veroIn,
+  buildAspects, cleanImages, cleanTitle, DEFAULT_QUANTITY, ebayItemUrl, isEuMarket, makeSku, MAX_LISTING_VARIANTS, mostCommon,
+  sanitizeDescription, startOfUtcDay, variantOptions, variationSpecs, veroIn, withoutVariationAspects,
 } from "@/lib/listing";
 
 export type ListingErrorCode =
@@ -51,16 +51,39 @@ interface LoadedVariant {
   offer: SupplierOffer; // dans la devise du pays
 }
 
-/** Produit + variante chez le fournisseur, avec le stock local et la livraison la moins chère, convertis dans la devise du pays. */
-async function loadVariant(user: UserWithAccounts, ref: SupplierRef, marketId: MarketplaceId): Promise<LoadedVariant> {
-  const m = marketplace(marketId);
-  let session;
+async function supplierSession(user: UserWithAccounts, supplier: SupplierId): Promise<Session> {
   try {
-    session = await openSession(user.supplierAccounts, ref.supplier);
+    return await openSession(user.supplierAccounts, supplier);
   } catch (e) {
     if (e instanceof SupplierError) throw new ListingError(e.code === "SUPPLIER_RECONNECT" ? "SUPPLIER_RECONNECT" : "SUPPLIER_UNSUPPORTED");
     throw e;
   }
+}
+
+/** Une variante vendable, ses options et son coût livré dans la devise du pays. */
+export interface PricedVariant extends VariantQuote {
+  cost: number;
+  unitLocal: number;
+  shippingLocal: number;
+}
+
+/** Toutes les variantes vendables du produit, avec leur coût dans la devise du pays. */
+async function loadAllVariants(user: UserWithAccounts, ref: SupplierRef, marketId: MarketplaceId): Promise<PricedVariant[]> {
+  const m = marketplace(marketId);
+  const session = await supplierSession(user, ref.supplier);
+  const quotes = await variantQuotes(session, ref.productId, m.country, MAX_LISTING_VARIANTS, variantOptions);
+  const rates = m.currency === "USD" ? null : await getUsdRates();
+  return quotes.map((q) => {
+    const unitLocal = rates ? convertFromUsd(q.unitPrice, m.currency, rates) : q.unitPrice;
+    const shippingLocal = rates ? convertFromUsd(q.shipping, m.currency, rates) : q.shipping;
+    return { ...q, unitLocal, shippingLocal, cost: landedCost({ supplierCost: unitLocal, supplierShipping: shippingLocal, supplierTaxRate: q.taxRate }) };
+  });
+}
+
+/** Produit + variante chez le fournisseur, avec le stock local et la livraison la moins chère, convertis dans la devise du pays. */
+async function loadVariant(user: UserWithAccounts, ref: SupplierRef, marketId: MarketplaceId): Promise<LoadedVariant> {
+  const m = marketplace(marketId);
+  const session = await supplierSession(user, ref.supplier);
   const cache = new Map<string, Promise<unknown>>();
   const info = await productInfo(session, ref.productId, ref.variantId, m.country, cache);
   if (!info) throw new ListingError("SUPPLIER_UNAVAILABLE");
@@ -108,6 +131,21 @@ export interface ListingDraft {
   /** Contexte pour régénérer titres / description sans rappeler le fournisseur ni eBay. */
   aiContext: { language: AiLanguage; productTitle: string; facts: string; variant?: string; comparableTitles: string[] };
   ai: { configured: boolean; used: number; limit: number; unlimited: boolean; note: "AI_LIMIT" | "AI_FAILED" | null };
+  /** Annonce à variantes possible (≥ 2 variantes en stock aux options cohérentes) : toutes sont proposées. */
+  variants: DraftVariant[];
+  variationNames: string[];
+}
+
+export interface DraftVariant {
+  variantId: string;
+  label: string;
+  options: Record<string, string>;
+  image: string | null;
+  stock: number;
+  cost: number;
+  minPrice: number;
+  suggestedPrice: number;
+  quantity: number;
 }
 
 /** Brouillon d'annonce : catégorie, textes rédigés par l'IA, caractéristiques, photos et prix conseillé. */
@@ -168,6 +206,30 @@ export async function prepareListing(user: UserWithAccounts, input: { keyword: s
   const marketPrice = median(market.prices);
   const suggestedPrice = Math.max(minPrice, marketPrice ?? 0);
 
+  // Toutes les variantes vendables (tailles, couleurs, lots…) : prix conseillé proportionnel au coût de chacune.
+  const all = await loadAllVariants(user, input.ref, m.id).catch((e) => {
+    console.error("Variantes", input.ref.productId, e);
+    return [] as PricedVariant[];
+  });
+  const specs = all.length >= 2 ? variationSpecs(all.map((v) => v.options)) : null;
+  const round2 = (n: number) => Math.round(n * 100) / 100;
+  const variants: DraftVariant[] = specs
+    ? all.map((v) => {
+        const vMin = priceForTargetMargin(v.cost, user.minMarginPct, { market: m });
+        return {
+          variantId: v.variantId,
+          label: v.label,
+          options: v.options,
+          image: v.image ?? null,
+          stock: v.stock,
+          cost: v.cost,
+          minPrice: vMin,
+          suggestedPrice: round2(Math.max(vMin, cost > 0 ? (suggestedPrice * v.cost) / cost : suggestedPrice)),
+          quantity: Math.min(DEFAULT_QUANTITY, v.stock),
+        };
+      })
+    : [];
+
   return {
     marketId: m.id,
     currency: m.currency,
@@ -201,6 +263,8 @@ export async function prepareListing(user: UserWithAccounts, input: { keyword: s
       comparableTitles: copyInput.comparableTitles,
     },
     ai: aiConfigured() ? { configured: true, ...(await aiUsage(user)), note: aiNote } : { configured: false, used: 0, limit: 0, unlimited: false, note: null },
+    variants,
+    variationNames: specs ? specs.map((x) => x.name) : [],
   };
 }
 
@@ -217,6 +281,8 @@ export interface PublishInput {
   price: number;
   quantity: number;
   keyword?: string; // recherche eBay du produit (repricing)
+  /** Annonce à variantes : les variantes choisies, leur prix et leur quantité (2 au moins). */
+  variants?: { variantId: string; price: number; quantity: number }[];
 }
 
 /** Publie l'annonce après avoir revérifié le coût fournisseur, la marge, les marques protégées et les limites. */
@@ -257,11 +323,16 @@ export async function publishListing(user: UserWithAccounts, input: PublishInput
   if (description.replace(/<[^>]+>/g, "").trim().length < 20) throw new ListingError("INVALID_INPUT");
   const defs = await ebay.getAspects(input.categoryId, m.id);
   const { aspects, missingRequired } = buildAspects(input.aspects, defs, m.id);
-  if (missingRequired.length) throw new ListingError("ASPECTS_MISSING", missingRequired.join(", "));
+  const withVariants = (input.variants?.length ?? 0) >= 2;
+  // Annonce à variantes : une caractéristique obligatoire peut être fournie par les variantes (taille, couleur…).
+  if (missingRequired.length && !withVariants) throw new ListingError("ASPECTS_MISSING", missingRequired.join(", "));
   const vero = veroIn(title, aspects);
   if (vero) throw new ListingError("LISTING_BLOCKED", vero);
   const images = cleanImages(info.images);
   if (!images.length) throw new ListingError("NO_IMAGES");
+  if (withVariants) {
+    return publishWithVariants(user, input, { m, account, saved, eu, title, description, aspects, images, productId: info.productId, missingRequired });
+  }
   const quantity = Math.max(1, Math.min(Math.floor(input.quantity) || 1, 10, offer.stockUs));
 
   const sku = makeSku();
@@ -308,19 +379,7 @@ export async function publishListing(user: UserWithAccounts, input: PublishInput
       fulfillmentPolicyId: setup.fulfillmentPolicyId,
       paymentPolicyId: setup.paymentPolicyId,
       returnPolicyId: setup.returnPolicyId,
-      regulatory: eu
-        ? {
-            responsiblePersons: [{
-              companyName: user.euRpCompany!,
-              addressLine1: user.euRpAddress!,
-              city: user.euRpCity!,
-              postalCode: user.euRpPostalCode!,
-              country: user.euRpCountry!,
-              email: user.euRpEmail!,
-              types: ["EUResponsiblePerson"],
-            }],
-          }
-        : undefined,
+      regulatory: regulatoryOf(user, eu),
     });
     await db.listing.update({
       where: { id: listing.id },
@@ -338,6 +397,152 @@ export async function publishListing(user: UserWithAccounts, input: PublishInput
       throw new ListingError("EBAY_REJECTED", e.readable);
     }
     throw e;
+  }
+}
+
+function regulatoryOf(user: UserWithAccounts, eu: boolean): ebay.Regulatory | undefined {
+  return eu
+    ? {
+        responsiblePersons: [{
+          companyName: user.euRpCompany!,
+          addressLine1: user.euRpAddress!,
+          city: user.euRpCity!,
+          postalCode: user.euRpPostalCode!,
+          country: user.euRpCountry!,
+          email: user.euRpEmail!,
+          types: ["EUResponsiblePerson"],
+        }],
+      }
+    : undefined;
+}
+
+/** Transforme une erreur de publication en erreur lisible, après l'avoir notée sur le brouillon. */
+async function publishFailed(listingId: string, e: unknown): Promise<never> {
+  const message = e instanceof EbayApiError ? e.readable : e instanceof Error ? e.message : String(e);
+  if (!(e instanceof ListingError)) await db.listing.update({ where: { id: listingId }, data: { errorMessage: message.slice(0, 1000) } });
+  if (e instanceof EbayReconnectRequired) throw new ListingError("EBAY_RECONNECT");
+  if (e instanceof EbayApiError) {
+    if (e.status === 401) throw new ListingError("EBAY_RECONNECT");
+    throw new ListingError("EBAY_REJECTED", e.readable);
+  }
+  throw e;
+}
+
+/**
+ * Annonce à variantes (une seule annonce eBay avec ses tailles, couleurs, lots…) : chaque variante est revérifiée
+ * (stock, coût, marge), puis eBay reçoit une fiche article par variante, le groupe qui les réunit, une offre par
+ * variante, et enfin la publication du groupe.
+ */
+async function publishWithVariants(
+  user: UserWithAccounts,
+  input: PublishInput,
+  ctx: {
+    m: ReturnType<typeof marketplace>; account: UserWithAccounts["ebayAccounts"][number]; saved: MarketSetup; eu: boolean;
+    title: string; description: string; aspects: Record<string, string[]>; images: string[]; productId: string; missingRequired: string[];
+  },
+): Promise<{ listingId: string; url: string; id: string }> {
+  const { m, account, saved, eu, title, description, aspects, images } = ctx;
+  const all = await loadAllVariants(user, { ...input.ref, productId: ctx.productId }, m.id);
+  const seen = new Set<string>();
+  const chosen = (input.variants ?? []).filter((v) => !seen.has(v.variantId) && seen.add(v.variantId)).map((v) => {
+    const q = all.find((x) => x.variantId === v.variantId);
+    if (!q) throw new ListingError("SUPPLIER_UNAVAILABLE", v.variantId);
+    const price = Math.round(v.price * 100) / 100;
+    const margin = computeMargin({ saleTotal: price, supplierCost: q.unitLocal, supplierShipping: q.shippingLocal, supplierTaxRate: q.taxRate, market: m });
+    if (margin.marginPct < user.minMarginPct) throw new ListingError("MARGIN_TOO_LOW", `${q.label} : ${priceForTargetMargin(q.cost, user.minMarginPct, { market: m })}`);
+    return { q, price, margin, quantity: Math.max(1, Math.min(Math.floor(v.quantity) || 1, 10, q.stock)) };
+  });
+  if (chosen.length < 2) throw new ListingError("INVALID_INPUT");
+  const specs = variationSpecs(chosen.map((c) => c.q.options));
+  if (!specs) throw new ListingError("INVALID_INPUT");
+  const names = specs.map((x) => x.name);
+  const stillMissing = ctx.missingRequired.filter((n) => !names.some((x) => x.toLowerCase() === n.toLowerCase()));
+  if (stillMissing.length) throw new ListingError("ASPECTS_MISSING", stillMissing.join(", "));
+  const common = withoutVariationAspects(aspects, names);
+  const groupKey = makeSku();
+  const skuOf = (i: number) => `${groupKey}-${i + 1}`;
+  const minMargin = Math.min(...chosen.map((c) => c.margin.marginPct));
+
+  const listing = await db.listing.create({
+    data: {
+      userId: user.id,
+      ebayAccountId: account.id,
+      status: "DRAFT",
+      marketplace: m.id,
+      currency: m.currency,
+      sku: groupKey,
+      groupKey,
+      title,
+      price: Math.min(...chosen.map((c) => c.price)),
+      supplier: input.ref.supplier,
+      supplierProductId: ctx.productId,
+      supplierVariantId: chosen[0].q.variantId,
+      supplierCost: chosen[0].margin.landedCost,
+      lastCheckedAt: new Date(),
+      lastMarginPct: minMargin,
+      quantity: chosen.reduce((s, c) => s + c.quantity, 0),
+      categoryId: input.categoryId,
+      searchKeyword: input.keyword?.trim().slice(0, 120) || keywordFromTitle(title) || null,
+      basePrice: Math.min(...chosen.map((c) => c.price)),
+      variants: {
+        create: chosen.map((c, i) => ({
+          sku: skuOf(i),
+          supplierVariantId: c.q.variantId,
+          label: c.q.label.slice(0, 200),
+          options: c.q.options,
+          image: c.q.image ?? null,
+          price: c.price,
+          quantity: c.quantity,
+          supplierCost: c.margin.landedCost,
+          lastMarginPct: c.margin.marginPct,
+        })),
+      },
+    },
+    include: { variants: true },
+  });
+
+  try {
+    const token = await userToken(account);
+    const setup = await checkedSetup(saved, await ebay.getPolicies(token, m.id));
+    if (!setup) throw new ListingError("EBAY_SETUP_REQUIRED");
+    await ebay.ensureLocation(token, setup.merchantLocationKey, shipFromOf(setup, m.country));
+    for (const [i, c] of chosen.entries()) {
+      const variantAspects = Object.fromEntries(Object.entries(c.q.options).map(([k, v]) => [k, [v]]));
+      const imageUrls = [...new Set([...(c.q.image ? [c.q.image] : []), ...images])].slice(0, 12);
+      await ebay.putInventoryItem(token, skuOf(i), { title, description, imageUrls, aspects: { ...common, ...variantAspects }, quantity: c.quantity }, m.id);
+    }
+    await ebay.putInventoryItemGroup(token, groupKey, {
+      title, description, imageUrls: images, aspects: common,
+      variantSkus: chosen.map((_, i) => skuOf(i)),
+      specs,
+      imageVariesBy: names.includes("Color") && chosen.every((c) => c.q.image) ? "Color" : undefined,
+    }, m.id);
+    const offerIds: string[] = [];
+    for (const [i, c] of chosen.entries()) {
+      offerIds.push(await ebay.upsertOffer(token, {
+        marketId: m.id,
+        sku: skuOf(i),
+        categoryId: input.categoryId,
+        price: c.price,
+        quantity: c.quantity,
+        description: "",
+        merchantLocationKey: setup.merchantLocationKey,
+        fulfillmentPolicyId: setup.fulfillmentPolicyId,
+        paymentPolicyId: setup.paymentPolicyId,
+        returnPolicyId: setup.returnPolicyId,
+        regulatory: regulatoryOf(user, eu),
+      }));
+    }
+    const { listingId } = await ebay.publishGroup(token, groupKey, m.id);
+    await db.listing.update({ where: { id: listing.id }, data: { status: "ACTIVE", ebayListingId: listingId, publishedAt: new Date(), errorMessage: null } });
+    for (const v of listing.variants) {
+      const i = chosen.findIndex((_, k) => skuOf(k) === v.sku);
+      if (i >= 0) await db.listingVariant.update({ where: { id: v.id }, data: { ebayOfferId: offerIds[i] } });
+    }
+    if (user.adsEnabled) await syncAds(user, [listing.id]).catch((e) => console.error("Publicité", groupKey, e));
+    return { id: listing.id, listingId, url: ebayItemUrl(m.id, listingId) };
+  } catch (e) {
+    return publishFailed(listing.id, e);
   }
 }
 
@@ -444,6 +649,8 @@ export async function endListing(user: UserWithAccounts, listingId: string) {
   const account = user.ebayAccounts.find((a) => a.id === listing.ebayAccountId);
   if (listing.ebayOfferId && account && (listing.status === "ACTIVE" || listing.status === "PAUSED")) {
     await ebay.withdrawOffer(await userToken(account), listing.ebayOfferId, marketplace(listing.marketplace).id);
+  } else if (listing.groupKey && listing.ebayListingId && account && (listing.status === "ACTIVE" || listing.status === "PAUSED")) {
+    await ebay.withdrawGroup(await userToken(account), listing.groupKey, marketplace(listing.marketplace).id);
   }
   await db.listing.update({ where: { id: listing.id }, data: { status: "ENDED" } });
   // Annonce créée sur eBay : elle y reste, Sellvela arrête seulement de la gérer.

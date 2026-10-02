@@ -324,6 +324,14 @@ export const en = {
     leadDone: "You're in. The next list of winning products will land in your inbox.",
   },
   listing: {
+    variantsTitle: "Variations: {n} of {total} in the listing",
+    variantsHelp: "One eBay listing with every checked option (size, color, pack…). Each variation has its own price and must keep at least a {pct}% margin.",
+    variantCol: "Variation",
+    variantStock: "Stock",
+    variantProfit: "Profit / sale",
+    variantMin: "min. {min}",
+    variantsSingle: "Fewer than 2 variations checked: the listing will be published with a single variation.",
+    variantsTooLow: "At least one variation is below a {pct}% margin: raise its price or uncheck it.",
     ai: {
       writtenByAi: "Title, description and item specifics written by AI. Check them before publishing.",
       usage: "{used} / {limit} AI generations this month",
@@ -403,6 +411,7 @@ export const en = {
     settingsLink: "Open Settings",
   },
   listings: {
+    variantsBadge: "{n} variations",
     unmanage: "Stop managing",
     createdOnEbay: "Created on eBay",
     title: "My listings",

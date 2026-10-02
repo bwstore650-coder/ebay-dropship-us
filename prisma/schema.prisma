@@ -197,6 +197,9 @@ model Listing {
   publishedAt      DateTime?
   /// Annonce créée en dehors de Sellvela (sur eBay) puis liée à un produit fournisseur : mises à jour par l'API Trading.
   legacy           Boolean       @default(false)
+  /// Annonce à variantes (tailles, couleurs…) : clé du groupe d'articles eBay ; le détail est dans ListingVariant.
+  groupKey         String?
+  variants         ListingVariant[]
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   orders           Order[]
@@ -593,4 +596,27 @@ model ExternalListing {
 
   @@unique([ebayAccountId, itemId])
   @@index([userId])
+}
+
+/// Une variante d'une annonce à variantes (une taille, une couleur…) : sa propre offre eBay, son stock et son prix.
+model ListingVariant {
+  id                String    @id @default(cuid())
+  listingId         String
+  listing           Listing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  sku               String    @unique
+  supplierVariantId String
+  label             String
+  options           Json      // ex. { "Size": "L", "Quantity": "1PCS" }
+  image             String?
+  price             Float
+  quantity          Int       @default(3)
+  supplierCost      Float
+  lastMarginPct     Float?
+  status            String    @default("ACTIVE") // ACTIVE | PAUSED
+  pauseReason       String?
+  ebayOfferId       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([listingId])
 }

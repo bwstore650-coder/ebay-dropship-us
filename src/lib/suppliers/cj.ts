@@ -85,6 +85,7 @@ export interface CjVariant {
   variantNameEn?: string;
   variantImage?: string;
   variantSellPrice: number;
+  variantWeight?: number | string;  // grammes
   inventories?: { countryCode: string; totalInventory: number }[];
 }
 
@@ -97,6 +98,7 @@ export interface CjProduct {
   materialNameEn?: string;
   packingNameEn?: string;
   productWeight?: number | string;
+  productKeyEn?: string;          // noms des options, ex. « Format-Quantity »
   sellPrice: number | string;
   variants: CjVariant[];
 }
