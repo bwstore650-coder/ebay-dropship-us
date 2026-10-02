@@ -23,6 +23,23 @@ export function cjProductIdFromUrl(href) {
   return null;
 }
 
+/** Sites eBay pris en charge (même liste que Sellvela). */
+export const EBAY_HOSTS = ["www.ebay.com", "www.ebay.ca", "www.ebay.co.uk", "www.ebay.com.au", "www.ebay.de", "www.ebay.fr", "www.ebay.it", "www.ebay.es", "www.ebay.ie"];
+
+/** Numéro d'annonce d'une fiche produit eBay (/itm/123… ou /itm/titre/123…) et son site, ou null. */
+export function ebayItemFromUrl(href) {
+  let u;
+  try {
+    u = new URL(href);
+  } catch {
+    return null;
+  }
+  const host = u.hostname.toLowerCase();
+  if (!EBAY_HOSTS.includes(host)) return null;
+  const m = u.pathname.match(/^\/itm\/(?:[^/]+\/)?(\d{8,15})(?:[/?#]|$)/);
+  return m ? { itemId: m[1], host } : null;
+}
+
 /** Langue de l'interface : celle du compte Sellvela, sinon celle du navigateur, sinon l'anglais. */
 export const LOCALES = ["en", "fr", "es", "de", "it"];
 export function pickLocale(accountLocale, browserLanguage) {
@@ -97,6 +114,8 @@ export function errorKey(code) {
       AI_LIMIT: "errAiLimit",
       AI_FAILED: "errAiFailed",
       AI_NOT_CONFIGURED: "errAiOff",
+      NOT_FOUND: "errItemNotFound",
+      FEATURE_OFF: "errFeatureOff",
     }[code] ?? "errGeneric"
   );
 }

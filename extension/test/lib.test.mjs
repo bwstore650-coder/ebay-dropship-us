@@ -63,3 +63,18 @@ describe("extension : liens et erreurs", () => {
     expect(safeUrl("javascript:alert(1)", base)).toBeNull();
   });
 });
+
+describe("fiche produit eBay", () => {
+  it("numéro d'annonce et site, sur les 9 sites eBay", async () => {
+    const { ebayItemFromUrl, errorKey } = await import("../src/lib.js");
+    expect(ebayItemFromUrl("https://www.ebay.com/itm/397582997770?hash=item5c91")).toEqual({ itemId: "397582997770", host: "www.ebay.com" });
+    expect(ebayItemFromUrl("https://www.ebay.fr/itm/power-tower-dip/287539542552")).toEqual({ itemId: "287539542552", host: "www.ebay.fr" });
+    expect(ebayItemFromUrl("https://www.ebay.co.uk/itm/123456789012/")).toEqual({ itemId: "123456789012", host: "www.ebay.co.uk" });
+    expect(ebayItemFromUrl("https://www.ebay.com/sch/i.html?_nkw=dip")).toBeNull();
+    expect(ebayItemFromUrl("https://www.ebay.com/itm/abc")).toBeNull();
+    expect(ebayItemFromUrl("https://evil.example/itm/397582997770")).toBeNull();
+    expect(ebayItemFromUrl("pas une adresse")).toBeNull();
+    expect(errorKey("NOT_FOUND")).toBe("errItemNotFound");
+    expect(errorKey("FEATURE_OFF")).toBe("errFeatureOff");
+  });
+});

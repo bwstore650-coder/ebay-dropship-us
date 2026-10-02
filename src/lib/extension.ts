@@ -9,7 +9,11 @@ import { db } from "@/lib/db";
 import { decrypt } from "@/lib/crypto";
 import { env } from "@/lib/env";
 import { findVeroBrand } from "@/lib/compliance";
-import { computeMargin, priceForTargetMargin } from "@/lib/margin";
+import { computeMargin, median, priceForTargetMargin, weightedMedian } from "@/lib/margin";
+import { SHOW_SALES_DATA } from "@/lib/flags";
+import { getItemSales, isQuotaError } from "@/lib/ebay";
+import { cachedImageDemand } from "@/lib/ebay-quota";
+import { keywordFromTitle } from "@/lib/sniper";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import { analyzeCatalogProduct, analyzedSince, minPriceFor, POOL_FRESH_MS, savePool, type Analysis } from "@/lib/product-pool";
 import { totals } from "@/lib/affiliate";
@@ -139,7 +143,7 @@ export async function extensionSummary(user: ExtUser, since: Date | null) {
 
 /* ---------- Analyse d'un produit CJ ---------- */
 
-export type ExtError = "PLAN_REQUIRED" | "CJ_REQUIRED" | "INVALID_INPUT" | "NOT_FOUND" | "RATE_LIMITED";
+export type ExtError = "PLAN_REQUIRED" | "CJ_REQUIRED" | "INVALID_INPUT" | "NOT_FOUND" | "RATE_LIMITED" | "FEATURE_OFF";
 
 /** Analyses en direct par vendeur et par heure (chacune coûte des appels eBay et CJ). Les analyses déjà en base ne comptent pas. */
 export const LIVE_ANALYSES_PER_HOUR = 60;
@@ -274,4 +278,54 @@ export function feeCalculator(i: { price: number; cost: number; shipping?: numbe
 export function brandCheck(text: string) {
   const brand = findVeroBrand(text.slice(0, 500));
   return { brand, risky: brand !== null };
+}
+
+
+/* ---------- Fiche produit eBay ouverte dans le navigateur (TEMPORAIRE : derrière SHOW_SALES_DATA) ---------- */
+
+export interface EbayItemInsight {
+  itemId: string;
+  marketId: MarketplaceId;
+  title: string;
+  price: number;
+  currency: string;
+  sold: number;                 // ventes estimées depuis la mise en ligne
+  monthly: number | null;       // ventes estimées par mois (1 décimale)
+  monthsOnline: number | null;
+  variations: number;
+  market: { competitors: number; monthlySales: number | null; priceMedian: number | null; method: "IMAGE" | "KEYWORD" } | null;
+}
+
+/** Numéro d'annonce eBay (8 à 15 chiffres). */
+export const cleanItemId = (raw: unknown) => (typeof raw === "string" && /^\d{8,15}$/.test(raw.trim()) ? raw.trim() : null);
+
+/** Ventes estimées de l'annonce ouverte, par mois, et le marché du même produit (trouvé par la photo de l'annonce). */
+export async function ebayItemInsight(user: ExtUser, itemId: string, marketId: MarketplaceId): Promise<EbayItemInsight> {
+  if (!SHOW_SALES_DATA) throw new ExtensionError("FEATURE_OFF");
+  if (user.plan === "NONE") throw new ExtensionError("PLAN_REQUIRED");
+  if (!(await takeAnalysisSlot(user.id))) throw new ExtensionError("RATE_LIMITED");
+  const item = await getItemSales(itemId, marketId);
+  if (!item) throw new ExtensionError("NOT_FOUND");
+  const created = item.createdAt ? Date.parse(item.createdAt) : NaN;
+  const months = Number.isFinite(created) ? Math.max(1, (Date.now() - created) / (30.44 * 86_400_000)) : null;
+  // Gamme de prix plausible autour de cette annonce (même produit, pas un modèle bien plus gros ou un accessoire).
+  const demand = await cachedImageDemand(item.image, keywordFromTitle(item.title), 10, marketId, item.price / 2.5).catch((e) => {
+    if (isQuotaError(e)) throw e;
+    console.error("Marché (fiche eBay)", e);
+    return null;
+  });
+  return {
+    itemId,
+    marketId,
+    title: item.title,
+    price: Math.round(item.price * 100) / 100,
+    currency: item.currency,
+    sold: item.sold,
+    monthly: months ? Math.round((item.sold / months) * 10) / 10 : null,
+    monthsOnline: months ? Math.round(months) : null,
+    variations: item.variations,
+    market: demand
+      ? { competitors: demand.total, monthlySales: demand.monthlySales ?? null, priceMedian: weightedMedian(demand.soldWeighted) ?? median(demand.prices), method: demand.method ?? "KEYWORD" }
+      : null,
+  };
 }

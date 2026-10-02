@@ -223,6 +223,51 @@ export async function searchByImage(imageBase64: string, limit = 50, marketId: M
   return { total: data.total ?? items.length, prices: items.map((i) => i.price).filter((p) => p > 0), items };
 }
 
+export interface EbayItemSales {
+  itemId: string;
+  title: string;
+  price: number;           // prix + livraison
+  currency: string;
+  image: string | null;
+  createdAt: string | null;
+  sold: number;            // ventes estimées par eBay depuis la mise en ligne (toutes variantes)
+  variations: number;      // 1 : annonce simple
+}
+
+type RawItem = ItemSummary & { estimatedAvailabilities?: { estimatedSoldQuantity?: number }[]; categoryId?: string };
+
+/** Une annonce par son numéro (celui de l'adresse ebay.com/itm/…), variantes comprises. Null : annonce introuvable. */
+export async function getItemSales(itemId: string, marketId: MarketplaceId = "EBAY_US"): Promise<EbayItemSales | null> {
+  const token = await getAppToken();
+  const sold = (i: RawItem) => i.estimatedAvailabilities?.reduce((s, a) => s + (a.estimatedSoldQuantity ?? 0), 0) ?? 0;
+  const shape = (items: RawItem[]): EbayItemSales => {
+    const first = items[0];
+    return {
+      itemId,
+      title: first.title,
+      price: Number(first.price?.value ?? 0) + Number(first.shippingOptions?.[0]?.shippingCost?.value ?? 0),
+      currency: first.price?.currency ?? marketplace(marketId).currency,
+      image: first.image?.imageUrl ?? null,
+      createdAt: first.itemCreationDate ?? null,
+      sold: items.reduce((s, i) => s + sold(i), 0),
+      variations: items.length,
+    };
+  };
+  try {
+    const item = await api<RawItem>(token, `/buy/browse/v1/item/get_item_by_legacy_id?${new URLSearchParams({ legacy_item_id: itemId })}`, {}, marketId);
+    return shape([item]);
+  } catch (e) {
+    if (isQuotaError(e) || !(e instanceof EbayApiError)) throw e;
+    // Annonce à variantes : eBay demande de la lire comme un groupe.
+    if (e.errors.some((x) => x.errorId === 11006)) {
+      const g = await api<{ items?: RawItem[] }>(token, `/buy/browse/v1/item/get_items_by_item_group?${new URLSearchParams({ item_group_id: itemId })}`, {}, marketId);
+      return g.items?.length ? shape(g.items) : null;
+    }
+    if (e.status === 404 || e.errors.some((x) => x.errorId === 11001)) return null;
+    throw e;
+  }
+}
+
 /** Nombre d'annonces actives pour une recherche précise (mots-clés + catégorie + gamme de prix), en un appel. */
 export async function countActive(q: string, opts: { categoryId?: string | null; priceMin?: number | null; priceMax?: number | null }, marketId: MarketplaceId = "EBAY_US"): Promise<number> {
   const m = marketplace(marketId);

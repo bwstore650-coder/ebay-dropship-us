@@ -110,6 +110,8 @@ chrome.runtime.onMessage.addListener((msg, sender, reply) => {
         return ok(await api("/api/ext/analyze", { method: "POST", body: { productId: msg.productId } }));
       case "AI_TITLES":
         return ok(await api("/api/ext/ai-titles", { method: "POST", body: { productId: msg.productId } }));
+      case "EBAY_ITEM":
+        return ok(await api("/api/ext/ebay-item", { method: "POST", body: { itemId: msg.itemId, host: msg.host } }));
       case "SAVE":
         return ok(await api("/api/ext/saved", { method: "POST", body: { productId: msg.productId, title: msg.title, image: msg.image } }));
       case "OPEN": {

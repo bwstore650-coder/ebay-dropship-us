@@ -174,3 +174,26 @@ describe("marché d'après la photo du produit", () => {
     expect(r2.method).toBe("KEYWORD");
   });
 });
+
+describe("fiche eBay ouverte dans l'extension : ventes de l'annonce", () => {
+  it("annonce simple, annonce à variantes (groupe), annonce introuvable", async () => {
+    const { getItemSales } = await import("./ebay");
+    const fetchMock = vi.fn(async (url: string) => {
+      const u = new URL(url);
+      if (u.pathname === "/identity/v1/oauth2/token") return json({ access_token: "APP", expires_in: 7200 });
+      if (u.pathname.endsWith("/get_item_by_legacy_id")) {
+        const id = u.searchParams.get("legacy_item_id");
+        if (id === "222222222222") return json({ errors: [{ errorId: 11006, message: "item group" }] }, 400);
+        if (id === "333333333333") return json({ errors: [{ errorId: 11001, message: "not found" }] }, 404);
+        return json({ itemId: "v1|111111111111|0", title: "Dip station", price: { value: "41.85", currency: "USD" }, image: { imageUrl: "https://i.ebayimg.com/a.jpg" }, itemCreationDate: created, estimatedAvailabilities: [{ estimatedSoldQuantity: 76 }] });
+      }
+      if (u.pathname.endsWith("/get_items_by_item_group"))
+        return json({ items: [1, 2, 3].map((n) => ({ itemId: `v1|222222222222|${n}`, title: "Shirt", price: { value: "15", currency: "USD" }, itemCreationDate: created, estimatedAvailabilities: [{ estimatedSoldQuantity: n * 10 }] })) });
+      return json({}, 500);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    expect(await getItemSales("111111111111")).toMatchObject({ title: "Dip station", price: 41.85, sold: 76, variations: 1, createdAt: created });
+    expect(await getItemSales("222222222222")).toMatchObject({ title: "Shirt", sold: 60, variations: 3 });
+    expect(await getItemSales("333333333333")).toBeNull();
+  });
+});
