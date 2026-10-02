@@ -7,6 +7,7 @@ import type { CandidateDetails } from "@/lib/sniper";
 import { Icon } from "@/components/icons";
 import { cjProductUrl, ebaySearchUrl } from "@/lib/listing";
 import type { MarketplaceId } from "@/lib/marketplaces";
+import { SHOW_SALES_DATA } from "@/lib/flags";
 
 type Candidate = RunState["candidates"][number];
 
@@ -101,6 +102,7 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
     [k.profit, c.profit !== null ? money(c.profit) : "—", "font-semibold text-fg"],
   ];
   const stats: [string, string][] = [
+    ...(SHOW_SALES_DATA && !c.expired ? ([[k.estSales, num(c.unitsSold)]] as [string, string][]) : []),
     [k.competitors, num(m?.listings)],
     [k.priceRange, m?.priceMin !== null && m?.priceMin !== undefined ? `${money(m.priceMin)} – ${money(m.priceMax ?? null)}` : "—"],
     [fmt(k.minPrice, { margin: minMargin }), money(d.minPrice ?? null)],
@@ -140,6 +142,12 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
             </span>
             <span className={`text-sm font-medium ${marginTone}`}>{c.marginPct !== null ? `${c.marginPct} % ${k.margin}` : ""}</span>
           </p>
+          {SHOW_SALES_DATA && !c.expired && (
+            <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted tabular-nums" title={k.estSalesHint}>
+              <span className="inline-flex items-center gap-1"><Icon name="fire" className="h-3.5 w-3.5 text-amber-300" />{fmt(k.estSalesValue, { n: c.unitsSold ?? 0 })}</span>
+              <span className="inline-flex items-center gap-1"><Icon name="users" className="h-3.5 w-3.5 text-subtle" />{fmt(k.competitorsValue, { n: m?.listings ?? 0 })}</span>
+            </p>
+          )}
           {reason && <p className="mt-1.5 text-xs"><span className="inline-block rounded-md bg-surface-3 px-2 py-0.5 font-medium leading-snug text-muted">{reason}</span></p>}
           <p className="mt-2 flex flex-wrap gap-2 text-xs">
             <a href={ebaySearchUrl(marketId, c.keyword)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface-2 px-2.5 py-1 font-medium text-fg-2 hover:border-brand-500/50 hover:text-fg">
