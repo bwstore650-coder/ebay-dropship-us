@@ -7,6 +7,7 @@ import { decrypt, encrypt } from "@/lib/crypto";
 import { MAX_DELIVERY_DAYS } from "@/lib/margin";
 import * as cj from "@/lib/suppliers/cj";
 import * as ae from "@/lib/suppliers/aliexpress";
+import { pickShipping } from "./shipping";
 
 export type SupplierId = "CJ" | "ALIEXPRESS";
 
@@ -124,7 +125,7 @@ export async function quote(s: Session, productId: string, variantId: string, qu
       if (stock < quantity) return { kind: "no_stock" };
       const options = await cj.freightCalculate(s.token, v.vid, quantity, country);
       if (!options.length) return { kind: "no_route", stock };
-      const best = options.reduce((a, b) => (b.logisticPrice < a.logisticPrice ? b : a));
+      const best = pickShipping(options, (o) => Number(o.logisticPrice), (o) => cj.parseMaxDays(o.logisticAging))!;
       return { kind: "ok", stock, unitPrice: Number(v.variantSellPrice), shipping: Number(best.logisticPrice), deliveryDaysMax: cj.parseMaxDays(best.logisticAging), service: best.logisticName };
     }
     const p = await cached(cache, `AE:${productId}:${country}`, () => ae.getProduct(s.cfg, s.session, productId, country));
@@ -134,7 +135,7 @@ export async function quote(s: Session, productId: string, variantId: string, qu
     if (v.shipsFrom !== country) return { kind: "no_route", stock: v.stock };
     const options = await ae.shipping(s.cfg, s.session, { productId, skuId: v.skuId, quantity, country, sendFrom: country });
     if (!options.length) return { kind: "no_route", stock: v.stock };
-    const best = options.reduce((a, b) => (b.amountUsd < a.amountUsd ? b : a));
+    const best = pickShipping(options, (o) => o.amountUsd, (o) => o.deliveryDaysMax)!;
     return { kind: "ok", stock: v.stock, unitPrice: v.price, shipping: best.amountUsd, deliveryDaysMax: best.deliveryDaysMax, service: best.service, taxRate: ae.AE_TAX_ESTIMATE[country] };
   } catch (e) {
     if (isGoneMessage(e instanceof Error ? e.message : String(e))) return { kind: "gone" };
@@ -304,7 +305,7 @@ export async function variantQuotes(s: Session, productId: string, country: stri
         skipped.push({ label, reason: "NO_SHIPPING" });
         continue;
       }
-      const best = options.reduce((a, b) => (b.logisticPrice < a.logisticPrice ? b : a));
+      const best = pickShipping(options, (o) => Number(o.logisticPrice), (o) => cj.parseMaxDays(o.logisticAging))!;
       const days = cj.parseMaxDays(best.logisticAging);
       if (days > MAX_DELIVERY_DAYS) {
         skipped.push({ label, reason: "SLOW_SHIPPING" });
@@ -332,7 +333,7 @@ export async function variantQuotes(s: Session, productId: string, country: stri
       skipped.push({ label: v.label, reason: "NO_SHIPPING" });
       continue;
     }
-    const best = options.reduce((a, b) => (b.amountUsd < a.amountUsd ? b : a));
+    const best = pickShipping(options, (o) => o.amountUsd, (o) => o.deliveryDaysMax)!;
     if (best.deliveryDaysMax > MAX_DELIVERY_DAYS) {
       skipped.push({ label: v.label, reason: "SLOW_SHIPPING" });
       continue;

@@ -4,6 +4,7 @@
  * Limite : 1 appel par seconde (QPS = 1). Jeton valable 180 jours.
  */
 import type { SupplierOffer } from "@/lib/margin";
+import { pickShipping } from "./shipping";
 
 const BASE = "https://developers.cjdropshipping.com/api2.0/v1";
 
@@ -179,7 +180,7 @@ export async function toOffers(token: string, product: CjProduct, countryCode = 
   for (const { v, stockUs } of inStock) {
     const options = await freightCalculate(token, v.vid, 1, countryCode);
     if (!options.length) continue;
-    const cheapest = options.reduce((a, b) => (b.logisticPrice < a.logisticPrice ? b : a));
+    const cheapest = pickShipping(options, (o) => Number(o.logisticPrice), (o) => parseMaxDays(o.logisticAging))!;
     offers.push({
       supplier: "CJ",
       productId: product.pid,

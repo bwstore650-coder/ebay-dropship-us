@@ -84,16 +84,18 @@ export interface SupplierOffer {
   url?: string;
 }
 
-/** Meilleure offre : en stock aux US, livrée en ≤ 8 jours, coût livré le plus bas. */
+/** Meilleure offre tous fournisseurs confondus : en stock dans l'entrepôt du pays, livrée en ≤ 8 jours, coût livré le plus bas. */
 export function pickBestOffer(offers: SupplierOffer[]): SupplierOffer | null {
   const ok = offers.filter((o) => o.stockUs > 0 && o.deliveryDaysMax <= MAX_DELIVERY_DAYS);
   if (!ok.length) return null;
-  return ok.reduce((best, o) =>
-    landedCost({ supplierCost: o.price, supplierShipping: o.shipping, supplierTaxRate: o.taxRate }) <
-    landedCost({ supplierCost: best.price, supplierShipping: best.shipping, supplierTaxRate: best.taxRate })
-      ? o
-      : best,
-  );
+  // Coût livré le plus bas ; à quelques centimes près (≤ 0,30 ou 2 %), la livraison la plus rapide l'emporte.
+  const cost = (o: SupplierOffer) => landedCost({ supplierCost: o.price, supplierShipping: o.shipping, supplierTaxRate: o.taxRate });
+  return ok.reduce((best, o) => {
+    const a = cost(best), b = cost(o);
+    const close = Math.abs(a - b) <= Math.max(0.3, Math.min(a, b) * 0.02);
+    if (close) return o.deliveryDaysMax < best.deliveryDaysMax || (o.deliveryDaysMax === best.deliveryDaysMax && b < a) ? o : best;
+    return b < a ? o : best;
+  });
 }
 
 export function median(values: number[]): number | null {

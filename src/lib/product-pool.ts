@@ -21,6 +21,7 @@ import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import { marketInsights } from "@/lib/market-insights";
 import * as cj from "@/lib/suppliers/cj";
 import { type CandidateDetails, classify, inCostRange, SCANNER_SEEDS, keywordFromTitle, MAX_VARIANTS, MIN_UNITS_SOLD } from "@/lib/sniper";
+import { pickShipping } from "@/lib/suppliers/shipping";
 
 /** Un produit n'est plus proposé au-delà de ce nombre de vendeurs. */
 export const MAX_SELLERS_PER_PRODUCT = 5;
@@ -76,7 +77,7 @@ async function cjOffersFor(token: string, product: cj.CjProduct, country: string
   for (const { v, stock } of inStock) {
     const options = await cj.freightCalculate(token, v.vid, 1, country);
     if (!options.length) continue;
-    const cheapest = options.reduce((a, b) => (b.logisticPrice < a.logisticPrice ? b : a));
+    const cheapest = pickShipping(options, (o) => Number(o.logisticPrice), (o) => cj.parseMaxDays(o.logisticAging))!;
     offers.push({
       supplier: "CJ",
       productId: product.pid,

@@ -15,6 +15,7 @@
  */
 import crypto from "node:crypto";
 import type { SupplierOffer } from "@/lib/margin";
+import { pickShipping } from "./shipping";
 
 const GATEWAY = "https://api-sg.aliexpress.com";
 
@@ -334,7 +335,7 @@ export async function offersFor(cfg: AeConfig, session: string, productId: strin
   for (const s of local) {
     const options = await shipping(cfg, session, { productId: p.productId, skuId: s.skuId, quantity: 1, country, sendFrom: country });
     if (!options.length) continue;
-    const best = options.reduce((a, b) => (b.amountUsd < a.amountUsd ? b : a));
+    const best = pickShipping(options, (o) => o.amountUsd, (o) => o.deliveryDaysMax)!;
     offers.push({
       supplier: "ALIEXPRESS",
       productId: p.productId,
