@@ -1286,3 +1286,73 @@ export async function getSellerStandards(token: string, marketId: MarketplaceId)
     metrics: (r?.metrics ?? []).map((m) => ({ key: m.metricKey ?? "", name: m.name ?? m.metricKey ?? "", level: m.level ?? null, value: metricNumber(m.value) })),
   };
 }
+
+/* ---------- Questions des acheteurs (API Trading) ---------- */
+
+export interface BuyerQuestion {
+  messageId: string;
+  itemId: string | null;
+  itemTitle: string | null;
+  buyer: string;
+  subject: string | null;
+  body: string;
+  questionType: string | null;
+  receivedAt: string | null;
+}
+
+/** Questions sans réponse d'une page GetMemberMessages. */
+export function parseMemberMessages(xml: string): { messages: BuyerQuestion[]; totalPages: number } {
+  const totalPages = Number(xtag(xml.match(/<PaginationResult>[\s\S]*?<\/PaginationResult>/)?.[0] ?? "", "TotalNumberOfPages") ?? 1) || 1;
+  const messages: BuyerQuestion[] = [];
+  for (const m of xml.matchAll(/<MemberMessageExchange>([\s\S]*?)<\/MemberMessageExchange>/g)) {
+    const x = m[1];
+    const item = x.match(/<Item>([\s\S]*?)<\/Item>/)?.[1] ?? "";
+    const q = x.match(/<Question>([\s\S]*?)<\/Question>/)?.[1] ?? "";
+    const messageId = xtag(q, "MessageID");
+    const buyer = xtag(q, "SenderID");
+    const body = xtag(q, "Body");
+    if (!messageId || !buyer || !body) continue;
+    messages.push({
+      messageId,
+      itemId: xtag(item, "ItemID"),
+      itemTitle: xtag(item, "Title"),
+      buyer,
+      subject: xtag(q, "Subject"),
+      body,
+      questionType: xtag(q, "QuestionType"),
+      receivedAt: xtag(x, "CreationDate"),
+    });
+  }
+  return { messages, totalPages };
+}
+
+/** Questions des acheteurs sans réponse depuis `since` (au plus 3 pages de 100). */
+export async function getUnansweredQuestions(token: string, since: Date, marketId: MarketplaceId = "EBAY_US"): Promise<BuyerQuestion[]> {
+  const out: BuyerQuestion[] = [];
+  for (let page = 1; page <= 3; page++) {
+    const xml = await trading(
+      token,
+      "GetMemberMessages",
+      `<MailMessageType>All</MailMessageType><MessageStatus>Unanswered</MessageStatus><StartCreationTime>${since.toISOString()}</StartCreationTime><EndCreationTime>${new Date().toISOString()}</EndCreationTime><Pagination><EntriesPerPage>100</EntriesPerPage><PageNumber>${page}</PageNumber></Pagination>`,
+      marketId,
+    );
+    const r = parseMemberMessages(xml);
+    out.push(...r.messages);
+    if (page >= r.totalPages) break;
+  }
+  return out;
+}
+
+/** Réponse privée à la question d'un acheteur (API Trading AddMemberMessageRTQ). */
+export async function answerBuyerQuestion(
+  token: string,
+  m: { itemId: string | null; parentMessageId: string; buyer: string; body: string },
+  marketId: MarketplaceId = "EBAY_US",
+): Promise<void> {
+  await trading(
+    token,
+    "AddMemberMessageRTQ",
+    `${m.itemId ? `<ItemID>${xmlEscape(m.itemId)}</ItemID>` : ""}<MemberMessage><Body>${xmlEscape(m.body.slice(0, 2000))}</Body><DisplayToPublic>false</DisplayToPublic><EmailCopyToSender>true</EmailCopyToSender><ParentMessageID>${xmlEscape(m.parentMessageId)}</ParentMessageID><RecipientID>${xmlEscape(m.buyer)}</RecipientID></MemberMessage>`,
+    marketId,
+  );
+}

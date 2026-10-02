@@ -249,3 +249,46 @@ Rules:
   if (!parsed.success) throw new AiError("Réponse IA invalide");
   return parsed.data.description_html;
 }
+
+/* ---------- Réponse à la question d'un acheteur ---------- */
+
+export interface BuyerReplyInput {
+  language: AiLanguage;
+  buyer: string;
+  question: string;
+  itemTitle: string | null;
+  order: { status: string; orderedAt: string | null; shippedAt: string | null; trackingNumber: string | null; carrier: string | null; createdAt: string } | null;
+}
+
+/** Réponse courte et polie, fondée seulement sur les faits de la commande (jamais de promesse de remboursement). */
+export async function writeBuyerReply(i: BuyerReplyInput): Promise<string> {
+  const facts = i.order
+    ? `Order facts (the only facts you may use):
+- Order received: ${i.order.createdAt.slice(0, 10)}
+- Status: ${i.order.status} (PENDING/ORDERING = being prepared, ORDERED = sent to the warehouse for shipping, SHIPPED = shipped)
+- Placed with the warehouse: ${i.order.orderedAt?.slice(0, 10) ?? "not yet"}
+- Shipped: ${i.order.shippedAt?.slice(0, 10) ?? "not yet"}
+- Tracking number: ${i.order.trackingNumber ?? "none yet"}${i.order.carrier ? ` (carrier: ${i.order.carrier})` : ""}`
+    : "No order from this buyer was found. Answer helpfully and, if the question is about an order, ask them to confirm which order.";
+  const out = (await callTool(
+    `You are an eBay seller answering a buyer's private message. Write in ${LANG_NAMES[i.language]}.
+Buyer: ${i.buyer}
+Item: ${i.itemTitle ?? "unknown"}
+Buyer's message:
+"""${i.question.slice(0, 2000)}"""
+
+${facts}
+
+Rules:
+- Friendly, professional, at most 110 words. Greet the buyer by their eBay username only if natural.
+- Use ONLY the facts above. If tracking exists, give the number and say it can take 24-48 h to update. Never invent dates, carriers or tracking numbers.
+- Never promise a refund, replacement, discount or a delivery date. For returns or problems, say you will help and that they can open a return/request through eBay.
+- Never mention suppliers, dropshipping, CJ, AliExpress or warehouses abroad.
+- No signature name, no placeholders like [Your name].`,
+    { name: "buyer_reply", description: "The reply to send to the buyer.", input_schema: { type: "object", properties: { reply: { type: "string" } }, required: ["reply"] } },
+    800,
+  )) as { reply?: string };
+  const reply = String(out.reply ?? "").trim();
+  if (!reply) throw new AiError("Réponse IA vide");
+  return reply.slice(0, 2000);
+}

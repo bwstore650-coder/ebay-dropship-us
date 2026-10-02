@@ -14,9 +14,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { locale, t } = await getI18n();
   const n = t.nav;
   const isAdmin = isAdminEmail(user.email, parseAdminEmails(process.env.ADMIN_EMAILS));
-  const [attention, openReturns] = await Promise.all([
+  const [attention, openReturns, newMessages] = await Promise.all([
     db.order.count({ where: { userId: user.id, status: { in: ["NEEDS_REVIEW", "FAILED"] } } }),
     db.afterSale.count({ where: { userId: user.id, open: true, action: null } }),
+    db.buyerMessage.count({ where: { userId: user.id, status: "NEW" } }),
   ]);
 
   const sections: NavSection[] = [
@@ -28,6 +29,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         { href: "/listings", label: n.listings, icon: "tag" },
         { href: "/orders", label: n.orders, icon: "box", badge: attention },
         { href: "/returns", label: n.returns, icon: "undo", badge: openReturns },
+        { href: "/messages", label: n.messages, icon: "message", badge: newMessages },
         { href: "/health", label: n.health, icon: "shield" },
       ],
     },

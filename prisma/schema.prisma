@@ -107,6 +107,7 @@ model User {
   aiUsage            AiUsage[]
 
   @@index([googleId])
+  buyerMessages      BuyerMessage[]
 }
 
 model EbayAccount {
@@ -619,4 +620,32 @@ model ListingVariant {
   updatedAt         DateTime  @updatedAt
 
   @@index([listingId])
+}
+
+/// Question d'un acheteur sur eBay (« où est ma commande ? ») ; l'IA prépare une réponse, le vendeur l'envoie d'un clic.
+model BuyerMessage {
+  id             String    @id @default(cuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  ebayAccountId  String
+  marketplace    String    @default("EBAY_US")
+  messageId      String
+  itemId         String?
+  itemTitle      String?
+  buyer          String
+  subject        String?
+  body           String
+  questionType   String?
+  receivedAt     DateTime  @default(now())
+  status         String    @default("NEW") // NEW | REPLIED | DISMISSED
+  orderId        String?   // commande Sellvela de cet acheteur (contexte de la réponse)
+  draft          String?
+  draftAt        DateTime?
+  draftError     String?
+  repliedAt      DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([ebayAccountId, messageId])
+  @@index([userId, status])
 }
