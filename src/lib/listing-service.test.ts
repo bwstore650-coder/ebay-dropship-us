@@ -61,6 +61,7 @@ const parse = (b: unknown) => {
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 
 let locationExists = true;
+let offerNotYet = 0;
 let accountPolicies = { f: ["F1"], p: ["PAY1"], r: ["R1"] };
 function router(url: string, init?: RequestInit): Response {
   const u = new URL(url);
@@ -116,7 +117,10 @@ function router(url: string, init?: RequestInit): Response {
   if (path === "/sell/inventory/v1/offer/O9" && init?.method === "PUT") return new Response(null, { status: 204 });
   if (path.startsWith("/sell/inventory/v1/inventory_item/") && init?.method === "PUT") return new Response(null, { status: 204 });
   if (path === "/sell/inventory/v1/offer" && (init?.method ?? "GET") === "GET") return json({ errors: [{ errorId: 25713, message: "Not found" }] }, 404);
-  if (path === "/sell/inventory/v1/offer" && init?.method === "POST") return json({ offerId: "O1" });
+  if (path === "/sell/inventory/v1/offer" && init?.method === "POST") {
+    if (offerNotYet > 0) { offerNotYet--; return json({ errors: [{ errorId: 25702, message: "PL-X could not be found or is not available in the system" }] }, 400); }
+    return json({ offerId: "O1" });
+  }
   if (path === "/sell/inventory/v1/offer/O1/publish") return json({ listingId: "L1" });
   return json({ errors: [{ message: `route inconnue ${url}` }] }, 500);
 }
@@ -144,6 +148,7 @@ const baseInput = {
 
 beforeEach(() => {
   locationExists = true;
+  offerNotYet = 0;
   accountPolicies = { f: ["F1"], p: ["PAY1"], r: ["R1"] };
   vi.stubEnv("DATABASE_URL", "postgresql://x");
   vi.stubEnv("SESSION_SECRET", "x".repeat(32));
@@ -216,6 +221,13 @@ describe("publication d'une annonce", { timeout: 30_000 }, () => {
     accountPolicies = { f: ["A", "B"], p: ["PAY1"], r: ["R-NEW"] };
     await expect(publishListing(user(), baseInput)).rejects.toMatchObject({ code: "EBAY_SETUP_REQUIRED" });
     expect(find("POST", "/sell/inventory/v1/offer")).toBeUndefined();
+  });
+
+  it("fiche article pas encore disponible chez eBay (25702) : l'offre est réessayée", { timeout: 20_000 }, async () => {
+    offerNotYet = 1;
+    const r = await publishListing(user(), baseInput);
+    expect(r.listingId).toBe("L1");
+    expect(calls.filter((c) => c.method === "POST" && c.url.endsWith("/sell/inventory/v1/offer"))).toHaveLength(2);
   });
 
   it("refuse un prix sous la marge minimum (prix minimum indiqué)", async () => {
