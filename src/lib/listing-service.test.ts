@@ -56,9 +56,15 @@ const parse = (b: unknown) => {
 };
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 
+let locationExists = true;
 function router(url: string, init?: RequestInit): Response {
   const u = new URL(url);
   const path = u.pathname;
+  if (path.startsWith("/sell/inventory/v1/location/")) {
+    if ((init?.method ?? "GET") === "GET")
+      return locationExists ? json({ merchantLocationKey: path.split("/").pop() }) : json({ errors: [{ errorId: 25805, message: "merchantLocationKey not found." }] }, 404);
+    if (init?.method === "POST") { locationExists = true; return new Response(null, { status: 204 }); }
+  }
   if (u.hostname === "developers.cjdropshipping.com") {
     if (path.endsWith("/product/query"))
       return json({
@@ -129,6 +135,7 @@ const baseInput = {
 };
 
 beforeEach(() => {
+  locationExists = true;
   vi.stubEnv("DATABASE_URL", "postgresql://x");
   vi.stubEnv("SESSION_SECRET", "x".repeat(32));
   vi.stubEnv("ENCRYPTION_KEY", "0".repeat(64));
@@ -178,6 +185,15 @@ describe("publication d'une annonce", { timeout: 30_000 }, () => {
 
     expect(store.created[0]).toMatchObject({ status: "DRAFT", marketplace: "EBAY_US", supplierCost: 12, price: 29.99, ebayAccountId: "A1" });
     expect(store.updates.at(-1)).toMatchObject({ status: "ACTIVE", ebayOfferId: "O1", ebayListingId: "L1" });
+  });
+
+  it("lieu d'expédition disparu chez eBay : recréé à l'identique avant la publication", async () => {
+    locationExists = false;
+    const r = await publishListing(user(), baseInput);
+    expect(r.listingId).toBe("L1");
+    const created = find("POST", "/sell/inventory/v1/location/PL-US-90001")!;
+    expect(created.body).toMatchObject({ locationTypes: ["WAREHOUSE"], merchantLocationStatus: "ENABLED", location: { address: { postalCode: "90001", country: "US" } } });
+    expect(calls.findIndex((c) => c.url.includes("/location/")) < calls.findIndex((c) => c.url.includes("/offer"))).toBe(true);
   });
 
   it("refuse un prix sous la marge minimum (prix minimum indiqué)", async () => {

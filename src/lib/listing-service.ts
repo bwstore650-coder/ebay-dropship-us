@@ -290,6 +290,9 @@ export async function publishListing(user: UserWithAccounts, input: PublishInput
 
   try {
     const token = await userToken(account);
+    // Le lieu d'expédition peut avoir disparu chez eBay (compte eBay reconnecté, lieu supprimé dans Seller Hub) :
+    // il est recréé à l'identique, sinon eBay refuse l'annonce (« Location information not found »).
+    await ebay.ensureLocation(token, setup.merchantLocationKey, shipFromOf(setup, m.country));
     await ebay.putInventoryItem(token, sku, { title, description, imageUrls: images, aspects, quantity }, m.id);
     const { offerId, listingId } = await ebay.createOrUpdateAndPublish(token, {
       marketId: m.id,
@@ -364,6 +367,15 @@ export async function createStandardPolicies(user: UserWithAccounts, accountId: 
   return setupOptions(user, accountId, marketId);
 }
 
+/** Adresse du lieu d'expédition d'un réglage (anciens réglages : code postal relu dans la clé « PL-US-91710 »). */
+export function shipFromOf(
+  setup: { merchantLocationKey: string; shipPostalCode?: string | null; shipCity?: string | null; shipState?: string | null },
+  country: string,
+): ebay.ShipFrom {
+  const postal = setup.shipPostalCode || setup.merchantLocationKey.replace(/^PL-[A-Z]{2}-/, "");
+  return { postalCode: postal, country, ...(setup.shipCity ? { city: setup.shipCity } : {}), ...(setup.shipState ? { stateOrProvince: setup.shipState } : {}) };
+}
+
 export async function saveSetup(
   user: UserWithAccounts,
   i: { accountId: string; marketId: MarketplaceId; fulfillmentPolicyId: string; paymentPolicyId: string; returnPolicyId: string; postalCode: string; city?: string; stateOrProvince?: string },
@@ -386,6 +398,9 @@ export async function saveSetup(
     paymentPolicyId: i.paymentPolicyId,
     returnPolicyId: i.returnPolicyId,
     merchantLocationKey: key,
+    shipPostalCode: postal,
+    shipCity: i.city?.trim() || null,
+    shipState: i.stateOrProvince?.trim() || null,
   };
   await db.ebayMarketSetup.upsert({
     where: { ebayAccountId_marketplaceId: { ebayAccountId: account.id, marketplaceId: m.id } },
