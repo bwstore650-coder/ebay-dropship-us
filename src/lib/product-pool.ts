@@ -14,7 +14,7 @@ import { decrypt } from "@/lib/crypto";
 import { parseAdminEmails } from "@/lib/admin";
 import { findVeroBrand } from "@/lib/compliance";
 import { isQuotaError } from "@/lib/ebay";
-import { browseQuota, cachedDemand, pauseForQuota, quotaPausedUntil, SCANNER_RESERVE, scannerMayRun } from "@/lib/ebay-quota";
+import { browseQuota, cachedImageDemand, pauseForQuota, quotaPausedUntil, SCANNER_RESERVE, scannerMayRun } from "@/lib/ebay-quota";
 import { getUsdRates, offersToCurrency } from "@/lib/fx";
 import { DEFAULT_MIN_MARGIN_PCT, evaluateProduct, priceForTargetMargin, weightedMedian, type SupplierOffer } from "@/lib/margin";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
@@ -28,6 +28,13 @@ export const MAX_SELLERS_PER_PRODUCT = 5;
 export const POOL_FRESH_MS = 24 * 3600_000; // contrat eBay : données eBay affichées de moins de 24 h
 /** Au-delà, le scanner réanalyse le produit. */
 export const POOL_REFRESH_MS = 20 * 3600_000; // réanalysés avant d'avoir 24 h
+/**
+ * Analyses faites avant le passage à la recherche par photo (2 octobre 2026) : prix et ventes parfois
+ * mesurés sur des produits différents. Elles sont considérées comme périmées (masquées et réanalysées en premier).
+ */
+export const IMAGE_METHOD_SINCE = process.env.VITEST ? 0 : Date.parse("2026-10-02T04:50:00Z"); // (tests : sans effet)
+/** Date au-delà de laquelle une analyse compte comme récente (jamais avant le passage à la recherche par photo). */
+export const analyzedSince = (maxAgeMs: number, now = Date.now()) => new Date(Math.max(now - maxAgeMs, IMAGE_METHOD_SINCE));
 const EXPOSURE_WINDOW_MS = 14 * 86_400_000;
 
 /** Rejets valables pour tout le monde (ne dépendent pas des réglages du vendeur). */
@@ -119,7 +126,8 @@ export async function analyzeCatalogProduct(
     return { ...base, ...empty, status: "REJECTED", reason: "COST_RANGE", details: supplierInfo, keyword: kw };
   }
 
-  const market = await cachedDemand(kw, 10, m.id);
+  // Annonces comparables trouvées par la PHOTO du produit (mots-clés si la photo ne donne rien de fiable).
+  const market = await cachedImageDemand(image, kw, 10, m.id);
   const insights = marketInsights(market);
   const sold = weightedMedian(market.soldWeighted);
   const prices = sold !== null ? [sold] : market.prices;
@@ -254,7 +262,7 @@ export async function pickFromPool(q: PoolQuery): Promise<ProductInsight[]> {
       marginPct: { gte: q.minMarginPct },
       ...(q.minProfit != null ? { profit: { gte: q.minProfit } } : {}),
       unitsSold: { gte: MIN_UNITS_SOLD },
-      analyzedAt: { gt: new Date(Date.now() - POOL_FRESH_MS) },
+      analyzedAt: { gt: analyzedSince(POOL_FRESH_MS) },
       ...(q.priceMin != null || q.priceMax != null ? { marketPrice: { ...(q.priceMin != null ? { gte: q.priceMin } : {}), ...(q.priceMax != null ? { lte: q.priceMax } : {}) } } : {}),
       ...(q.exclude?.length ? { productId: { notIn: q.exclude } } : {}),
       // Thèmes : produit trouvé par ce thème (catégorie), ou thème présent dans le titre / la recherche eBay.
@@ -314,7 +322,7 @@ const MAX_ROUNDS = 30;
  * pas encore connus ou périmés, jusqu'à `deadline`. Réanalyse ensuite les produits rentables les plus anciens.
  */
 /** Appels eBay au plus par produit analysé (1 recherche + 10 ventes estimées). */
-export const CALLS_PER_PRODUCT = 11;
+export const CALLS_PER_PRODUCT = 12; // recherche par image + ventes de 10 annonces + comptage des concurrents
 /** Nombre de produits que le scanner peut analyser sans entamer la réserve des vendeurs. */
 export function scanBudget(q: { limit: number; remaining: number } | null): number {
   if (!q || !q.limit) return Infinity;
@@ -373,7 +381,7 @@ export async function scanTick(
 
     const ids = items.map((it) => String(it.id ?? it.pid));
     const known = await db.productInsight.findMany({
-      where: { marketplace: m.id, supplier: "CJ", productId: { in: ids }, analyzedAt: { gt: new Date(Date.now() - POOL_REFRESH_MS) } },
+      where: { marketplace: m.id, supplier: "CJ", productId: { in: ids }, analyzedAt: { gt: analyzedSince(POOL_REFRESH_MS) } },
       select: { productId: true },
     });
     const skip = new Set(known.map((k) => k.productId));
@@ -392,7 +400,7 @@ export async function scanTick(
   if (opts.refresh === false) return { analyzed, refreshed };
   // 2) Produits rentables dont l'analyse vieillit : réanalysés en priorité (ce sont ceux qu'on propose).
   const stale = await db.productInsight.findMany({
-    where: { marketplace: m.id, supplier: "CJ", reason: null, analyzedAt: { lt: new Date(Date.now() - POOL_REFRESH_MS) } },
+    where: { marketplace: m.id, supplier: "CJ", reason: null, analyzedAt: { lt: analyzedSince(POOL_REFRESH_MS) } },
     orderBy: { analyzedAt: "asc" },
     take: 50,
     select: { productId: true, keyword: true, title: true },
@@ -412,7 +420,7 @@ export async function poolWinners(userId: string, marketId: MarketplaceId, minMa
 
 /** Statistiques de la base (admin et page gagnants). */
 export async function poolStats(marketId: MarketplaceId) {
-  const fresh = new Date(Date.now() - POOL_FRESH_MS);
+  const fresh = analyzedSince(POOL_FRESH_MS);
   const [total, profitable] = await Promise.all([
     db.productInsight.count({ where: { marketplace: marketId, analyzedAt: { gt: fresh } } }),
     db.productInsight.count({ where: { marketplace: marketId, analyzedAt: { gt: fresh }, reason: null, marginPct: { gte: DEFAULT_MIN_MARGIN_PCT }, unitsSold: { gte: MIN_UNITS_SOLD } } }),

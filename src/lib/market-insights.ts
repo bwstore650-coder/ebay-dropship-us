@@ -21,12 +21,15 @@ export interface MarketInsights {
   priceMin: number | null;
   priceMedian: number | null;
   priceMax: number | null;
+  monthlySales?: number | null; // ventes estimées par mois sur les annonces comparables
+  method?: "IMAGE" | "KEYWORD"; // annonces trouvées par la photo du produit, ou par mots-clés
+  search?: { q: string; categoryId: string | null; priceMin: number | null; priceMax: number | null }; // recherche précise des concurrents
 }
 
 export const MAX_CHART_PRICES = 40;
 
 export function marketInsights(
-  m: { total: number; prices: number[]; analyzed: AnalyzedListing[] },
+  m: { total: number; prices: number[]; analyzed: AnalyzedListing[]; monthlySales?: number | null; method?: "IMAGE" | "KEYWORD"; search?: MarketInsights["search"] },
 ): MarketInsights {
   const prices = m.prices.filter((p) => p > 0).sort((a, b) => a - b);
   // Pour le graphique : échantillon réparti sur toute la fourchette.
@@ -40,5 +43,8 @@ export function marketInsights(
     priceMin: prices.length ? round(prices[0]) : null,
     priceMedian: prices.length ? round(median(prices)!) : null,
     priceMax: prices.length ? round(prices[prices.length - 1]) : null,
+    monthlySales: m.monthlySales ?? null,
+    ...(m.method ? { method: m.method } : {}),
+    ...(m.search ? { search: m.search } : {}),
   };
 }

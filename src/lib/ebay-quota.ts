@@ -7,7 +7,9 @@
  */
 import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
-import { getBrowseQuota, searchWithDemand, type BrowseQuota, type DemandSnapshot } from "@/lib/ebay";
+import { createHash } from "node:crypto";
+import { countActive, getBrowseQuota, isQuotaError, searchByImage, searchWithDemand, soldQuantities, type BrowseQuota, type DemandSnapshot } from "@/lib/ebay";
+import { monthlySales, pickComparables } from "@/lib/comparables";
 import type { MarketplaceId } from "@/lib/marketplaces";
 
 const PAUSE_KEY = "ebay:browse:pause";
@@ -86,6 +88,75 @@ export async function cachedDemand(q: string, sample: number, marketId: Marketpl
   const hit = await readState<DemandSnapshot>(key);
   if (hit) return hit;
   const fresh = await searchWithDemand(q, sample, marketId);
+  await writeState(key, fresh as unknown as Prisma.InputJsonValue, new Date(Date.now() + DEMAND_CACHE_MS));
+  return fresh;
+}
+
+/** Photos plus lourdes : pas de recherche par image (lente et refusée par eBay au-delà de quelques Mo). */
+const MAX_IMAGE_BYTES = 3_000_000;
+/** Moins d'annonces vraiment comparables que ça : la recherche par mots-clés prend le relais. */
+export const MIN_IMAGE_MATCHES = 3;
+
+async function imageBase64(url: string): Promise<string | null> {
+  if (!/^https:\/\//.test(url)) return null;
+  try {
+    const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) return null;
+    const buf = Buffer.from(await res.arrayBuffer());
+    return buf.length && buf.length <= MAX_IMAGE_BYTES ? buf.toString("base64") : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Marché d'un produit fournisseur d'après sa PHOTO (recherche eBay par image) :
+ * 1. annonces les plus ressemblantes, filtrées (titre et prix cohérents) ;
+ * 2. ventes estimées de ces annonces (total et par mois) ;
+ * 3. concurrents = recherche précise construite à partir d'elles (mots communs + catégorie + gamme de prix).
+ * Sans photo exploitable ou avec trop peu d'annonces comparables : recherche par mots-clés (méthode d'avant).
+ * Gardé 6 h comme les autres recherches eBay.
+ */
+export async function cachedImageDemand(imageUrl: string | null, keyword: string, sample: number, marketId: MarketplaceId): Promise<DemandSnapshot> {
+  if (!imageUrl) return cachedDemand(keyword, sample, marketId);
+  const key = `idemand:${marketId}:${sample}:${createHash("sha1").update(imageUrl).digest("hex")}`;
+  const hit = await readState<DemandSnapshot>(key);
+  if (hit) return hit;
+  const image = await imageBase64(imageUrl);
+  if (!image) return cachedDemand(keyword, sample, marketId);
+  let found;
+  try {
+    found = await searchByImage(image, 50, marketId);
+  } catch (e) {
+    if (isQuotaError(e)) throw e;
+    console.error("Recherche eBay par image", e);
+    return cachedDemand(keyword, sample, marketId);
+  }
+  const set = pickComparables(found.items);
+  if (set.matches.length < MIN_IMAGE_MATCHES) return cachedDemand(keyword, sample, marketId);
+
+  const sampled = set.matches.slice(0, sample);
+  const sold = await soldQuantities(sampled.map((i) => i.id), marketId);
+  const analyzed = sampled.filter((i) => sold.has(i.id)).map((i) => ({ ...i, sold: sold.get(i.id)! }));
+  const q = set.keywords.length >= 2 ? set.keywords.join(" ") : keyword;
+  let total = set.matches.length;
+  try {
+    total = Math.max(total, await countActive(q, { categoryId: set.categoryId, priceMin: set.priceMin, priceMax: set.priceMax }, marketId));
+  } catch (e) {
+    if (isQuotaError(e)) throw e;
+    console.error("Concurrents eBay", e);
+  }
+  const fresh: DemandSnapshot = {
+    total,
+    prices: set.matches.map((i) => i.price).filter((p) => p > 0),
+    items: set.matches,
+    analyzed,
+    soldWeighted: analyzed.map((i) => ({ price: i.price, weight: i.sold })),
+    unitsSold: analyzed.reduce((s, i) => s + i.sold, 0),
+    monthlySales: monthlySales(analyzed),
+    method: "IMAGE",
+    search: { q, categoryId: set.categoryId, priceMin: set.priceMin, priceMax: set.priceMax },
+  };
   await writeState(key, fresh as unknown as Prisma.InputJsonValue, new Date(Date.now() + DEMAND_CACHE_MS));
   return fresh;
 }

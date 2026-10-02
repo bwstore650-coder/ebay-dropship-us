@@ -23,6 +23,7 @@ interface Result {
   best: { supplier: "CJ" | "ALIEXPRESS"; productId: string; variantId?: string; title: string; price: number; shipping: number; deliveryDaysMax: number; stockUs: number } | null;
   margin: { landedCost: number; fees: number; profit: number; marginPct: number } | null;
   minPriceForTarget: number | null;
+  insights?: { monthlySales?: number | null };
 }
 
 export default function FinderClient({
@@ -132,6 +133,7 @@ export default function FinderClient({
             <Row k={r.priceSource === "SOLD_WEIGHTED" ? t.marketPriceSold : t.marketPriceActive} v={r.marketPrice !== null ? money(r.marketPrice) : "—"} />
             <Row k={t.listingsFound} v={r.ebayListingsCount} />
             {SHOW_SALES_DATA && <Row k={t.estSales} v={r.unitsSold} />}
+            {SHOW_SALES_DATA && r.insights?.monthlySales != null && <Row k={t.monthlySales} v={r.insights.monthlySales} />}
             <Row k={t.offersCompared} v={r.offersChecked} />
             {r.best && <Row k={t.bestSupplier} v={`${r.best.supplier} — ${r.best.title}`} />}
             {r.best && <Row k={t.deliveryLabel} v={fmt(t.delivery, { days: r.best.deliveryDaysMax, stock: r.best.stockUs })} />}

@@ -19,7 +19,7 @@ describe("quota eBay", () => {
     expect(scannerMayRun(null)).toBe(true);
     expect(scannerMayRun({ limit: 5000, remaining: 4000, reset: null })).toBe(true);
     expect(scannerMayRun({ limit: 5000, remaining: 2500, reset: null })).toBe(false);
-    expect(scanBudget({ limit: 5000, remaining: 3600 })).toBe(100); // (3600 - 2500) / 11
+    expect(scanBudget({ limit: 5000, remaining: 3600 })).toBe(91); // (3600 - 2500) / 12
     expect(scanBudget({ limit: 5000, remaining: 1000 })).toBe(0);
     expect(scanBudget(null)).toBe(Infinity);
   });

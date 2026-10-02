@@ -151,6 +151,15 @@ export function ebaySearchUrl(marketId: string, keyword: string): string {
 }
 
 /** Fiche du produit sur le site CJdropshipping. */
+/** Recherche eBay précise (annonces comparables) : mots-clés + catégorie + gamme de prix, neuf, achat immédiat. */
+export function ebayPreciseSearchUrl(marketId: string, s: { q: string; categoryId?: string | null; priceMin?: number | null; priceMax?: number | null }): string {
+  const p = new URLSearchParams({ _nkw: s.q, LH_BIN: "1", LH_ItemCondition: "1000" });
+  if (s.categoryId) p.set("_sacat", s.categoryId);
+  if (s.priceMin != null) p.set("_udlo", String(Math.floor(s.priceMin)));
+  if (s.priceMax != null) p.set("_udhi", String(Math.ceil(s.priceMax)));
+  return `https://${ebayDomain(marketId)}/sch/i.html?${p}`;
+}
+
 export function cjProductUrl(productId: string, title?: string | null): string {
   const slug = (title ?? "product").toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 80).replace(/^-+|-+$/g, "") || "product";
   return `https://cjdropshipping.com/product/${slug}-p-${encodeURIComponent(productId)}.html`;

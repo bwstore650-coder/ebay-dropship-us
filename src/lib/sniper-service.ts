@@ -16,7 +16,7 @@ import { pauseForQuota, quotaPausedUntil } from "@/lib/ebay-quota";
 import { ListingError, prepareListing, publishListing } from "@/lib/listing-service";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import * as cj from "@/lib/suppliers/cj";
-import { analyzeCatalogProduct, minPriceFor, pickFromPool, POOL_FRESH_MS, savePool } from "@/lib/product-pool";
+import { analyzeCatalogProduct, analyzedSince, minPriceFor, pickFromPool, POOL_FRESH_MS, savePool } from "@/lib/product-pool";
 import {
   type CandidateDetails,
   classify, DEFAULT_SEEDS, HIGH_TICKET_PROFIT, HIGH_TICKET_SEEDS, isCategoryId, isFinished, keywordFromTitle, MAX_TARGET, maxScan, RESUME_AFTER_MS,
@@ -247,7 +247,7 @@ async function gather(run: RunRow, token: string): Promise<Cursor> {
       // Déjà analysés récemment dans la base commune : les rentables ont été proposés d'office, inutile de refaire l'analyse.
       run.autoList
         ? Promise.resolve([] as { productId: string }[])
-        : db.productInsight.findMany({ where: { marketplace: run.marketplace, supplier: "CJ", productId: { in: ids }, analyzedAt: { gt: new Date(Date.now() - POOL_FRESH_MS) } }, select: { productId: true } }),
+        : db.productInsight.findMany({ where: { marketplace: run.marketplace, supplier: "CJ", productId: { in: ids }, analyzedAt: { gt: analyzedSince(POOL_FRESH_MS) } }, select: { productId: true } }),
     ]);
     const skip = new Set([...known.map((k) => k.productId), ...listed.map((l) => l.supplierProductId), ...pooled.map((p) => p.productId)]);
     const fresh = items.filter((it) => !skip.has(String(it.id ?? it.pid)));

@@ -12,7 +12,13 @@ describe("analyse du marché", () => {
         { title: "Second", price: 22, sold: 12 },
       ],
     });
-    expect(r).toEqual({ listings: 57, analyzed: 3, prices: [18.5, 22, 25, 30], priceMin: 18.5, priceMedian: 23.5, priceMax: 30 });
+    expect(r).toEqual({ listings: 57, analyzed: 3, prices: [18.5, 22, 25, 30], priceMin: 18.5, priceMedian: 23.5, priceMax: 30, monthlySales: null });
+  });
+
+  it("garde le rythme de ventes par mois et la recherche précise (méthode par image)", () => {
+    const search = { q: "power tower dip station", categoryId: "15273", priceMin: 41.4, priceMax: 110.4 };
+    const r = marketInsights({ total: 420, prices: [69], analyzed: [], monthlySales: 37, method: "IMAGE", search });
+    expect(r).toMatchObject({ listings: 420, monthlySales: 37, method: "IMAGE", search });
   });
 
   it("marché vide et graphique limité", () => {

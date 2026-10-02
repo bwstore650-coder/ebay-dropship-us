@@ -11,7 +11,7 @@ import { env } from "@/lib/env";
 import { findVeroBrand } from "@/lib/compliance";
 import { computeMargin, priceForTargetMargin } from "@/lib/margin";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
-import { analyzeCatalogProduct, minPriceFor, POOL_FRESH_MS, savePool, type Analysis } from "@/lib/product-pool";
+import { analyzeCatalogProduct, analyzedSince, minPriceFor, POOL_FRESH_MS, savePool, type Analysis } from "@/lib/product-pool";
 import { totals } from "@/lib/affiliate";
 import * as cj from "@/lib/suppliers/cj";
 
@@ -229,7 +229,7 @@ export async function analyzeForExtension(user: ExtUser, productId: string, mark
   const pooled = await db.productInsight.findUnique({
     where: { marketplace_supplier_productId: { marketplace: m.id, supplier: "CJ", productId } },
   });
-  if (pooled && Date.now() - pooled.analyzedAt.getTime() < POOL_FRESH_MS) {
+  if (pooled && pooled.analyzedAt > analyzedSince(POOL_FRESH_MS)) {
     const a: Analysis & { keyword: string } = {
       status: pooled.reason ? "REJECTED" : "PROFITABLE",
       reason: pooled.reason,

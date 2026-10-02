@@ -5,6 +5,7 @@
  */
 import { env } from "@/lib/env";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
+import { monthlySales } from "@/lib/comparables";
 
 const HOSTS = {
   sandbox: { auth: "https://auth.sandbox.ebay.com", api: "https://api.sandbox.ebay.com" },
@@ -191,6 +192,46 @@ export async function searchActive(q: string, limit = 50, marketId: MarketplaceI
   return { total: data.total, prices: items.map((i) => i.price).filter((p) => p > 0), items };
 }
 
+/** Filtre commun : annonces neuves à prix fixe, situées dans le pays, dans sa devise (+ gamme de prix). */
+function marketFilter(m: ReturnType<typeof marketplace>, price?: { min: number | null; max: number | null }) {
+  const f = [`buyingOptions:{FIXED_PRICE}`, `conditions:{NEW}`, `itemLocationCountry:${m.country}`, `priceCurrency:${m.currency}`];
+  if (price && (price.min !== null || price.max !== null)) f.push(`price:[${price.min ?? ""}..${price.max ?? ""}]`);
+  return f.join(",");
+}
+
+const toListing = (i: ItemSummary) => ({
+  id: i.itemId,
+  title: i.title,
+  price: Number(i.price?.value ?? 0) + Number(i.shippingOptions?.[0]?.shippingCost?.value ?? 0),
+  url: i.itemWebUrl,
+  image: i.image?.imageUrl,
+  categoryId: i.leafCategoryIds?.[0],
+  createdAt: i.itemCreationDate,
+});
+
+/** Recherche par image (photo en base64) : annonces classées de la plus ressemblante à la moins ressemblante. */
+export async function searchByImage(imageBase64: string, limit = 50, marketId: MarketplaceId = "EBAY_US"): Promise<MarketSnapshot> {
+  const m = marketplace(marketId);
+  const params = new URLSearchParams({ limit: String(limit), filter: marketFilter(m) });
+  const data = await api<{ total?: number; itemSummaries?: ItemSummary[] }>(
+    await getAppToken(),
+    `/buy/browse/v1/item_summary/search_by_image?${params}`,
+    { method: "POST", body: JSON.stringify({ image: imageBase64 }) },
+    m.id,
+  );
+  const items = (data.itemSummaries ?? []).map(toListing);
+  return { total: data.total ?? items.length, prices: items.map((i) => i.price).filter((p) => p > 0), items };
+}
+
+/** Nombre d'annonces actives pour une recherche précise (mots-clés + catégorie + gamme de prix), en un appel. */
+export async function countActive(q: string, opts: { categoryId?: string | null; priceMin?: number | null; priceMax?: number | null }, marketId: MarketplaceId = "EBAY_US"): Promise<number> {
+  const m = marketplace(marketId);
+  const params = new URLSearchParams({ q, limit: "1", filter: marketFilter(m, { min: opts.priceMin ?? null, max: opts.priceMax ?? null }) });
+  if (opts.categoryId) params.set("category_ids", opts.categoryId);
+  const data = await api<{ total?: number }>(await getAppToken(), `/buy/browse/v1/item_summary/search?${params}`, {}, m.id);
+  return data.total ?? 0;
+}
+
 /**
  * Ventes estimées d'une annonce (API Browse getItem → estimatedAvailabilities.estimatedSoldQuantity).
  * Source officielle et gratuite ; c'est une estimation d'eBay, cumulée sur la vie de l'annonce.
@@ -301,6 +342,9 @@ export interface DemandSnapshot extends MarketSnapshot {
   unitsSold: number;                                  // total estimé sur les annonces analysées
   soldWeighted: { price: number; weight: number }[]; // prix × unités vendues
   analyzed: (MarketSnapshot["items"][number] & { sold: number })[]; // annonces analysées, avec leurs ventes
+  monthlySales?: number | null;                       // ventes estimées par mois (annonces analysées)
+  method?: "IMAGE" | "KEYWORD";                       // comment les annonces comparables ont été trouvées
+  search?: { q: string; categoryId: string | null; priceMin: number | null; priceMax: number | null }; // recherche précise (concurrents)
 }
 
 /** Marché + demande : prix des annonces actives, pondérés par ce qu'elles ont réellement vendu. */
@@ -311,7 +355,7 @@ export async function searchWithDemand(q: string, sample = 20, marketId: Marketp
   // Annonce retirée entre-temps : absente de la liste, on l'ignore.
   const analyzed = sampled.filter((i) => sold.has(i.id)).map((i) => ({ ...i, sold: sold.get(i.id)! }));
   const soldWeighted = analyzed.map((i) => ({ price: i.price, weight: i.sold }));
-  return { ...market, soldWeighted, analyzed, unitsSold: soldWeighted.reduce((s, p) => s + p.weight, 0) };
+  return { ...market, soldWeighted, analyzed, unitsSold: soldWeighted.reduce((s, p) => s + p.weight, 0), monthlySales: monthlySales(analyzed), method: "KEYWORD", search: { q, categoryId: null, priceMin: null, priceMax: null } };
 }
 
 /* ---------- Mise en vente (API Inventory) ---------- */
