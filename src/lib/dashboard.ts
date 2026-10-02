@@ -9,6 +9,8 @@ export interface DashOrder {
   marketplace: string;
   saleTotal: number | null;
   profit: number | null;
+  fees?: number | null;
+  supplierCost?: number | null;
   createdAt: Date;
   lines: { title?: string; quantity?: number; listingId?: string }[] | null;
 }
@@ -17,19 +19,21 @@ export const COUNTED = new Set(["ORDERED", "SHIPPED"]);
 const DAY = 86_400_000;
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
-export interface Totals { orders: number; revenue: number; profit: number; units: number }
+export interface Totals { orders: number; revenue: number; profit: number; units: number; fees: number; supplierCost: number }
 
 /** Totaux d'une période [from, to[ pour une devise. */
 export function totals(orders: DashOrder[], currency: string, from: Date, to: Date): Totals {
-  const t = { orders: 0, revenue: 0, profit: 0, units: 0 };
+  const t = { orders: 0, revenue: 0, profit: 0, units: 0, fees: 0, supplierCost: 0 };
   for (const o of orders) {
     if (!COUNTED.has(o.status) || o.currency !== currency || o.createdAt < from || o.createdAt >= to) continue;
     t.orders++;
     t.revenue += o.saleTotal ?? 0;
     t.profit += o.profit ?? 0;
+    t.fees += o.fees ?? 0;
+    t.supplierCost += o.supplierCost ?? 0;
     t.units += (o.lines ?? []).reduce((s, l) => s + (l.quantity ?? 1), 0) || 1;
   }
-  return { ...t, revenue: round2(t.revenue), profit: round2(t.profit) };
+  return { ...t, revenue: round2(t.revenue), profit: round2(t.profit), fees: round2(t.fees), supplierCost: round2(t.supplierCost) };
 }
 
 /** Évolution en % par rapport à la période précédente (null si rien avant). */

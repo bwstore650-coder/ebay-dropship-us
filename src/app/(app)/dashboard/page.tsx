@@ -19,15 +19,19 @@ const DAY = 86_400_000;
 const QUICK_START_UNTIL = 10;
 const PAUSE_REASONS = ["OUT_OF_STOCK", "MARGIN", "SLOW", "SUPPLIER_GONE"] as const;
 
-export default async function Dashboard() {
+const PERIODS = [7, 30, 90] as const;
+
+export default async function Dashboard({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
+  const { days: daysParam } = await searchParams;
+  const days: number = PERIODS.find((d) => String(d) === daysParam) ?? 30;
   const user = await requireUser();
   const { locale, t } = await getI18n();
   const D = t.dashboard;
   const tag = LOCALE_TAGS[locale];
   const now = new Date();
   const end = new Date(now.getTime() + 1);
-  const since = new Date(now.getTime() - 30 * DAY);
-  const prevSince = new Date(now.getTime() - 60 * DAY);
+  const since = new Date(now.getTime() - days * DAY);
+  const prevSince = new Date(now.getTime() - 2 * days * DAY);
 
   const [active, paused, drafts, orders60, recent, needsReview, openReturns, pausedList, lastRun] = await Promise.all([
     db.listing.count({ where: { userId: user.id, status: "ACTIVE" } }),
@@ -61,7 +65,7 @@ export default async function Dashboard() {
   const symbol = orders.find((o) => o.currency === currency) ? marketplace(orders.find((o) => o.currency === currency)!.marketplace).symbol : defaultMarket.symbol;
   const cur = totals(orders, currency, since, end);
   const prev = totals(orders, currency, prevSince, since);
-  const series = dailySeries(orders, currency, 30, now);
+  const series = dailySeries(orders, currency, days, now);
   const top = topProducts(orders.filter((o) => o.createdAt >= since), currency, 5);
   const markets = ordersByMarket(orders.filter((o) => o.createdAt >= since));
   const marketsTotal = markets.reduce((s, m) => s + m.orders, 0);
@@ -141,10 +145,20 @@ export default async function Dashboard() {
       )}
 
       {/* Chiffres clés sur 30 jours, comparés aux 30 jours précédents */}
+      <nav className="flex items-center justify-end gap-1.5" aria-label={D.period}>
+        <span className="mr-1 text-xs text-muted">{D.period}</span>
+        {PERIODS.map((d) => (
+          <Link key={d} href={d === 30 ? "/dashboard" : `/dashboard?days=${d}`} aria-current={d === days ? "page" : undefined}
+            className={`rounded-md px-2.5 py-1 text-xs font-semibold tabular-nums ${d === days ? "bg-brand-500/20 text-fg ring-1 ring-brand-500/50" : "bg-surface-2 text-muted hover:text-fg"}`}>
+            {fmt(D.days, { d })}
+          </Link>
+        ))}
+      </nav>
+
       <section className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
-        <StatCard label={D.kpiRevenue} value={money(cur.revenue)} icon="dollar" tone="fuchsia" hint={<>{delta(cur.revenue, prev.revenue)}{otherCur.length ? <span className="block text-subtle">{fmt(D.otherCurrencies, { list: otherCur.join(", ") })}</span> : null}</>} />
-        <StatCard label={D.kpiProfit} value={<span className={cur.profit < 0 ? "text-red-300" : "text-emerald-300"}>{money(cur.profit)}</span>} icon="trend" tone="emerald" hint={delta(cur.profit, prev.profit)} />
-        <StatCard label={D.kpiOrders} value={cur.orders} icon="cart" tone="sky" hint={delta(cur.orders, prev.orders)} />
+        <StatCard label={fmt(D.kpiRevenue, { d: days })} value={money(cur.revenue)} icon="dollar" tone="fuchsia" hint={<>{delta(cur.revenue, prev.revenue)}{otherCur.length ? <span className="block text-subtle">{fmt(D.otherCurrencies, { list: otherCur.join(", ") })}</span> : null}</>} />
+        <StatCard label={fmt(D.kpiProfit, { d: days })} value={<span className={cur.profit < 0 ? "text-red-300" : "text-emerald-300"}>{money(cur.profit)}</span>} icon="trend" tone="emerald" hint={delta(cur.profit, prev.profit)} />
+        <StatCard label={fmt(D.kpiOrders, { d: days })} value={cur.orders} icon="cart" tone="sky" hint={delta(cur.orders, prev.orders)} />
         <StatCard label={D.kpiMargin} value={margin !== null ? `${margin} %` : "—"} icon="percent" tone="brand" hint={prevMargin !== null && margin !== null ? <span className={margin >= prevMargin ? "text-emerald-300" : "text-red-300"}>{fmt(D.vsPrevPts, { p: `${margin - prevMargin > 0 ? "+" : ""}${margin - prevMargin}` })}</span> : <span className="text-subtle">{D.noPrev}</span>} />
         <StatCard label={D.activeListings} value={active} icon="tag" tone="brand" hint={fmt(D.kpiListingsHint, { paused, drafts })} />
         <StatCard label={D.kpiAov} value={aov !== null ? money(aov) : "—"} icon="card" tone="sky" hint={cur.units ? fmt(D.topUnits, { n: cur.units }) : undefined} />
@@ -156,11 +170,47 @@ export default async function Dashboard() {
         </Link>
       </section>
 
+      {/* Où va l'argent : ventes → frais eBay → fournisseur → profit net */}
+      <section className="card">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 className="font-semibold text-fg">{fmt(D.moneyTitle, { d: days })}</h2>
+          <p className="text-xs text-subtle">{D.moneyNote}</p>
+        </div>
+        {cur.revenue > 0 ? (() => {
+          const other = Math.max(0, Math.round((cur.revenue - cur.fees - cur.supplierCost - cur.profit) * 100) / 100);
+          const parts = [
+            { key: "fees", label: D.moneyFees, value: cur.fees, cls: "bg-amber-400/70" },
+            { key: "supplier", label: D.moneySupplier, value: cur.supplierCost, cls: "bg-sky-400/70" },
+            ...(other > 0.01 ? [{ key: "other", label: D.moneyOther, value: other, cls: "bg-fuchsia-400/60" }] : []),
+            { key: "profit", label: D.moneyProfit, value: cur.profit, cls: cur.profit >= 0 ? "bg-emerald-400" : "bg-red-400" },
+          ];
+          const pct = (v: number) => Math.max(0, Math.min(100, (v / cur.revenue) * 100));
+          return (
+            <>
+              <div className="mt-4 flex h-3 overflow-hidden rounded-full bg-surface-3" role="img" aria-label={fmt(D.moneyTitle, { d: days })}>
+                {parts.filter((p) => p.value > 0).map((p) => <div key={p.key} className={p.cls} style={{ width: `${pct(p.value)}%` }} title={`${p.label} : ${money(p.value)}`} />)}
+              </div>
+              <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-5">
+                <div><dt className="text-xs text-muted">{D.moneySales}</dt><dd className="mt-0.5 font-semibold tabular-nums text-fg">{money(cur.revenue)}</dd></div>
+                {parts.map((p) => (
+                  <div key={p.key}>
+                    <dt className="flex items-center gap-1.5 text-xs text-muted"><span className={`h-2 w-2 rounded-full ${p.cls}`} aria-hidden="true" />{p.label}</dt>
+                    <dd className={`mt-0.5 font-semibold tabular-nums ${p.key === "profit" ? (cur.profit >= 0 ? "text-emerald-300" : "text-red-300") : "text-fg-2"}`}>
+                      {p.key === "profit" ? "" : "− "}{money(p.value)} <span className="text-xs font-normal text-subtle">{Math.round(pct(p.value))} %</span>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </>
+          );
+        })() : <p className="mt-3 text-sm text-muted">{D.moneyEmpty}</p>}
+      </section>
+
       {/* Graphique des ventes + santé des annonces */}
       <section className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
         <div className="card min-w-0 lg:col-span-2">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
-            <h2 className="font-semibold text-fg">{D.chartTitle}</h2>
+            <h2 className="font-semibold text-fg">{fmt(D.chartTitle, { d: days })}</h2>
             <p className="text-sm text-muted tabular-nums">{money(cur.revenue)} · <span className="text-emerald-300">{money(cur.profit)}</span></p>
           </div>
           {cur.orders > 0 ? (
@@ -265,7 +315,7 @@ export default async function Dashboard() {
         </div>
 
         <div className="card min-w-0">
-          <h2 className="font-semibold text-fg">{D.topTitle}</h2>
+          <h2 className="font-semibold text-fg">{fmt(D.topTitle, { d: days })}</h2>
           {top.length === 0 ? (
             <p className="mt-2 text-sm text-muted">{D.topEmpty}</p>
           ) : (

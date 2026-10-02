@@ -9,7 +9,7 @@ const o = (d: number, sale: number, profit: number, extra: Partial<DashOrder> = 
 });
 
 const orders = [
-  o(0, 30, 12),
+  o(0, 30, 12, { fees: 4.2, supplierCost: 13.8 }),
   o(2, 25, 9, { lines: [{ title: "Closet light", quantity: 2, listingId: "L2" }] }),
   o(2, 30, 11),
   o(5, 40, 15, { status: "NEEDS_REVIEW" }),            // pas passée : ignorée
@@ -19,8 +19,8 @@ const orders = [
 
 describe("tableau de bord", () => {
   it("totaux d'une période et d'une devise", () => {
-    expect(totals(orders, "USD", ago(30), ago(-1))).toEqual({ orders: 3, revenue: 85, profit: 32, units: 4 });
-    expect(totals(orders, "USD", ago(60), ago(30))).toEqual({ orders: 1, revenue: 20, profit: 5, units: 1 });
+    expect(totals(orders, "USD", ago(30), ago(-1))).toEqual({ orders: 3, revenue: 85, profit: 32, units: 4, fees: 4.2, supplierCost: 13.8 });
+    expect(totals(orders, "USD", ago(60), ago(30))).toEqual({ orders: 1, revenue: 20, profit: 5, units: 1, fees: 0, supplierCost: 0 });
     expect(totals(orders, "EUR", ago(30), ago(-1)).orders).toBe(1);
   });
   it("évolution en %", () => {
