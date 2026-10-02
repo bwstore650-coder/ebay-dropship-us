@@ -12,7 +12,7 @@ const IMAGE_HOSTS = /^https:\/\/([a-z0-9-]+\.)*(cjdropshipping\.com|cjdropshippi
 
 /**
  * Les 5 annonces eBay les plus proches d'un produit (trouvées par sa photo), lues en direct ou depuis
- * le cache de 6 h : rien n'est gardé plus longtemps (contrat eBay). ?image=&kw=&m=
+ * le cache de 6 h : rien n'est gardé plus longtemps (contrat eBay). ?image=&kw=&m=&cost= (prix fournisseur de l'analyse)
  */
 export async function GET(req: Request) {
   const user = await currentUser();
@@ -21,10 +21,11 @@ export async function GET(req: Request) {
   const image = q.get("image") ?? "";
   const kw = (q.get("kw") ?? "").slice(0, 120).trim();
   const m = q.get("m") ?? "";
+  const cost = Number(q.get("cost"));
   if (!IMAGE_HOSTS.test(image) || !kw) return NextResponse.json({ error: "INVALID_INPUT" }, { status: 400 });
   const marketId = marketplace(isMarketplaceId(m) ? (m as MarketplaceId) : user.defaultMarketplace).id;
   try {
-    const d = await cachedImageDemand(image, kw, 10, marketId);
+    const d = await cachedImageDemand(image, kw, 10, marketId, Number.isFinite(cost) && cost > 0 ? cost : null);
     const sold = new Map(d.analyzed.map((a) => [a.id, a.sold]));
     return NextResponse.json({
       method: d.method ?? "KEYWORD",

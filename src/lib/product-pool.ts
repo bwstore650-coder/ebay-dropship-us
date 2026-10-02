@@ -127,7 +127,7 @@ export async function analyzeCatalogProduct(
   }
 
   // Annonces comparables trouvées par la PHOTO du produit (mots-clés si la photo ne donne rien de fiable).
-  const market = await cachedImageDemand(image, kw, 10, m.id);
+  const market = await cachedImageDemand(image, kw, 10, m.id, cheapest.price);
   const insights = marketInsights(market);
   const sold = weightedMedian(market.soldWeighted);
   const prices = sold !== null ? [sold] : market.prices;

@@ -23,7 +23,7 @@ export interface MarketInsights {
   priceMax: number | null;
   monthlySales?: number | null; // ventes estimées par mois sur les annonces comparables
   method?: "IMAGE" | "KEYWORD"; // annonces trouvées par la photo du produit, ou par mots-clés
-  search?: { q: string; categoryId: string | null; priceMin: number | null; priceMax: number | null }; // recherche précise des concurrents
+  search?: { q: string; categoryId: string | null; priceMin: number | null; priceMax: number | null; cost?: number | null }; // recherche précise des concurrents
 }
 
 export const MAX_CHART_PRICES = 40;

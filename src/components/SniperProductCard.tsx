@@ -216,7 +216,7 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
             <p className="text-xs text-subtle">{k.noMarket}</p>
           )}
 
-          {c.image && !c.expired && <ComparablesPanel t={k} image={c.image} keyword={c.keyword} marketId={marketId} money={money} />}
+          {c.image && !c.expired && <ComparablesPanel t={k} image={c.image} keyword={c.keyword} marketId={marketId} cost={m?.search?.cost ?? null} money={money} />}
 
           <p className="text-[11px] text-subtle">{m?.method === "IMAGE" ? `${k.byImage} ` : ""}{k.estimateNote}</p>
         </div>

@@ -9,7 +9,7 @@ import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { createHash } from "node:crypto";
 import { countActive, getBrowseQuota, isQuotaError, searchByImage, searchWithDemand, soldQuantities, type BrowseQuota, type DemandSnapshot } from "@/lib/ebay";
-import { monthlySales, pickComparables } from "@/lib/comparables";
+import { costBand, monthlySales, pickComparables } from "@/lib/comparables";
 import type { MarketplaceId } from "@/lib/marketplaces";
 
 const PAUSE_KEY = "ebay:browse:pause";
@@ -92,6 +92,27 @@ export async function cachedDemand(q: string, sample: number, marketId: Marketpl
   return fresh;
 }
 
+/**
+ * Recherche par mots-clés : on écarte les annonces dont le prix est impossible pour ce produit
+ * (autre produit plus gros ou accessoire), puis on recalcule ventes et rythme mensuel. Aucun appel en plus.
+ */
+export function keepPlausible(d: DemandSnapshot, supplierCost?: number | null): DemandSnapshot {
+  if (!supplierCost) return d;
+  const band = costBand(supplierCost);
+  const ok = (p: number) => p >= band.min && p <= band.max;
+  const analyzed = d.analyzed.filter((i) => ok(i.price));
+  return {
+    ...d,
+    prices: d.prices.filter(ok),
+    items: d.items.filter((i) => ok(i.price)),
+    analyzed,
+    soldWeighted: analyzed.map((i) => ({ price: i.price, weight: i.sold })),
+    unitsSold: analyzed.reduce((s, i) => s + i.sold, 0),
+    monthlySales: monthlySales(analyzed),
+    search: d.search ? { ...d.search, cost: supplierCost } : undefined,
+  };
+}
+
 /** Photos plus lourdes : pas de recherche par image (lente et refusée par eBay au-delà de quelques Mo). */
 const MAX_IMAGE_BYTES = 3_000_000;
 /** Moins d'annonces vraiment comparables que ça : la recherche par mots-clés prend le relais. */
@@ -117,23 +138,25 @@ async function imageBase64(url: string): Promise<string | null> {
  * Sans photo exploitable ou avec trop peu d'annonces comparables : recherche par mots-clés (méthode d'avant).
  * Gardé 6 h comme les autres recherches eBay.
  */
-export async function cachedImageDemand(imageUrl: string | null, keyword: string, sample: number, marketId: MarketplaceId): Promise<DemandSnapshot> {
-  if (!imageUrl) return cachedDemand(keyword, sample, marketId);
-  const key = `idemand:${marketId}:${sample}:${createHash("sha1").update(imageUrl).digest("hex")}`;
+export async function cachedImageDemand(imageUrl: string | null, keyword: string, sample: number, marketId: MarketplaceId, supplierCost?: number | null): Promise<DemandSnapshot> {
+  const byKeyword = async () => keepPlausible(await cachedDemand(keyword, sample, marketId), supplierCost);
+  if (!imageUrl) return byKeyword();
+  const anchor = supplierCost ? Math.round(supplierCost) : 0;
+  const key = `idemand:${marketId}:${sample}:${anchor}:${createHash("sha1").update(imageUrl).digest("hex")}`;
   const hit = await readState<DemandSnapshot>(key);
   if (hit) return hit;
   const image = await imageBase64(imageUrl);
-  if (!image) return cachedDemand(keyword, sample, marketId);
+  if (!image) return byKeyword();
   let found;
   try {
     found = await searchByImage(image, 50, marketId);
   } catch (e) {
     if (isQuotaError(e)) throw e;
     console.error("Recherche eBay par image", e);
-    return cachedDemand(keyword, sample, marketId);
+    return byKeyword();
   }
-  const set = pickComparables(found.items);
-  if (set.matches.length < MIN_IMAGE_MATCHES) return cachedDemand(keyword, sample, marketId);
+  const set = pickComparables(found.items, { supplierCost });
+  if (set.matches.length < MIN_IMAGE_MATCHES) return byKeyword();
 
   const sampled = set.matches.slice(0, sample);
   const sold = await soldQuantities(sampled.map((i) => i.id), marketId);
@@ -155,7 +178,7 @@ export async function cachedImageDemand(imageUrl: string | null, keyword: string
     unitsSold: analyzed.reduce((s, i) => s + i.sold, 0),
     monthlySales: monthlySales(analyzed),
     method: "IMAGE",
-    search: { q, categoryId: set.categoryId, priceMin: set.priceMin, priceMax: set.priceMax },
+    search: { q, categoryId: set.categoryId, priceMin: set.priceMin, priceMax: set.priceMax, cost: supplierCost ?? null },
   };
   await writeState(key, fresh as unknown as Prisma.InputJsonValue, new Date(Date.now() + DEMAND_CACHE_MS));
   return fresh;

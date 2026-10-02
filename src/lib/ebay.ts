@@ -344,7 +344,7 @@ export interface DemandSnapshot extends MarketSnapshot {
   analyzed: (MarketSnapshot["items"][number] & { sold: number })[]; // annonces analysées, avec leurs ventes
   monthlySales?: number | null;                       // ventes estimées par mois (annonces analysées)
   method?: "IMAGE" | "KEYWORD";                       // comment les annonces comparables ont été trouvées
-  search?: { q: string; categoryId: string | null; priceMin: number | null; priceMax: number | null }; // recherche précise (concurrents)
+  search?: { q: string; categoryId: string | null; priceMin: number | null; priceMax: number | null; cost?: number | null }; // recherche précise (concurrents) ; cost = prix fournisseur de référence
 }
 
 /** Marché + demande : prix des annonces actives, pondérés par ce qu'elles ont réellement vendu. */

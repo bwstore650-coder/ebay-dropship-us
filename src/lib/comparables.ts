@@ -49,6 +49,15 @@ export interface ComparableSet<T extends Listing> {
   priceMax: number | null;
 }
 
+/**
+ * Prix de revente plausibles pour un produit qui coûte `cost` chez le fournisseur : une annonce à plus de
+ * 6 fois ce prix (ou 40 de plus pour les petits prix), ou à moins de la moitié, est un autre produit
+ * (ex. une serre en polycarbonate à 440 $ pour une mini-serre en PVC à 39 $).
+ */
+export function costBand(cost: number): { min: number; max: number } {
+  return { min: Math.round(cost * 0.5 * 100) / 100, max: Math.round(Math.max(cost * 6, cost + 40) * 100) / 100 };
+}
+
 /** Prix gardés autour du prix médian des annonces les plus ressemblantes. */
 export const PRICE_BAND = { keepLow: 0.5, keepHigh: 2, countLow: 0.6, countHigh: 1.6 };
 
@@ -56,8 +65,11 @@ export const PRICE_BAND = { keepLow: 0.5, keepHigh: 2, countLow: 0.6, countHigh:
  * Garde les annonces vraiment comparables parmi les résultats de la recherche par image :
  * prix proche du médian des premières annonces, et titre qui partage les mots communs.
  */
-export function pickComparables<T extends Listing>(items: T[], top = 30): ComparableSet<T> {
-  const head = items.slice(0, top).filter((i) => i.price > 0);
+export function pickComparables<T extends Listing>(items: T[], opts: { top?: number; supplierCost?: number | null } = {}): ComparableSet<T> {
+  const band = opts.supplierCost ? costBand(opts.supplierCost) : null;
+  const head = items
+    .filter((i) => i.price > 0 && (!band || (i.price >= band.min && i.price <= band.max)))
+    .slice(0, opts.top ?? 30);
   const median0 = medianOf(head.map((i) => i.price));
   if (median0 === null) return { matches: [], keywords: [], categoryId: null, medianPrice: null, priceMin: null, priceMax: null };
   const priced = head.filter((i) => i.price >= median0 * PRICE_BAND.keepLow && i.price <= median0 * PRICE_BAND.keepHigh);

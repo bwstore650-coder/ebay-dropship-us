@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { consensusWords, monthlySales, pickComparables, titleWords } from "./comparables";
+import { consensusWords, costBand, monthlySales, pickComparables, titleWords } from "./comparables";
 
 /** Résultats réels de la recherche par image (photo CJ du support de dips), 1er octobre 2026. */
 const IMAGE_RESULTS = [
@@ -42,6 +42,19 @@ describe("annonces comparables (recherche par image)", () => {
     expect(r.medianPrice).toBeLessThan(80);
     expect(r.priceMin).toBeCloseTo(r.medianPrice! * 0.6, 1);
     expect(r.priceMax).toBeCloseTo(r.medianPrice! * 1.6, 1);
+  });
+
+  it("prix fournisseur de référence : les produits bien plus gros (ou les accessoires) sont écartés avant tout", () => {
+    expect(costBand(38.59)).toEqual({ min: 19.3, max: 231.54 });
+    expect(costBand(2)).toEqual({ min: 1, max: 42 });
+    // Mini-serre en PVC à 39 $ : la photo ramène surtout des serres en polycarbonate à 340-520 $.
+    const items = [
+      ...["Walk-in Polycarbonate Greenhouse 8x6", "6x12FT Polycarbonate Greenhouse Walk-in", "8x8 FT Polycarbonate Greenhouse Door", "Heavy Duty Polycarbonate Greenhouse Patio"].map((t, i) => ({ id: `P${i}`, title: t, price: 340 + i * 60 })),
+      ...["Mini Greenhouse PVC Cover Plant Grow Tent", "Portable Mini Greenhouse Clear PVC Plant Tent", "Mini Greenhouse Clear PVC Grow Tent Balcony", "Small Mini Greenhouse PVC Plant Cover"].map((t, i) => ({ id: `M${i}`, title: t, price: 45 + i * 8 })),
+    ];
+    const r = pickComparables(items, { supplierCost: 38.59 });
+    expect(r.matches.map((m) => m.id)).toEqual(["M0", "M1", "M2", "M3"]);
+    expect(r.keywords).toEqual(expect.arrayContaining(["greenhouse", "pvc"]));
   });
 
   it("aucun résultat exploitable", () => {
@@ -132,6 +145,24 @@ describe("marché d'après la photo du produit", () => {
     mem.calls = [];
     await cachedImageDemand("https://cf.cjdropshipping.com/a.jpg", "power tower dip station pull", 10, "EBAY_US");
     expect(mem.calls).toEqual([]); // depuis le cache
+  });
+
+  it("prix fournisseur de référence : gardé avec la recherche (pour recharger les mêmes annonces) et dans la clé du cache", async () => {
+    const r = await cachedImageDemand("https://cf.cjdropshipping.com/a.jpg", "power tower dip station pull", 10, "EBAY_US", 53.85);
+    expect(r.search!.cost).toBe(53.85);
+    expect(Math.max(...r.prices)).toBeLessThanOrEqual(323.1);
+    mem.calls = [];
+    await cachedImageDemand("https://cf.cjdropshipping.com/a.jpg", "power tower dip station pull", 10, "EBAY_US", 53.85);
+    expect(mem.calls).toEqual([]);
+  });
+
+  it("mots-clés avec un prix fournisseur : les annonces à un prix impossible ne comptent pas", async () => {
+    mem.imageFail = true;
+    const r = await cachedImageDemand("https://cf.cjdropshipping.com/c.jpg", "mini greenhouse", 10, "EBAY_US", 10);
+    expect(r.method).toBe("KEYWORD");
+    expect(r.prices).toEqual([]); // l'annonce à 147 $ est hors de la gamme 5 – 60 $
+    expect(r.unitsSold).toBe(0);
+    expect(r.total).toBe(1656);
   });
 
   it("recherche par image en panne ou sans photo : recherche par mots-clés", async () => {

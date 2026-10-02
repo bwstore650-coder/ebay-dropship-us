@@ -7,11 +7,12 @@ import { SHOW_SALES_DATA } from "@/lib/flags";
 interface Item { id: string; title: string; price: number; url: string | null; image: string | null; sold: number | null }
 
 /** Les 5 annonces eBay les plus proches du produit, chargées à la demande (pour vérifier que c'est le même produit). */
-export default function ComparablesPanel({ t, image, keyword, marketId, money }: {
+export default function ComparablesPanel({ t, image, keyword, marketId, cost, money }: {
   t: Dict["sniper"]["card"];
   image: string;
   keyword: string;
   marketId: string;
+  cost: number | null;
   money: (v: number | null) => string;
 }) {
   const [items, setItems] = useState<Item[] | null>(null);
@@ -19,7 +20,7 @@ export default function ComparablesPanel({ t, image, keyword, marketId, money }:
 
   async function load() {
     setState("loading");
-    const res = await fetch(`/api/comparables?${new URLSearchParams({ image, kw: keyword, m: marketId })}`).catch(() => null);
+    const res = await fetch(`/api/comparables?${new URLSearchParams({ image, kw: keyword, m: marketId, ...(cost ? { cost: String(cost) } : {}) })}`).catch(() => null);
     const data = res?.ok ? ((await res.json().catch(() => null)) as { items?: Item[] } | null) : null;
     if (!data?.items) return setState("error");
     setItems(data.items);
