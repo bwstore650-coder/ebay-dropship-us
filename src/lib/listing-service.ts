@@ -13,11 +13,12 @@ import { convertFromUsd, getUsdRates, offersToCurrency } from "@/lib/fx";
 import { computeMargin, landedCost, MAX_DELIVERY_DAYS, median, priceForTargetMargin, type SupplierOffer } from "@/lib/margin";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import { planInfo } from "@/lib/plans";
-import { openSession, productInfo, quote, SupplierError, variantQuotes, type ProductInfo, type Session, type SupplierId, type VariantQuote } from "@/lib/suppliers";
+import { openSession, productInfo, quote, SupplierError, variantQuotes, type ProductInfo, type Session, type SkippedVariant, type SupplierId, type VariantQuote } from "@/lib/suppliers";
 import { aiConfigured, htmlToText, supplierCopy, writeListingCopy, type AiLanguage, type ListingCopy } from "@/lib/ai";
 import { AiLimitError, aiUsage, refundAiCredit, takeAiCredit } from "@/lib/ai-quota";
 import { syncAds } from "@/lib/ads-service";
 import { cachedDemand } from "@/lib/ebay-quota";
+import { costBand } from "@/lib/comparables";
 import { keywordFromTitle } from "@/lib/sniper";
 import {
   buildAspects, cleanImages, cleanTitle, DEFAULT_QUANTITY, ebayItemUrl, isEuMarket, makeSku, MAX_LISTING_VARIANTS, mostCommon,
@@ -68,10 +69,10 @@ export interface PricedVariant extends VariantQuote {
 }
 
 /** Toutes les variantes vendables du produit, avec leur coût dans la devise du pays. */
-async function loadAllVariants(user: UserWithAccounts, ref: SupplierRef, marketId: MarketplaceId): Promise<PricedVariant[]> {
+async function loadAllVariants(user: UserWithAccounts, ref: SupplierRef, marketId: MarketplaceId, skipped?: SkippedVariant[]): Promise<PricedVariant[]> {
   const m = marketplace(marketId);
   const session = await supplierSession(user, ref.supplier);
-  const quotes = await variantQuotes(session, ref.productId, m.country, MAX_LISTING_VARIANTS, variantOptions);
+  const quotes = await variantQuotes(session, ref.productId, m.country, MAX_LISTING_VARIANTS, variantOptions, skipped);
   const rates = m.currency === "USD" ? null : await getUsdRates();
   return quotes.map((q) => {
     const unitLocal = rates ? convertFromUsd(q.unitPrice, m.currency, rates) : q.unitPrice;
@@ -134,6 +135,8 @@ export interface ListingDraft {
   /** Annonce à variantes possible (≥ 2 variantes en stock aux options cohérentes) : toutes sont proposées. */
   variants: DraftVariant[];
   variationNames: string[];
+  /** Options du fournisseur non proposées (rupture dans l'entrepôt du pays, livraison impossible ou trop lente). */
+  variantsUnavailable: SkippedVariant[];
 }
 
 export interface DraftVariant {
@@ -155,7 +158,13 @@ export async function prepareListing(user: UserWithAccounts, input: { keyword: s
   const { info, offer } = await loadVariant(user, input.ref, m.id);
 
   // Annonces comparables : mots-clés des titres qui vendent, catégorie la plus utilisée, prix du marché.
-  const market = await ebay.searchActive(input.keyword, 50, m.id);
+  // Seules les annonces à un prix plausible pour ce coût fournisseur comptent (sinon une recherche par mots-clés
+  // ramène des produits bien plus chers ou dérivés, et le prix conseillé devient absurde).
+  const cost = offerCost(offer);
+  const band = costBand(cost);
+  const rawMarket = await ebay.searchActive(input.keyword, 50, m.id);
+  const plausible = rawMarket.items.filter((i) => i.price >= band.min && i.price <= band.max);
+  const market = { ...rawMarket, items: plausible.length ? plausible : rawMarket.items, prices: rawMarket.prices.filter((p) => p >= band.min && p <= band.max) };
   let categoryId = mostCommon(market.items.slice(0, 20).map((i) => i.categoryId));
   let categoryName: string | null = null;
   if (!categoryId) {
@@ -201,13 +210,13 @@ export async function prepareListing(user: UserWithAccounts, input: { keyword: s
   const title = cleanTitle(copy.title);
   const { aspects, missingRequired } = buildAspects(copy.aspects, defs, m.id);
 
-  const cost = offerCost(offer);
   const minPrice = priceForTargetMargin(cost, user.minMarginPct, { market: m });
   const marketPrice = median(market.prices);
   const suggestedPrice = Math.max(minPrice, marketPrice ?? 0);
 
   // Toutes les variantes vendables (tailles, couleurs, lots…) : prix conseillé proportionnel au coût de chacune.
-  const all = await loadAllVariants(user, input.ref, m.id).catch((e) => {
+  const skipped: SkippedVariant[] = [];
+  const all = await loadAllVariants(user, input.ref, m.id, skipped).catch((e) => {
     console.error("Variantes", input.ref.productId, e);
     return [] as PricedVariant[];
   });
@@ -265,6 +274,7 @@ export async function prepareListing(user: UserWithAccounts, input: { keyword: s
     ai: aiConfigured() ? { configured: true, ...(await aiUsage(user)), note: aiNote } : { configured: false, used: 0, limit: 0, unlimited: false, note: null },
     variants,
     variationNames: specs ? specs.map((x) => x.name) : [],
+    variantsUnavailable: skipped.slice(0, 30),
   };
 }
 

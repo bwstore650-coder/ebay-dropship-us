@@ -65,6 +65,7 @@ const json = (data: unknown, status = 200) => new Response(JSON.stringify(data),
 
 let locationExists = true;
 let multiVariant = false;
+let marketOutliers: unknown[] = [];
 let freightCalls = 0;
 let offerNotYet = 0;
 let accountPolicies = { f: ["F1"], p: ["PAY1"], r: ["R1"] };
@@ -122,6 +123,7 @@ function router(url: string, init?: RequestInit): Response {
         { itemId: "1", title: "Automatic Can Opener Electric Smooth Edge", price: { value: "29.99", currency: "USD" }, leafCategoryIds: ["20667"] },
         { itemId: "2", title: "Electric Can Opener Hands Free", price: { value: "31.00", currency: "USD" }, leafCategoryIds: ["20667"] },
         { itemId: "3", title: "Can opener", price: { value: "25.00", currency: "USD" }, leafCategoryIds: ["11111"] },
+        ...marketOutliers,
       ],
     });
   if (path.endsWith("/get_default_category_tree_id")) return json({ categoryTreeId: "0" });
@@ -171,6 +173,7 @@ const baseInput = {
 beforeEach(() => {
   locationExists = true;
   multiVariant = false;
+  marketOutliers = [];
   freightCalls = 0;
   store.variantUpdates = [];
   offerNotYet = 0;
@@ -397,6 +400,16 @@ describe("annonce à variantes (tailles, lots…)", { timeout: 60_000 }, () => {
     expect(d.variants[2].suggestedPrice).toBeGreaterThan(d.variants[0].suggestedPrice); // le lot de 2 coûte plus cher
     expect(d.variants.every((v) => v.suggestedPrice >= v.minPrice)).toBe(true);
     expect(freightCalls).toBe(1 + 2); // variante du brouillon + 2 poids (80-82 g, 160 g)
+    expect(d.variantsUnavailable).toEqual([{ label: "XL-1PCS", reason: "NO_STOCK" }]);
+  });
+
+  it("prix conseillé : les annonces à un prix sans rapport avec le coût fournisseur sont ignorées", async () => {
+    const base = await prepareListing(user(), { keyword: "can opener", marketId: "EBAY_US", ref: { supplier: "CJ", productId: "P1", variantId: "V1" } });
+    marketOutliers = [400, 450, 500, 520, 610].map((p, i) => ({ itemId: `X${i}`, title: "Commercial Can Opener Industrial", price: { value: String(p), currency: "USD" }, leafCategoryIds: ["99999"] }));
+    const d = await prepareListing(user(), { keyword: "can opener 2", marketId: "EBAY_US", ref: { supplier: "CJ", productId: "P1", variantId: "V1" } });
+    expect(d.suggestedPrice).toBe(base.suggestedPrice);
+    expect(d.suggestedPrice).toBeLessThan(60);
+    expect(d.categoryId).toBe("20667");
   });
 
   it("publie une seule annonce : une fiche par variante, le groupe (ce qui varie), une offre par variante, puis le groupe", async () => {

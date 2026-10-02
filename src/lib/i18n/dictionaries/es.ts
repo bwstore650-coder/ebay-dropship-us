@@ -332,6 +332,8 @@ export const es: Dict = {
     variantProfit: "Beneficio / venta",
     variantMin: "mín. {min}",
     variantsSingle: "Menos de 2 variantes marcadas: el anuncio se publicará con una sola variante.",
+    variantsUnavailable: "{n} opción(es) más no ofrecida(s) (clic para ver por qué)",
+    variantReasons: { NO_STOCK: "Agotado en el almacén local", NO_SHIPPING: "Sin envío a este país", SLOW_SHIPPING: "Entrega demasiado lenta (más de 8 días)" },
     variantsTooLow: "Al menos una variante está por debajo del {pct} % de margen: sube su precio o desmárcala.",
     ai: {
       writtenByAi: "Título, descripción y características escritos por la IA. Revísalos antes de publicar.",

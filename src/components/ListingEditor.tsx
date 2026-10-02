@@ -301,6 +301,20 @@ export default function ListingEditor({
         </div>
       )}
 
+      {(draft.variantsUnavailable ?? []).length > 0 && (
+        <details className="rounded-lg border border-line bg-surface-2/40 px-3 py-2 text-xs text-muted">
+          <summary className="cursor-pointer select-none">{fmt(t.variantsUnavailable, { n: draft.variantsUnavailable.length })}</summary>
+          <ul className="mt-2 space-y-0.5">
+            {draft.variantsUnavailable.map((v, i) => (
+              <li key={`${v.label}-${i}`} className="flex justify-between gap-3">
+                <span className="text-fg-2">{v.label}</span>
+                <span className="text-subtle">{t.variantReasons[v.reason]}</span>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+
       {/* Prix, quantité, marge */}
       {!useVariants && <div className="grid gap-4 sm:grid-cols-3">
         <label className="block text-sm font-medium">

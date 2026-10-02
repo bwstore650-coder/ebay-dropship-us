@@ -331,6 +331,8 @@ export const en = {
     variantProfit: "Profit / sale",
     variantMin: "min. {min}",
     variantsSingle: "Fewer than 2 variations checked: the listing will be published with a single variation.",
+    variantsUnavailable: "{n} other option(s) not offered (click to see why)",
+    variantReasons: { NO_STOCK: "Out of stock in the local warehouse", NO_SHIPPING: "No shipping to this country", SLOW_SHIPPING: "Delivery too slow (over 8 days)" },
     variantsTooLow: "At least one variation is below a {pct}% margin: raise its price or uncheck it.",
     ai: {
       writtenByAi: "Title, description and item specifics written by AI. Check them before publishing.",

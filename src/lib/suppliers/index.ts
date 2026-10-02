@@ -282,13 +282,16 @@ export interface VariantQuote {
  * CJ : la livraison est calculée une fois par poids (les tailles d'un même modèle pèsent pareil), pour limiter
  * les appels (1 par seconde chez CJ).
  */
-export async function variantQuotes(s: Session, productId: string, country: string, max: number, optionsOf: (keyNames: string | undefined, variantKey: string | undefined, label: string) => Record<string, string>): Promise<VariantQuote[]> {
+/** Variante écartée d'une annonce à variantes, et pourquoi (affiché au vendeur). */
+export interface SkippedVariant { label: string; reason: "NO_STOCK" | "NO_SHIPPING" | "SLOW_SHIPPING" }
+
+export async function variantQuotes(s: Session, productId: string, country: string, max: number, optionsOf: (keyNames: string | undefined, variantKey: string | undefined, label: string) => Record<string, string>, skipped: SkippedVariant[] = []): Promise<VariantQuote[]> {
   if (s.supplier === "CJ") {
     const p = await cj.getProduct(s.token, productId);
-    const inStock = p.variants
-      .map((v) => ({ v, stock: v.inventories?.find((i) => i.countryCode === country)?.totalInventory ?? 0 }))
-      .filter((x) => x.stock > 0)
-      .slice(0, max);
+    const labelOf = (v: cj.CjVariant) => v.variantKey || v.variantNameEn || v.variantSku || v.vid;
+    const all = p.variants.map((v) => ({ v, stock: v.inventories?.find((i) => i.countryCode === country)?.totalInventory ?? 0 }));
+    for (const x of all) if (x.stock <= 0) skipped.push({ label: labelOf(x.v), reason: "NO_STOCK" });
+    const inStock = all.filter((x) => x.stock > 0).slice(0, max);
     const byWeight = new Map<string, Promise<cj.CjFreightOption[]>>();
     const out: VariantQuote[] = [];
     for (const { v, stock } of inStock) {
@@ -296,11 +299,17 @@ export async function variantQuotes(s: Session, productId: string, country: stri
       const key = Number.isFinite(w) && w > 0 ? String(Math.round(w / 10)) : v.vid;
       if (!byWeight.has(key)) byWeight.set(key, cj.freightCalculate(s.token, v.vid, 1, country));
       const options = await byWeight.get(key)!;
-      if (!options.length) continue;
+      const label = labelOf(v);
+      if (!options.length) {
+        skipped.push({ label, reason: "NO_SHIPPING" });
+        continue;
+      }
       const best = options.reduce((a, b) => (b.logisticPrice < a.logisticPrice ? b : a));
       const days = cj.parseMaxDays(best.logisticAging);
-      if (days > MAX_DELIVERY_DAYS) continue;
-      const label = v.variantKey || v.variantNameEn || v.variantSku || v.vid;
+      if (days > MAX_DELIVERY_DAYS) {
+        skipped.push({ label, reason: "SLOW_SHIPPING" });
+        continue;
+      }
       out.push({
         variantId: v.vid,
         label,
@@ -316,11 +325,18 @@ export async function variantQuotes(s: Session, productId: string, country: stri
   }
   const p = await ae.getProduct(s.cfg, s.session, productId, country);
   const out: VariantQuote[] = [];
+  for (const v of p.skus) if (!(v.stock > 0 && v.shipsFrom === country)) skipped.push({ label: v.label, reason: "NO_STOCK" });
   for (const v of p.skus.filter((x) => x.stock > 0 && x.shipsFrom === country).slice(0, max)) {
     const options = await ae.shipping(s.cfg, s.session, { productId, skuId: v.skuId, quantity: 1, country, sendFrom: country });
-    if (!options.length) continue;
+    if (!options.length) {
+      skipped.push({ label: v.label, reason: "NO_SHIPPING" });
+      continue;
+    }
     const best = options.reduce((a, b) => (b.amountUsd < a.amountUsd ? b : a));
-    if (best.deliveryDaysMax > MAX_DELIVERY_DAYS) continue;
+    if (best.deliveryDaysMax > MAX_DELIVERY_DAYS) {
+      skipped.push({ label: v.label, reason: "SLOW_SHIPPING" });
+      continue;
+    }
     const parts = v.label.split(/\s*\/\s*/).filter(Boolean);
     out.push({
       variantId: v.skuId,
