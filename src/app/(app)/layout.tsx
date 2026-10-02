@@ -27,6 +27,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         { href: "/listings", label: n.listings, icon: "tag" },
         { href: "/orders", label: n.orders, icon: "box", badge: attention },
         { href: "/returns", label: n.returns, icon: "undo", badge: openReturns },
+        { href: "/health", label: n.health, icon: "shield" },
       ],
     },
     {

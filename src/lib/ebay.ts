@@ -22,7 +22,11 @@ export const LEGACY_SCOPES = [
   "https://api.ebay.com/oauth/api_scope/sell.account",
 ];
 export const MARKETING_SCOPE = "https://api.ebay.com/oauth/api_scope/sell.marketing";
-export const SELLER_SCOPES = [...LEGACY_SCOPES, MARKETING_SCOPE];
+export const ANALYTICS_SCOPE = "https://api.ebay.com/oauth/api_scope/sell.analytics.readonly";
+export const SELLER_SCOPES = [...LEGACY_SCOPES, MARKETING_SCOPE, ANALYTICS_SCOPE];
+
+/** Le compte a-t-il autorisé la lecture de ses standards vendeur (comptes connectés avant : à reconnecter) ? */
+export const canReadStandards = (scopes: string | null | undefined) => Boolean(scopes?.split(" ").includes(ANALYTICS_SCOPE));
 
 /** Le compte a-t-il autorisé la publicité (Promoted Listings) ? */
 export const canAdvertise = (scopes: string | null | undefined) => Boolean(scopes?.split(" ").includes(MARKETING_SCOPE));
@@ -1228,4 +1232,57 @@ export function updateAdRate(token: string, campaignId: string, adId: string, ra
 
 export function deleteAd(token: string, campaignId: string, adId: string, marketId: MarketplaceId) {
   return api<void>(token, `/sell/marketing/v1/ad_campaign/${encodeURIComponent(campaignId)}/ad/${encodeURIComponent(adId)}`, { method: "DELETE" }, marketId);
+}
+
+
+/* ---------- Santé du compte vendeur ---------- */
+
+export interface SellingLimit { amount: number | null; currency: string | null; quantity: number | null }
+
+/** Limites de vente du compte (montant et nombre d'objets en vente par mois). Null : aucune limite communiquée. */
+export async function getSellingLimit(token: string): Promise<SellingLimit | null> {
+  const r = await api<{ sellingLimit?: { amount?: { value?: string; currency?: string }; quantity?: number } }>(token, "/sell/account/v1/privilege");
+  const l = r?.sellingLimit;
+  if (!l) return null;
+  const amount = l.amount?.value !== undefined ? Number(l.amount.value) : null;
+  return { amount: Number.isFinite(amount) ? amount : null, currency: l.amount?.currency ?? null, quantity: typeof l.quantity === "number" ? l.quantity : null };
+}
+
+export interface StandardsMetric { key: string; name: string; level: string | null; value: number | null }
+export interface SellerStandards { level: string; program: string; evaluatedAt: string | null; metrics: StandardsMetric[] }
+
+/** Programme de standards vendeur d'un site eBay. */
+export function standardsProgram(marketId: MarketplaceId): string {
+  if (marketId === "EBAY_US") return "PROGRAM_US";
+  if (marketId === "EBAY_GB") return "PROGRAM_UK";
+  if (marketId === "EBAY_DE") return "PROGRAM_DE";
+  return "PROGRAM_GLOBAL";
+}
+
+/** Valeur numérique d'une métrique eBay (nombre, texte ou objet { value }). */
+export function metricNumber(v: unknown): number | null {
+  if (typeof v === "number") return Number.isFinite(v) ? v : null;
+  if (typeof v === "string") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : null;
+  }
+  if (v && typeof v === "object" && "value" in v) return metricNumber((v as { value: unknown }).value);
+  return null;
+}
+
+/** Standards vendeur du cycle en cours (niveau, taux de défauts, retards…). */
+export async function getSellerStandards(token: string, marketId: MarketplaceId): Promise<SellerStandards> {
+  const program = standardsProgram(marketId);
+  const r = await api<{
+    standardsLevel?: string;
+    program?: string;
+    cycle?: { evaluationDate?: string };
+    metrics?: { metricKey?: string; name?: string; level?: string; value?: unknown }[];
+  }>(token, `/sell/analytics/v1/seller_standards_profile/${program}/CURRENT`, {}, marketId);
+  return {
+    level: r?.standardsLevel ?? "UNKNOWN",
+    program: r?.program ?? program,
+    evaluatedAt: r?.cycle?.evaluationDate ?? null,
+    metrics: (r?.metrics ?? []).map((m) => ({ key: m.metricKey ?? "", name: m.name ?? m.metricKey ?? "", level: m.level ?? null, value: metricNumber(m.value) })),
+  };
 }

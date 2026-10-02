@@ -24,13 +24,13 @@ export const SCANNER_RESERVE = 0.5;
 /** Contrat eBay : les infos d'annonces ne doivent pas avoir plus de 6 h de retard sur eBay. */
 export const DEMAND_CACHE_MS = 6 * 3600_000;
 
-async function readState<T>(key: string): Promise<T | null> {
+export async function readState<T>(key: string): Promise<T | null> {
   const row = await db.appState.findUnique({ where: { key } });
   if (!row || (row.expiresAt && row.expiresAt.getTime() <= Date.now())) return null;
   return row.value as T;
 }
 
-async function writeState(key: string, value: Prisma.InputJsonValue, expiresAt: Date) {
+export async function writeState(key: string, value: Prisma.InputJsonValue, expiresAt: Date) {
   await db.appState.upsert({ where: { key }, create: { key, value, expiresAt }, update: { value, expiresAt } });
 }
 
