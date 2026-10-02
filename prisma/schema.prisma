@@ -110,6 +110,10 @@ model User {
   buyerMessages      BuyerMessage[]
   notifySales        Boolean  @default(true) // email à chaque nouvelle vente
   pushSubscriptions  PushSubscription[]
+  autopilot          Boolean  @default(false) // pilote automatique : ajoute des produits rentables chaque jour
+  autopilotPerDay    Int      @default(5)
+  autopilotCategories Json?   // catégories choisies (vide = toutes)
+  autopilotLastRunAt DateTime?
 }
 
 model EbayAccount {

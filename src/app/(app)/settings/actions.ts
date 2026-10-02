@@ -5,6 +5,8 @@ import { z } from "zod";
 import { requireUser } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { EU_COUNTRIES } from "@/lib/eu";
+import { isCategoryId } from "@/lib/sniper";
+import { AUTOPILOT_MAX_PER_DAY } from "@/lib/autopilot";
 
 const schema = z.object({
   euRpCompany: z.string().trim().min(2).max(100),
@@ -53,6 +55,22 @@ export async function saveMessages(formData: FormData) {
   });
   revalidatePath("/settings");
   redirect("/settings?saved=messages#messages");
+}
+
+/** Pilote automatique : produits ajoutés chaque jour. */
+export async function saveAutopilot(formData: FormData) {
+  const user = await requireUser();
+  const categories = formData.getAll("autopilotCategories").map(String).filter(isCategoryId).slice(0, 5);
+  await db.user.update({
+    where: { id: user.id },
+    data: {
+      autopilot: checked(formData, "autopilot"),
+      autopilotPerDay: Math.round(numberIn(formData.get("autopilotPerDay"), 1, AUTOPILOT_MAX_PER_DAY, 5)),
+      autopilotCategories: categories,
+    },
+  });
+  revalidatePath("/settings");
+  redirect("/settings?saved=autopilot#autopilot");
 }
 
 /** Alertes de vente par email. */

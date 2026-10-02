@@ -7,7 +7,9 @@ import CjConnectForm from "@/components/CjConnectForm";
 import { EU_COUNTRIES } from "@/lib/eu";
 import { aeConfig } from "@/lib/suppliers";
 import { LOCALE_TAGS } from "@/lib/i18n";
-import { saveGpsr, saveGrowth, saveMessages, saveNotifications, setAutoOrder } from "./actions";
+import { saveAutopilot, saveGpsr, saveGrowth, saveMessages, saveNotifications, setAutoOrder } from "./actions";
+import { CATEGORY_IDS } from "@/lib/sniper";
+import { AUTOPILOT_MAX_PER_DAY, autopilotCategories } from "@/lib/autopilot";
 import PushToggle from "@/components/PushToggle";
 import { vapidPublicKey } from "@/lib/notify";
 import { canAdvertise } from "@/lib/ebay";
@@ -88,6 +90,33 @@ export default async function Settings({ searchParams }: { searchParams: Promise
           <button className={user.autoOrder ? "btn-secondary px-4 py-2 text-sm" : "btn-primary px-4 py-2 text-sm"}>
             {user.autoOrder ? s.autoOrderDisable : s.autoOrderEnable}
           </button>
+        </form>
+      </section>
+
+      <section id="autopilot" className="card scroll-mt-24">
+        <h2 className="flex items-center gap-2.5 font-semibold text-fg"><SectionIcon name="zap" />{s.autopilotTitle}</h2>
+        <p className="mt-2 text-sm text-muted">{s.autopilotHelp}</p>
+        {saved === "autopilot" && <Notice tone="emerald" className="mt-3">{s.saved}</Notice>}
+        <form action={saveAutopilot} className="mt-4 space-y-4">
+          <Switch name="autopilot" defaultChecked={user.autopilot} label={s.autopilotOn} />
+          <label className="block max-w-xs text-sm font-medium text-fg-2">
+            {s.autopilotPerDay}
+            <input name="autopilotPerDay" type="number" min={1} max={AUTOPILOT_MAX_PER_DAY} defaultValue={user.autopilotPerDay} className={input} />
+          </label>
+          <fieldset>
+            <legend className="text-sm font-medium text-fg-2">{s.autopilotCategories}</legend>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {CATEGORY_IDS.map((id) => (
+                <label key={id} className="flex cursor-pointer items-center gap-1.5 rounded-full bg-surface-2 px-3 py-1 text-xs text-fg-2 ring-1 ring-line has-[:checked]:bg-brand-500/20 has-[:checked]:ring-brand-500/50">
+                  <input type="checkbox" name="autopilotCategories" value={id} defaultChecked={autopilotCategories(user.autopilotCategories).includes(id)} className="h-3 w-3" />
+                  {t.sniper.categoryNames[id]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          {user.autopilotLastRunAt && <p className="text-xs text-subtle">{fmt(s.autopilotLast, { date: new Intl.DateTimeFormat(LOCALE_TAGS[locale], { dateStyle: "medium", timeStyle: "short" }).format(user.autopilotLastRunAt) })}</p>}
+          <p className="text-xs text-subtle">{s.autopilotSetup}</p>
+          <button className="btn-primary px-4 py-2 text-sm">{s.save}</button>
         </form>
       </section>
 
