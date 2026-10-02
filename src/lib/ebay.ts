@@ -525,13 +525,26 @@ export async function findOfferId(token: string, sku: string, marketId: Marketpl
 }
 
 /** Crée l'offre, ou met à jour celle qui existe déjà pour ce SKU, puis la publie. */
-export async function createOrUpdateAndPublish(token: string, o: OfferInput): Promise<{ offerId: string; listingId: string }> {
+export async function createOrUpdateAndPublish(token: string, o: OfferInput, wait = (ms: number) => new Promise((r) => setTimeout(r, ms))): Promise<{ offerId: string; listingId: string }> {
   const m = marketplace(o.marketId);
-  let offerId = await findOfferId(token, o.sku, m.id);
-  if (offerId) await updateOffer(token, offerId, o);
-  else offerId = (await createOffer(token, o)).offerId;
-  const { listingId } = await publishOffer(token, offerId, m.id);
-  return { offerId, listingId };
+  // Fiche article tout juste créée : eBay met parfois quelques secondes à la rendre disponible
+  // (« <SKU> could not be found or is not available in the system », errorId 25702) → on réessaie.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      let offerId = await findOfferId(token, o.sku, m.id);
+      if (offerId) await updateOffer(token, offerId, o);
+      else offerId = (await createOffer(token, o)).offerId;
+      const { listingId } = await publishOffer(token, offerId, m.id);
+      return { offerId, listingId };
+    } catch (e) {
+      const notYet = e instanceof EbayApiError && (e.errors.some((x) => x.errorId === 25702) || /could not be found or is not available/i.test(e.readable));
+      if (!notYet || attempt >= 3) {
+        if (e instanceof EbayApiError) console.error("Publication eBay", e.path, e.status, JSON.stringify(e.errors).slice(0, 1500));
+        throw e;
+      }
+      await wait(2000 * (attempt + 1));
+    }
+  }
 }
 
 export function publishOffer(token: string, offerId: string, marketId: MarketplaceId = "EBAY_US") {
