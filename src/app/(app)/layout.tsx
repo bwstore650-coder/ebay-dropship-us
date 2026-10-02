@@ -7,6 +7,7 @@ import { isAdminEmail, parseAdminEmails } from "@/lib/admin";
 import AppSidebar, { type NavSection } from "@/components/AppSidebar";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { Icon } from "@/components/icons";
+import AssistantChat from "@/components/AssistantChat";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -86,6 +87,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <div className="lg:pl-64">
         <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-10 lg:py-10">{children}</main>
       </div>
+      {user.plan !== "NONE" && <AssistantChat t={t.assistant} errors={t.errors} categoryNames={t.sniper.categoryNames} />}
     </div>
   );
 }
