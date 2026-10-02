@@ -1,6 +1,6 @@
 import { MARKETPLACES } from "./marketplaces";
 import { describe, expect, it } from "vitest";
-import { weightedMedian, computeMargin, ebayFees, evaluateProduct, median, pickBestOffer, priceForTargetMargin, type SupplierOffer } from "./margin";
+import { weightedMedian, computeMargin, ebayFees, evaluateProduct, median, pickBestOffer, priceForTargetMargin, quantityProfit, type SupplierOffer } from "./margin";
 
 describe("frais eBay", () => {
   it("13,6 % + 0,40 $ au-dessus de 10 $", () => {
@@ -115,5 +115,27 @@ describe("frais Europe (vendeurs pro, hors TVA)", () => {
       expect(got).toBeGreaterThanOrEqual(30);
       expect(got).toBeLessThan(30.5);
     }
+  });
+});
+
+describe("calculateur des fiches produit : bénéfice pour N ventes", () => {
+  it("multiplie le résultat d'une vente (chaque vente paie ses frais fixes)", () => {
+    const r = quantityProfit({ saleTotal: 30.75, supplierCost: 8, supplierShipping: 3.45, quantity: 10 });
+    const one = computeMargin({ saleTotal: 30.75, supplierCost: 8, supplierShipping: 3.45 });
+    expect(r.unit).toEqual(one);
+    expect(r).toMatchObject({ quantity: 10, revenue: 307.5, cost: 114.5, fees: Math.round(one.fees * 1000) / 100, profit: Math.round(one.profit * 1000) / 100 });
+    // Au prix minimum sans perte, le bénéfice est ~0.
+    expect(Math.abs(computeMargin({ saleTotal: r.breakEven!, supplierCost: 11.45 }).profit)).toBeLessThan(0.05);
+  });
+  it("publicité, autre pays, quantité invalide ramenée à 1, vente à perte", () => {
+    const de = MARKETPLACES.EBAY_DE;
+    const withAds = quantityProfit({ saleTotal: 40, supplierCost: 10, promotedRate: 0.05, market: de, quantity: 3 });
+    const noAds = quantityProfit({ saleTotal: 40, supplierCost: 10, market: de, quantity: 3 });
+    expect(withAds.fees).toBeGreaterThan(noAds.fees);
+    expect(quantityProfit({ saleTotal: 40, supplierCost: 10, quantity: 0 }).quantity).toBe(1);
+    expect(quantityProfit({ saleTotal: 40, supplierCost: 10, quantity: Number.NaN }).quantity).toBe(1);
+    const loss = quantityProfit({ saleTotal: 10, supplierCost: 12, quantity: 5 });
+    expect(loss.profit).toBeLessThan(0);
+    expect(loss.profit).toBeCloseTo(loss.unit.profit * 5, 2);
   });
 });

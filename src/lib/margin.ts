@@ -159,3 +159,34 @@ export function evaluateProduct(
 
 function round2(n: number) { return Math.round(n * 100) / 100; }
 function round1(n: number) { return Math.round(n * 10) / 10; }
+
+export interface QuantityProfit {
+  unit: MarginResult;      // une vente
+  quantity: number;
+  revenue: number;         // total encaissé
+  cost: number;            // total payé au fournisseur (produit + livraison)
+  fees: number;            // total des frais eBay
+  profit: number;          // bénéfice total
+  breakEven: number | null;// prix de vente à 0 de bénéfice
+}
+
+/** Calculateur : bénéfice d'une vente au prix choisi, puis pour N ventes (chaque vente est une commande eBay). */
+export function quantityProfit(i: MarginInput & { quantity: number }): QuantityProfit {
+  const quantity = Math.max(1, Math.min(1_000_000, Math.floor(i.quantity) || 1));
+  const unit = computeMargin(i);
+  let breakEven: number | null = null;
+  try {
+    breakEven = priceForTargetMargin(unit.landedCost, 0, i);
+  } catch {
+    /* frais ≥ 100 % */
+  }
+  return {
+    unit,
+    quantity,
+    revenue: round2(unit.saleTotal * quantity),
+    cost: round2(unit.landedCost * quantity),
+    fees: round2(unit.fees * quantity),
+    profit: round2(unit.profit * quantity),
+    breakEven,
+  };
+}

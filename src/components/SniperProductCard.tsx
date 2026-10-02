@@ -8,6 +8,7 @@ import { Icon } from "@/components/icons";
 import { cjProductUrl, ebaySearchUrl } from "@/lib/listing";
 import type { MarketplaceId } from "@/lib/marketplaces";
 import { SHOW_SALES_DATA } from "@/lib/flags";
+import ProductCalculator from "@/components/ProductCalculator";
 
 type Candidate = RunState["candidates"][number];
 
@@ -87,6 +88,7 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
   onToggleSave?: (c: Candidate) => void;
 }) {
   const [open, setOpen] = useState(!collapsible);
+  const [calc, setCalc] = useState(false);
   const k = t.card;
   const d: CandidateDetails = c.details ?? {};
   const m = d.market;
@@ -153,6 +155,10 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
             <a href={ebaySearchUrl(marketId, c.keyword)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface-2 px-2.5 py-1 font-medium text-fg-2 hover:border-brand-500/50 hover:text-fg">
               {k.viewEbay} <span aria-hidden="true">↗</span>
             </a>
+            <button type="button" onClick={() => setCalc((v) => !v)} aria-expanded={calc}
+              className={`inline-flex items-center gap-1 rounded-lg border px-2.5 py-1 font-medium transition ${calc ? "border-brand-500/50 bg-brand-500/15 text-fg" : "border-line bg-surface-2 text-fg-2 hover:border-brand-500/50 hover:text-fg"}`}>
+              <Icon name="dollar" className="h-3.5 w-3.5" />{t.calc.open}
+            </button>
             {c.supplier === "CJ" && c.productId && (
               <a href={cjProductUrl(c.productId, c.title)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface-2 px-2.5 py-1 font-medium text-fg-2 hover:border-brand-500/50 hover:text-fg">
                 {k.viewCj} <span aria-hidden="true">↗</span>
@@ -161,6 +167,19 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
           </p>
         </div>
       </div>
+
+      {calc && (
+        <div className="px-5 pb-4">
+          <ProductCalculator
+            t={t.calc}
+            marketId={marketId}
+            price={c.expired ? null : c.marketPrice ?? d.minPrice ?? null}
+            cost={d.supplierPrice ?? null}
+            shipping={d.shipping ?? null}
+            minMargin={minMargin}
+          />
+        </div>
+      )}
 
       {collapsible && (
         <button onClick={() => setOpen((o) => !o)} className="mx-5 mb-3 self-start text-xs font-medium text-brand-300 hover:text-brand-200" aria-expanded={open}>
