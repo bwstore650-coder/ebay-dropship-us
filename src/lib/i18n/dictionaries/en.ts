@@ -110,6 +110,7 @@ export const en = {
   dashboard: {
     title: "Dashboard",
     onboarding: "Getting started",
+    quick: { title: "Quick start: your store online in 15 minutes", subtitle: "Sellvela finds profitable products stocked in US warehouses and lists them for you.", plan: "Choose a plan", ebay: "Connect your eBay account", cj: "Connect CJdropshipping", setup: "eBay settings for {market} (shipping, returns, location)", howMany: "How many products to list", categories: "Categories (optional, up to {max})", launch: "Find and list {n} products", launching: "Starting…", launchHelp: "Only products that meet your minimum margin and ship in 8 days or less. Follow progress in the Sniper; you can stop at any time.", running: "A search is running — see progress" },
     stepPlan: "Choose a plan",
     stepEbay: "Connect your eBay account",
     stepSupplier: "Connect a supplier (CJ or AliExpress)",

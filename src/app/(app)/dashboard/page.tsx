@@ -10,10 +10,13 @@ import { Notice, StatCard, StatusBadge } from "@/components/ui";
 import { ORDER_TONE } from "@/lib/status-tones";
 import { change, dailySeries, ordersByMarket, topProducts, totals, type DashOrder } from "@/lib/dashboard";
 import SalesChart from "@/components/SalesChart";
+import QuickStart from "@/components/QuickStart";
 
 export const dynamic = "force-dynamic";
 
 const DAY = 86_400_000;
+/** Le démarrage rapide reste affiché tant que le vendeur a moins d'annonces en ligne que ça. */
+const QUICK_START_UNTIL = 10;
 const PAUSE_REASONS = ["OUT_OF_STOCK", "MARGIN", "SLOW", "SUPPLIER_GONE"] as const;
 
 export default async function Dashboard() {
@@ -50,6 +53,10 @@ export default async function Dashboard() {
   const byCur = new Map<string, number>();
   for (const o of orders) if (o.createdAt >= since && (o.status === "ORDERED" || o.status === "SHIPPED")) byCur.set(o.currency, (byCur.get(o.currency) ?? 0) + (o.saleTotal ?? 0));
   const defaultMarket = marketplace(user.defaultMarketplace);
+  const firstAccount = user.ebayAccounts[0] ?? null;
+  const setupDone = firstAccount
+    ? Boolean(await db.ebayMarketSetup.findUnique({ where: { ebayAccountId_marketplaceId: { ebayAccountId: firstAccount.id, marketplaceId: defaultMarket.id } }, select: { id: true } }))
+    : false;
   const currency = [...byCur.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? defaultMarket.currency;
   const symbol = orders.find((o) => o.currency === currency) ? marketplace(orders.find((o) => o.currency === currency)!.marketplace).symbol : defaultMarket.symbol;
   const cur = totals(orders, currency, since, end);
@@ -73,13 +80,6 @@ export default async function Dashboard() {
   const pauseCounts = PAUSE_REASONS.map((r) => ({ r, n: pausedList.filter((l) => l.pauseReason === r).length })).filter((x) => x.n > 0);
   const listingTotal = active + paused + drafts;
 
-  const steps = [
-    { done: user.plan !== "NONE", label: D.stepPlan, href: "/billing" },
-    { done: user.ebayAccounts.length > 0, label: D.stepEbay, href: "/settings" },
-    { done: user.supplierAccounts.length > 0, label: D.stepSupplier, href: "/settings" },
-    { done: active + paused > 0, label: D.stepFirstListing, href: "/finder" },
-  ];
-  const doneCount = steps.filter((s) => s.done).length;
   const name = user.email.split("@")[0];
 
   const quick: [string, string, IconName][] = [
@@ -178,33 +178,20 @@ export default async function Dashboard() {
         </div>
 
         <div className="space-y-6">
-          {doneCount < steps.length && (
-            <div className="card">
-              <div className="flex items-center justify-between">
-                <h2 className="font-semibold text-fg">{D.onboarding}</h2>
-                <span className="text-xs text-muted">{fmt(D.progress, { done: doneCount, total: steps.length })}</span>
-              </div>
-              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-3">
-                <div className="h-full rounded-full bg-gradient-to-r from-brand-500 to-fuchsia-500" style={{ width: `${(doneCount / steps.length) * 100}%` }} />
-              </div>
-              <ul className="mt-3 space-y-0.5">
-                {steps.map((s) => (
-                  <li key={s.label}>
-                    {s.done ? (
-                      <span className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm text-subtle line-through decoration-subtle/60">
-                        <span className="grid h-5 w-5 place-items-center rounded-full bg-emerald-500/20 text-emerald-300"><Icon name="check" className="h-3 w-3" strokeWidth={3} /></span>
-                        {s.label}
-                      </span>
-                    ) : (
-                      <Link href={s.href} className="group flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm text-fg-2 hover:bg-surface-2 hover:text-fg">
-                        <span className="h-5 w-5 rounded-full border-2 border-line-strong group-hover:border-brand-400" />
-                        <span className="flex-1">{s.label}</span>
-                      </Link>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </div>
+          {active + paused < QUICK_START_UNTIL && (
+            <QuickStart
+              t={D.quick}
+              tl={t.listing}
+              ts={t.sniper}
+              errors={t.errors}
+              marketId={defaultMarket.id}
+              marketName={t.markets[defaultMarket.id]}
+              account={firstAccount ? { id: firstAccount.id, label: firstAccount.label ?? firstAccount.ebayUserId ?? "eBay" } : null}
+              hasPlan={user.plan !== "NONE"}
+              hasCj={user.supplierAccounts.some((a) => a.supplier === "CJ")}
+              setupDone={setupDone}
+              running={lastRun?.status === "RUNNING"}
+            />
           )}
 
           <div className="card">

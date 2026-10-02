@@ -111,6 +111,7 @@ export const it: Dict = {
   dashboard: {
     title: "Panoramica",
     onboarding: "Primi passi",
+    quick: { title: "Avvio rapido: il tuo negozio online in 15 minuti", subtitle: "Sellvela trova prodotti redditizi nei magazzini locali e li mette in vendita per te.", plan: "Scegli un piano", ebay: "Collega il tuo account eBay", cj: "Collega CJdropshipping", setup: "Impostazioni eBay per {market} (spedizione, resi, luogo)", howMany: "Quanti prodotti mettere in vendita", categories: "Categorie (facoltativo, massimo {max})", launch: "Trova e metti in vendita {n} prodotti", launching: "Avvio…", launchHelp: "Solo prodotti con il tuo margine minimo e consegna entro 8 giorni. Segui l'avanzamento nello Sniper; puoi fermarti quando vuoi.", running: "Ricerca in corso — vedi l'avanzamento" },
     stepPlan: "Scegli un piano",
     stepEbay: "Collega il tuo account eBay",
     stepSupplier: "Collega un fornitore (CJ o AliExpress)",
