@@ -1356,3 +1356,54 @@ export async function answerBuyerQuestion(
     marketId,
   );
 }
+
+/* ---------- Trafic des annonces (Analytics API, comme Seller Hub › Performance › Trafic) ---------- */
+
+export const TRAFFIC_METRICS = [
+  "TOTAL_IMPRESSION_TOTAL",                 // toutes les impressions (= Seller Hub)
+  "LISTING_IMPRESSION_SEARCH_RESULTS_PAGE",
+  "LISTING_IMPRESSION_STORE",
+  "LISTING_VIEWS_TOTAL",
+  "LISTING_VIEWS_SOURCE_SEARCH_RESULTS_PAGE",
+  "LISTING_VIEWS_SOURCE_STORE",
+  "LISTING_VIEWS_SOURCE_DIRECT",
+  "LISTING_VIEWS_SOURCE_OFF_EBAY",
+  "LISTING_VIEWS_SOURCE_OTHER_EBAY",
+  "CLICK_THROUGH_RATE",
+  "SALES_CONVERSION_RATE",
+  "TRANSACTION",
+] as const;
+export type TrafficMetric = (typeof TRAFFIC_METRICS)[number];
+export type TrafficRow = { key: string } & Partial<Record<TrafficMetric, number>>;
+
+const ymd = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, "");
+
+/** Lit un rapport de trafic eBay : une ligne par jour (DAY) ou par annonce (LISTING). */
+export function parseTrafficReport(r: {
+  header?: { metrics?: { key?: string }[] };
+  records?: { dimensionValues?: { value?: string }[]; metricValues?: { value?: unknown; applicable?: boolean }[] }[];
+}): TrafficRow[] {
+  const keys = (r.header?.metrics ?? []).map((m) => m.key ?? "");
+  return (r.records ?? []).map((rec) => {
+    const row: TrafficRow = { key: String(rec.dimensionValues?.[0]?.value ?? "") };
+    keys.forEach((k, i) => {
+      const v = rec.metricValues?.[i];
+      const n = metricNumber(v?.value);
+      if (v?.applicable !== false && n !== null && (TRAFFIC_METRICS as readonly string[]).includes(k)) row[k as TrafficMetric] = n;
+    });
+    return row;
+  });
+}
+
+export async function getTrafficReport(
+  token: string,
+  o: { marketId: MarketplaceId; from: Date; to: Date; dimension: "DAY" | "LISTING"; listingIds?: string[] },
+): Promise<TrafficRow[]> {
+  const range = `date_range:[${ymd(o.from)}..${ymd(o.to)}]`;
+  const filter = o.dimension === "LISTING"
+    ? `marketplace_ids:{${o.marketId}},listing_ids:{${(o.listingIds ?? []).slice(0, 200).join("|")}},${range}`
+    : `marketplace_ids:{${o.marketId}},${range}`;
+  const q = new URLSearchParams({ dimension: o.dimension, filter, metric: TRAFFIC_METRICS.join(",") });
+  const r = await api<Parameters<typeof parseTrafficReport>[0]>(token, `/sell/analytics/v1/traffic_report?${q}`, {}, o.marketId);
+  return parseTrafficReport(r ?? {});
+}

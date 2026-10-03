@@ -30,6 +30,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         { href: "/orders", label: n.orders, icon: "box", badge: attention },
         { href: "/returns", label: n.returns, icon: "undo", badge: openReturns },
         { href: "/messages", label: n.messages, icon: "message", badge: newMessages },
+        { href: "/performance", label: n.performance, icon: "trend" },
         { href: "/health", label: n.health, icon: "shield" },
       ],
     },
