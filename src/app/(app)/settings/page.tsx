@@ -1,5 +1,6 @@
 import { requireUser } from "@/lib/auth";
 import { dailyListingLimit } from "@/lib/compliance";
+import { isAdminEmail, parseAdminEmails } from "@/lib/admin";
 import { maxEbayAccounts } from "@/lib/plans";
 import { fmt } from "@/lib/i18n";
 import { getI18n } from "@/lib/i18n/server";
@@ -38,7 +39,7 @@ export default async function Settings({ searchParams }: { searchParams: Promise
 
       <section className="card">
         <h2 className="flex items-center gap-2.5 font-semibold text-fg"><SectionIcon name="globe" />{fmt(s.ebayAccounts, { count: user.ebayAccounts.length, max })}</h2>
-        <p className="mt-2 text-sm text-muted">{fmt(s.ebayHelp, { limit: dailyListingLimit(user.ebayAccountOpenedAt) })}</p>
+        <p className="mt-2 text-sm text-muted">{fmt(s.ebayHelp, { limit: dailyListingLimit(user.ebayAccountOpenedAt, new Date(), isAdminEmail(user.email, parseAdminEmails(process.env.ADMIN_EMAILS))) })}</p>
         <ul className="mt-3 space-y-2">
           {user.ebayAccounts.map((a: { id: string; label: string | null; ebayUserId: string | null }, i: number) => (
             <li key={a.id} className="flex items-center justify-between rounded-xl border border-line bg-surface-2 px-4 py-2.5 text-sm">

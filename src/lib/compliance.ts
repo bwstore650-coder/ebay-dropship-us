@@ -69,11 +69,19 @@ export function findVeroBrand(text: string): string | null {
   return VERO_BRANDS.find((b) => t.includes(` ${b} `)) ?? KNOCKOFFS.find((k) => k.test(t))?.brand ?? null;
 }
 
-/** Nombre maximum d'annonces par jour selon l'âge du compte eBay. */
-export function dailyListingLimit(accountOpenedAt: Date | null, now = new Date()): number {
-  if (!accountOpenedAt) return 5;
+/** Limite par jour du compte administrateur (tests de l'outil), au minimum. */
+export const ADMIN_DAILY_LISTINGS = 30;
+
+/** Nombre maximum d'annonces par jour selon l'âge du compte eBay (`admin` : au moins ADMIN_DAILY_LISTINGS). */
+export function dailyListingLimit(accountOpenedAt: Date | null, now = new Date(), admin = false): number {
+  const base = baseDailyLimit(accountOpenedAt, now);
+  return admin ? Math.max(ADMIN_DAILY_LISTINGS, base) : base;
+}
+
+function baseDailyLimit(accountOpenedAt: Date | null, now: Date): number {
+  if (!accountOpenedAt) return 10;
   const days = (now.getTime() - accountOpenedAt.getTime()) / 86_400_000;
-  if (days < 30) return 5;
+  if (days < 30) return 10;
   if (days < 90) return 15;
   if (days < 180) return 30;
   return 50;

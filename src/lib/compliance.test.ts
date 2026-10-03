@@ -29,7 +29,10 @@ describe("conformité", () => {
   });
   it("limites selon l'âge du compte", () => {
     const now = new Date("2026-09-27");
-    expect(dailyListingLimit(new Date("2026-09-10"), now)).toBe(5);
+    expect(dailyListingLimit(new Date("2026-09-10"), now)).toBe(10);
+    expect(dailyListingLimit(null, now)).toBe(10);
+    expect(dailyListingLimit(new Date("2026-09-10"), now, true)).toBe(30); // compte administrateur
+    expect(dailyListingLimit(new Date("2025-01-01"), now, true)).toBe(50);
     expect(dailyListingLimit(new Date("2026-07-01"), now)).toBe(15);
     expect(dailyListingLimit(new Date("2025-01-01"), now)).toBe(50);
   });

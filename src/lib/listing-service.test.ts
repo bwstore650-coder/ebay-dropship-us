@@ -275,8 +275,8 @@ describe("publication d'une annonce", { timeout: 30_000 }, () => {
     store.setup = null;
     await expect(publishListing(user(), baseInput)).rejects.toMatchObject({ code: "EBAY_SETUP_REQUIRED" });
     store.setup = { fulfillmentPolicyId: "F1", paymentPolicyId: "PAY1", returnPolicyId: "R1", merchantLocationKey: "K" };
-    store.listedToday = 5;
-    await expect(publishListing(user(), baseInput)).rejects.toMatchObject({ code: "DAILY_LIMIT", detail: "5" });
+    store.listedToday = 10;
+    await expect(publishListing(user(), baseInput)).rejects.toMatchObject({ code: "DAILY_LIMIT", detail: "10" });
   });
 
   it("Europe : personne responsable obligatoire, puis envoyée dans l'offre ; prix en euros", async () => {

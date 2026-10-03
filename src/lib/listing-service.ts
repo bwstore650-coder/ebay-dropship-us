@@ -6,6 +6,7 @@
 import type { User } from "@prisma/client";
 import { db } from "@/lib/db";
 import { dailyListingLimit } from "@/lib/compliance";
+import { isAdminEmail, parseAdminEmails } from "@/lib/admin";
 import * as ebay from "@/lib/ebay";
 import { EbayApiError } from "@/lib/ebay";
 import { EbayReconnectRequired, userToken } from "@/lib/ebay-account";
@@ -310,7 +311,7 @@ export async function publishListing(user: UserWithAccounts, input: PublishInput
 
   // Limites : par jour (âge du compte eBay) et par mois (formule).
   const listedToday = await db.listing.count({ where: { ebayAccountId: account.id, publishedAt: { gte: startOfUtcDay() } } });
-  const dayLimit = dailyListingLimit(user.ebayAccountOpenedAt);
+  const dayLimit = dailyListingLimit(user.ebayAccountOpenedAt, new Date(), isAdminEmail(user.email, parseAdminEmails(process.env.ADMIN_EMAILS)));
   if (listedToday >= dayLimit) throw new ListingError("DAILY_LIMIT", String(dayLimit));
   const monthly = planInfo(user.plan)?.listingsPerMonth ?? null;
   if (monthly !== null) {
