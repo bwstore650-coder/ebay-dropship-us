@@ -749,7 +749,7 @@ export const de: Dict = {
     cjRequired: "Der Sniper durchsucht den CJDropshipping-Katalog. Verbinde zuerst dein CJ-Konto.",
     cjRequiredLink: "CJ in den Einstellungen verbinden",
     modeCatalog: "Lieferantenkatalog",
-    modeCatalogHint: "Automatisch: durchsucht CJ-Produkte mit Lager im Land",
+    modeCatalogHint: "Automatisch: durchsucht Lieferantenprodukte mit Lager im Land",
     modeKeywords: "Suchbegriffsliste",
     modeKeywordsHint: "Massenweise: testet bis zu 50 Suchen auf einmal",
     target: "Zu findende Produkte",

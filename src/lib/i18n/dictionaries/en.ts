@@ -748,7 +748,7 @@ export const en = {
     cjRequired: "The Sniper scans the CJDropshipping catalog. Connect your CJ account first.",
     cjRequiredLink: "Connect CJ in Settings",
     modeCatalog: "Supplier catalog",
-    modeCatalogHint: "Automatic: scans CJ products stocked in the country",
+    modeCatalogHint: "Automatic: scans supplier products stocked in the country",
     modeKeywords: "Keyword list",
     modeKeywordsHint: "Bulk: tests up to 50 searches at once",
     target: "Products to find",
