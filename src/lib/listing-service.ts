@@ -281,6 +281,9 @@ export async function prepareListing(user: UserWithAccounts, input: { keyword: s
 
 
 
+/** Photos par annonce choisies par le vendeur (comme dans l'éditeur). */
+export const MAX_EDIT_PHOTOS = 12;
+
 export interface PublishInput {
   ebayAccountId: string;
   marketId: MarketplaceId;
@@ -295,6 +298,7 @@ export interface PublishInput {
   /** Annonce à variantes : les variantes choisies, leur prix et leur quantité (2 au moins). */
   variants?: { variantId: string; price: number; quantity: number }[];
   mainVariantId?: string; // variante principale (photo et options proposées en premier)
+  images?: string[]; // photos choisies et ordonnées par le vendeur (la première = photo principale)
 }
 
 /** Publie l'annonce après avoir revérifié le coût fournisseur, la marge, les marques protégées et les limites. */
@@ -340,7 +344,7 @@ export async function publishListing(user: UserWithAccounts, input: PublishInput
   if (missingRequired.length && !withVariants) throw new ListingError("ASPECTS_MISSING", missingRequired.join(", "));
   const vero = veroIn(title, aspects);
   if (vero) throw new ListingError("LISTING_BLOCKED", vero);
-  const images = cleanImages(info.images);
+  const images = cleanImages(input.images?.length ? input.images : info.images).slice(0, MAX_EDIT_PHOTOS);
   if (!images.length) throw new ListingError("NO_IMAGES");
   if (withVariants) {
     return publishWithVariants(user, input, { m, account, saved, eu, title, description, aspects, images, productId: info.productId, missingRequired });
@@ -530,7 +534,8 @@ async function publishWithVariants(
     const varies = imageVariesBy(chosen.map((c) => ({ options: c.q.options, image: c.q.image })), names);
     await ebay.putInventoryItemGroup(token, groupKey, {
       title, description, aspects: common,
-      imageUrls: groupImages(chosen[0].q.image, chosen.map((c) => c.q.image), images),
+      // Photos ordonnées par le vendeur : son ordre est respecté ; sinon la photo de la variante principale ouvre l'annonce.
+      imageUrls: input.images?.length ? groupImages(null, [], [...images, ...chosen.map((c) => c.q.image ?? "")]) : groupImages(chosen[0].q.image, chosen.map((c) => c.q.image), images),
       variantSkus: chosen.map((_, i) => skuOf(i)),
       specs,
       imageVariesBy: varies ?? undefined,
@@ -742,7 +747,7 @@ export async function updateListingContent(user: UserWithAccounts, listingId: st
   return { title };
 }
 
-/* ---------- Modifier une annonce à variantes déjà en ligne ---------- */
+/* ---------- Modifier toute l'annonce déjà en ligne (sans la retirer) ---------- */
 
 export interface VariantEditorRow {
   id: string;
@@ -753,79 +758,217 @@ export interface VariantEditorRow {
   quantity: number;
   status: string;
   minPrice: number | null; // prix minimum pour la marge du vendeur
-  main: boolean;
 }
 
-async function groupListing(user: UserWithAccounts, listingId: string) {
+export interface FullListing {
+  id: string;
+  kind: "single" | "group";
+  status: string;
+  currency: string;
+  marketId: MarketplaceId;
+  minMarginPct: number;
+  url: string | null;
+  title: string;
+  descriptionHtml: string;
+  images: string[];
+  aspects: Record<string, string[]>;
+  aspectDefs: ebay.AspectDef[];
+  variationNames: string[];
+  price: number | null;      // annonce simple
+  quantity: number | null;   // annonce simple
+  minPrice: number | null;   // annonce simple
+  variants: VariantEditorRow[]; // annonce à variantes, dans l'ordre eBay (la première = principale)
+}
+
+export interface FullListingUpdate {
+  title: string;
+  descriptionHtml: string;
+  images: string[];
+  aspects: Record<string, string[]>;
+  price?: number;
+  quantity?: number;
+  variants?: { id: string; price: number; quantity: number }[]; // dans l'ordre voulu (la première = principale)
+}
+
+async function liveListing(user: UserWithAccounts, listingId: string) {
   const listing = await db.listing.findFirst({ where: { id: listingId, userId: user.id }, include: { variants: { orderBy: { sku: "asc" } } } });
   if (!listing) throw new ListingError("NOT_FOUND");
-  if (!listing.groupKey || !listing.ebayListingId || !["ACTIVE", "PAUSED"].includes(listing.status)) throw new ListingError("INVALID_INPUT");
+  if (!["ACTIVE", "PAUSED"].includes(listing.status)) throw new ListingError("INVALID_INPUT");
+  const group = !!listing.groupKey && !!listing.ebayListingId && listing.variants.length > 0;
+  if (!group && !listing.ebayOfferId) throw new ListingError("INVALID_INPUT");
   const account = user.ebayAccounts.find((a) => a.id === listing.ebayAccountId);
   if (!account) throw new ListingError("EBAY_NOT_CONNECTED");
-  return { listing, account, m: marketplace(listing.marketplace as MarketplaceId) };
+  return { listing, account, group, m: marketplace(listing.marketplace as MarketplaceId) };
 }
 
-/** Variantes d'une annonce en ligne : prix, quantité, photo, et laquelle est la principale. */
-export async function variantEditor(user: UserWithAccounts, listingId: string): Promise<{ currency: string; minMarginPct: number; variants: VariantEditorRow[] }> {
-  const { listing, m } = await groupListing(user, listingId);
-  return {
-    currency: m.currency,
-    minMarginPct: user.minMarginPct,
-    variants: listing.variants.map((v) => ({
-      id: v.id,
-      label: v.label,
-      options: (v.options ?? {}) as Record<string, string>,
-      image: v.image,
-      price: v.price,
-      quantity: v.quantity,
-      status: v.status,
-      minPrice: v.supplierCost != null ? priceForTargetMargin(v.supplierCost, user.minMarginPct, { market: m }) : null,
-      main: v.supplierVariantId === listing.supplierVariantId,
-    })),
+function ebayFailure(e: unknown): never {
+  if (e instanceof ListingError) throw e;
+  if (e instanceof EbayReconnectRequired || (e instanceof EbayApiError && e.status === 401)) throw new ListingError("EBAY_RECONNECT");
+  if (e instanceof EbayApiError) throw new ListingError("EBAY_REJECTED", e.readable);
+  throw e;
+}
+
+const minPriceFor = (cost: number | null, minMarginPct: number, m: ReturnType<typeof marketplace>) =>
+  cost != null ? priceForTargetMargin(cost, minMarginPct, { market: m }) : null;
+
+/** Variantes rangées dans l'ordre de l'annonce eBay (celles absentes de la liste eBay à la fin). */
+export function orderBySkus<T extends { sku: string }>(rows: T[], skus: string[] | undefined): T[] {
+  const pos = new Map((skus ?? []).map((s, i) => [s, i]));
+  return rows.map((r, i) => ({ r, k: pos.get(r.sku) ?? skus?.length ?? 0, i })).sort((a, b) => a.k - b.k || a.i - b.i).map((x) => x.r);
+}
+
+/** Tout le contenu de l'annonce en ligne (lu chez eBay) pour la modifier dans Sellvela. */
+export async function listingFull(user: UserWithAccounts, listingId: string): Promise<FullListing> {
+  const { listing, account, group, m } = await liveListing(user, listingId);
+  const base = {
+    id: listing.id, status: listing.status, currency: m.currency, marketId: m.id, minMarginPct: user.minMarginPct,
+    url: listing.ebayListingId ? ebayItemUrl(m.id, listing.ebayListingId) : null,
   };
+  try {
+    const token = await userToken(account);
+    if (group) {
+      const g = await ebay.getInventoryItemGroup(token, listing.groupKey!, m.id);
+      const ordered = orderBySkus(listing.variants, g.variantSKUs);
+      const categoryId = listing.categoryId ?? (ordered[0]?.ebayOfferId ? String((await ebay.getOffer(token, ordered[0].ebayOfferId, m.id)).categoryId ?? "") : "");
+      const names = (g.variesBy?.specifications ?? []).map((x) => x.name);
+      return {
+        ...base, kind: "group",
+        title: g.title ?? listing.title,
+        descriptionHtml: g.description ?? "",
+        images: g.imageUrls ?? [],
+        aspects: g.aspects ?? {},
+        aspectDefs: categoryId ? await ebay.getAspects(categoryId, m.id).catch(() => []) : [],
+        variationNames: names,
+        price: null, quantity: null, minPrice: null,
+        variants: ordered.map((v) => ({
+          id: v.id, label: v.label, options: (v.options ?? {}) as Record<string, string>, image: v.image,
+          price: v.price, quantity: v.quantity, status: v.status, minPrice: minPriceFor(v.supplierCost, user.minMarginPct, m),
+        })),
+      };
+    }
+    const [item, offer] = await Promise.all([ebay.getInventoryItem(token, listing.sku, m.id), ebay.getOffer(token, listing.ebayOfferId!, m.id)]);
+    const product = (item.product ?? {}) as { title?: string; description?: string; imageUrls?: string[]; aspects?: Record<string, string[]> };
+    const categoryId = String(offer.categoryId ?? listing.categoryId ?? "");
+    const offerPrice = Number((offer.pricingSummary as { price?: { value?: string } } | undefined)?.price?.value);
+    return {
+      ...base, kind: "single",
+      title: product.title ?? listing.title,
+      descriptionHtml: String(offer.listingDescription ?? product.description ?? ""),
+      images: product.imageUrls ?? [],
+      aspects: product.aspects ?? {},
+      aspectDefs: categoryId ? await ebay.getAspects(categoryId, m.id).catch(() => []) : [],
+      variationNames: [],
+      price: Number.isFinite(offerPrice) && offerPrice > 0 ? offerPrice : listing.price,
+      quantity: listing.quantity,
+      minPrice: minPriceFor(listing.supplierCost, user.minMarginPct, m),
+      variants: [],
+    };
+  } catch (e) {
+    return ebayFailure(e);
+  }
+}
+
+/** Contenu commun vérifié (titre, description, photos, caractéristiques, marques protégées). */
+async function checkedContent(input: FullListingUpdate, categoryId: string | null, m: ReturnType<typeof marketplace>, variationNames: string[]) {
+  const title = cleanTitle(input.title);
+  if (title.length < 10) throw new ListingError("INVALID_INPUT");
+  const description = sanitizeDescription(input.descriptionHtml);
+  if (description.replace(/<[^>]+>/g, "").trim().length < 20) throw new ListingError("INVALID_INPUT");
+  const images = cleanImages(input.images).slice(0, MAX_EDIT_PHOTOS);
+  if (!images.length) throw new ListingError("NO_IMAGES");
+  const defs = categoryId ? await ebay.getAspects(categoryId, m.id).catch(() => [] as ebay.AspectDef[]) : [];
+  const built = buildAspects(input.aspects, defs, m.id);
+  const missing = built.missingRequired.filter((n) => !variationNames.some((x) => x.toLowerCase() === n.toLowerCase()));
+  if (missing.length) throw new ListingError("ASPECTS_MISSING", missing.join(", "));
+  const aspects = withoutVariationAspects(built.aspects, variationNames);
+  const vero = veroIn(title, aspects);
+  if (vero) throw new ListingError("LISTING_BLOCKED", vero);
+  return { title, description, images, aspects };
 }
 
 /**
- * Met à jour l'annonce en ligne : variante principale (photo et options en premier), photo qui change avec la
- * variante, prix et quantités. Rien n'est retiré ni republié : c'est la même annonce eBay.
+ * Modifie toute l'annonce en ligne : titre, description, photos (dans l'ordre choisi), caractéristiques, prix et
+ * quantités, et l'ordre des variantes (la première = principale). C'est la même annonce eBay : rien n'est retiré ni
+ * republié, ses ventes et ses vues sont gardées.
  */
-export async function updateVariants(
-  user: UserWithAccounts,
-  listingId: string,
-  input: { mainVariantId?: string; variants: { id: string; price: number; quantity: number }[] },
-): Promise<{ ok: true }> {
-  const { listing, account, m } = await groupListing(user, listingId);
-  const byId = new Map(input.variants.map((v) => [v.id, v]));
-  const rows = listing.variants.map((v) => {
-    const edit = byId.get(v.id);
-    const price = edit ? Math.round(edit.price * 100) / 100 : v.price;
-    const quantity = edit ? Math.max(1, Math.min(10, Math.floor(edit.quantity) || 1)) : v.quantity;
-    if (v.supplierCost != null) {
-      const margin = computeMargin({ saleTotal: price, supplierCost: v.supplierCost, supplierShipping: 0, market: m });
-      if (margin.marginPct < user.minMarginPct) throw new ListingError("MARGIN_TOO_LOW", `${v.label} : ${priceForTargetMargin(v.supplierCost, user.minMarginPct, { market: m })}`);
+export async function updateListingFull(user: UserWithAccounts, listingId: string, input: FullListingUpdate): Promise<{ ok: true }> {
+  const { listing, account, group, m } = await liveListing(user, listingId);
+  const checkMargin = (label: string, price: number, cost: number | null) => {
+    if (cost == null) return null;
+    const pct = computeMargin({ saleTotal: price, supplierCost: cost, supplierShipping: 0, market: m }).marginPct;
+    if (pct < user.minMarginPct) throw new ListingError("MARGIN_TOO_LOW", `${label}${priceForTargetMargin(cost, user.minMarginPct, { market: m })}`);
+    return pct;
+  };
+  const qty = (q: number) => Math.max(1, Math.min(10, Math.floor(q) || 1));
+
+  if (!group) {
+    if (!(input.price && input.price > 0) || !input.quantity) throw new ListingError("INVALID_INPUT");
+    const price = Math.round(input.price * 100) / 100;
+    const quantity = qty(input.quantity);
+    const marginPct = checkMargin("", price, listing.supplierCost);
+    try {
+      const token = await userToken(account);
+      const [item, offer] = await Promise.all([ebay.getInventoryItem(token, listing.sku, m.id), ebay.getOffer(token, listing.ebayOfferId!, m.id)]);
+      const c = await checkedContent(input, String(offer.categoryId ?? listing.categoryId ?? "") || null, m, []);
+      const live = listing.status === "PAUSED" ? 0 : quantity; // une annonce en pause reste à 0 chez eBay
+      const availability = (item.availability ?? {}) as { shipToLocationAvailability?: Record<string, unknown> };
+      await ebay.replaceInventoryItem(token, listing.sku, {
+        ...item,
+        product: { ...(item.product as object), title: c.title, description: c.description, imageUrls: c.images, aspects: c.aspects },
+        availability: { ...availability, shipToLocationAvailability: { ...(availability.shipToLocationAvailability ?? {}), quantity: live } },
+      }, m.id);
+      const pricing = (offer.pricingSummary ?? {}) as Record<string, unknown>;
+      await ebay.replaceOffer(token, listing.ebayOfferId!, {
+        ...offer, listingDescription: c.description, availableQuantity: live,
+        pricingSummary: { ...pricing, price: { value: price.toFixed(2), currency: m.currency } },
+      }, m.id);
+      await db.listing.update({
+        where: { id: listing.id },
+        data: { title: c.title, price, basePrice: price, quantity, ...(marginPct != null ? { lastMarginPct: marginPct } : {}), errorMessage: null },
+      });
+      return { ok: true };
+    } catch (e) {
+      return ebayFailure(e);
     }
-    return { v, price, quantity, margin: v.supplierCost != null ? computeMargin({ saleTotal: price, supplierCost: v.supplierCost, supplierShipping: 0, market: m }).marginPct : v.lastMarginPct };
-  });
-  const main = rows.find((r) => r.v.id === input.mainVariantId) ?? rows.find((r) => r.v.supplierVariantId === listing.supplierVariantId) ?? rows[0];
-  const ordered = [main, ...rows.filter((r) => r !== main)];
-  const options = ordered.map((r) => (r.v.options ?? {}) as Record<string, string>);
+  }
+
+  // Annonce à variantes : l'ordre envoyé est l'ordre eBay ; une variante oubliée garde sa place à la fin.
+  const edits = new Map((input.variants ?? []).map((v, i) => [v.id, { ...v, i }]));
+  const rows = listing.variants
+    .map((v) => {
+      const e = edits.get(v.id);
+      const price = e ? Math.round(e.price * 100) / 100 : v.price;
+      const quantity = e ? qty(e.quantity) : v.quantity;
+      const margin = checkMargin(`${v.label} : `, price, v.supplierCost) ?? v.lastMarginPct;
+      return { v, price, quantity, margin, order: e?.i ?? Number.MAX_SAFE_INTEGER };
+    })
+    .sort((a, b) => a.order - b.order);
+  const options = rows.map((r) => (r.v.options ?? {}) as Record<string, string>);
   const specs = variationSpecs(options);
   if (!specs) throw new ListingError("INVALID_INPUT");
-  const names = specs.map((s) => s.name);
+  const names = specs.map((x) => x.name);
 
+  let c: Awaited<ReturnType<typeof checkedContent>>;
   try {
     const token = await userToken(account);
-    const group = await ebay.getInventoryItemGroup(token, listing.groupKey!, m.id);
+    const categoryId = listing.categoryId ?? (rows[0].v.ebayOfferId ? String((await ebay.getOffer(token, rows[0].v.ebayOfferId, m.id)).categoryId ?? "") || null : null);
+    c = await checkedContent(input, categoryId, m, names);
+    // Chaque variante : même titre, description et caractéristiques, sa photo en premier.
+    for (const r of rows) {
+      const own = Object.fromEntries(Object.entries((r.v.options ?? {}) as Record<string, string>).map(([k, v]) => [k, [v]]));
+      await ebay.putInventoryItem(token, r.v.sku, {
+        title: c.title, description: c.description,
+        imageUrls: [...new Set([...(r.v.image ? [r.v.image] : []), ...c.images])].slice(0, MAX_EDIT_PHOTOS),
+        aspects: { ...c.aspects, ...own },
+        quantity: r.v.status === "PAUSED" ? 0 : r.quantity,
+      }, m.id);
+    }
     await ebay.putInventoryItemGroup(token, listing.groupKey!, {
-      title: group.title ?? listing.title,
-      description: group.description ?? "",
-      aspects: group.aspects ?? {},
-      imageUrls: groupImages(main.v.image, ordered.map((r) => r.v.image), group.imageUrls ?? []),
-      variantSkus: ordered.map((r) => r.v.sku),
+      title: c.title, description: c.description, aspects: c.aspects, imageUrls: c.images,
+      variantSkus: rows.map((r) => r.v.sku),
       specs,
-      imageVariesBy: imageVariesBy(ordered.map((r) => ({ options: (r.v.options ?? {}) as Record<string, string>, image: r.v.image })), names) ?? undefined,
+      imageVariesBy: imageVariesBy(rows.map((r) => ({ options: (r.v.options ?? {}) as Record<string, string>, image: r.v.image })), names) ?? undefined,
     }, m.id);
-    // Prix et quantités (une variante en pause reste à 0 chez eBay).
     const offers = rows.filter((r) => r.v.ebayOfferId).map((r) => ({
       sku: r.v.sku, offerId: r.v.ebayOfferId!, quantity: r.v.status === "PAUSED" ? 0 : r.quantity, price: { value: r.price, currency: m.currency },
     }));
@@ -833,10 +976,7 @@ export async function updateVariants(
     const failed = results.find((r) => !r.ok);
     if (failed) throw new ListingError("EBAY_REJECTED", failed.message ?? failed.sku);
   } catch (e) {
-    if (e instanceof ListingError) throw e;
-    if (e instanceof EbayReconnectRequired || (e instanceof EbayApiError && e.status === 401)) throw new ListingError("EBAY_RECONNECT");
-    if (e instanceof EbayApiError) throw new ListingError("EBAY_REJECTED", e.readable);
-    throw e;
+    return ebayFailure(e);
   }
 
   for (const r of rows) await db.listingVariant.update({ where: { id: r.v.id }, data: { price: r.price, quantity: r.quantity, lastMarginPct: r.margin } });
@@ -844,7 +984,9 @@ export async function updateVariants(
   await db.listing.update({
     where: { id: listing.id },
     data: {
-      supplierVariantId: main.v.supplierVariantId,
+      title: c.title,
+      supplierVariantId: rows[0].v.supplierVariantId,
+      supplierCost: rows[0].v.supplierCost,
       price: Math.min(...rows.map((r) => r.price)),
       quantity: active.reduce((s, r) => s + r.quantity, 0),
       errorMessage: null,

@@ -9,7 +9,6 @@ import { checkNowAction, deleteDraftAction, endListingAction } from "./actions";
 import { Icon } from "@/components/icons";
 import { PageHeader, StatusBadge } from "@/components/ui";
 import ImproveListingButton from "@/components/ai/ImproveListingButton";
-import VariantManager from "@/components/VariantManager";
 import { aiConfigured } from "@/lib/ai";
 import { LISTING_TONE } from "@/lib/status-tones";
 import { lastSync } from "@/lib/external-listings";
@@ -119,8 +118,8 @@ export default async function ListingsPage() {
                         {aiConfigured() && user.plan !== "NONE" && l.ebayOfferId && (l.status === "ACTIVE" || l.status === "PAUSED") && (
                           <ImproveListingButton listingId={l.id} t={t.listing.ai} errors={t.errors} titleCount={t.listing.titleCount} />
                         )}
-                        {l.groupKey && l.ebayListingId && (l.status === "ACTIVE" || l.status === "PAUSED") && (
-                          <VariantManager listingId={l.id} t={L.variants} tl={t.listing} errors={t.errors} />
+                        {(l.ebayOfferId || (l.groupKey && l.ebayListingId)) && (l.status === "ACTIVE" || l.status === "PAUSED") && (
+                          <Link href={`/listings/${l.id}/edit`} className="font-medium text-brand-300 hover:text-brand-200">{L.editor.edit}</Link>
                         )}
                         {(l.status === "ACTIVE" || l.status === "PAUSED") && (
                           <form action={endListingAction}>

@@ -25,7 +25,7 @@ vi.mock("@/lib/db", () => ({
       findFirst: vi.fn(async ({ where }: { where: { id: string; userId: string } }) =>
         where.id === "GRP1" && where.userId === "U1"
           ? {
-              id: "GRP1", userId: "U1", status: "ACTIVE", sku: "PL-G", groupKey: "PL-G", ebayListingId: "LG9", ebayAccountId: "A1", marketplace: "EBAY_US", title: "XLR Connector",
+              id: "GRP1", userId: "U1", status: "ACTIVE", sku: "PL-G", groupKey: "PL-G", ebayListingId: "LG9", ebayAccountId: "A1", marketplace: "EBAY_US", title: "XLR Connector", categoryId: "20667",
               supplierVariantId: "V1",
               variants: [
                 { id: "VA", sku: "PL-G-1", supplierVariantId: "V1", label: "1 Pair", options: { Qty: "1 Pair" }, image: "https://cf.cj.com/1.jpg", price: 12.99, quantity: 3, status: "ACTIVE", supplierCost: 6, lastMarginPct: 30, ebayOfferId: "OG1" },
@@ -57,7 +57,7 @@ vi.mock("@/lib/db", () => ({
 }));
 vi.mock("@/lib/crypto", () => ({ decrypt: (s: string) => s, encrypt: (s: string) => s }));
 
-import { ListingError, listingContent, prepareListing, publishListing, updateListingContent, updateVariants, variantEditor } from "./listing-service";
+import { ListingError, listingContent, prepareListing, publishListing, listingFull, orderBySkus, updateListingContent, updateListingFull } from "./listing-service";
 
 type Call = { method: string; url: string; body: unknown };
 let calls: Call[] = [];
@@ -491,25 +491,78 @@ describe("annonce à variantes (tailles, lots…)", { timeout: 60_000 }, () => {
 
 });
 
-describe("modifier une annonce à variantes en ligne", () => {
-  it("variante principale, photo qui suit la variante, prix et quantités : mise à jour sur place", async () => {
-    const ed = await variantEditor(user(), "GRP1");
-    expect(ed.variants.map((v) => [v.id, v.main])).toEqual([["VA", true], ["VB", false]]);
-    await updateVariants(user(), "GRP1", { mainVariantId: "VB", variants: [{ id: "VA", price: 13.49, quantity: 5 }, { id: "VB", price: 55.6, quantity: 3 }] });
+describe("photos choisies par le vendeur", () => {
+  it("publie les photos dans l'ordre du vendeur (la première = principale)", async () => {
+    await publishListing(user(), { ...baseInput, images: ["https://cf.cj.com/2.jpg", "http://cf.cj.com/1.jpg", "javascript:alert(1)"] });
+    const item = calls.find((c) => c.method === "PUT" && c.url.includes("/inventory_item/"))!.body as { product: { imageUrls: string[] } };
+    expect(item.product.imageUrls).toEqual(["https://cf.cj.com/2.jpg", "https://cf.cj.com/1.jpg"]);
+  });
+});
+
+describe("modifier toute l'annonce en ligne", () => {
+  const content = {
+    title: "XLR Connector Male Female 3 Pin Audio Plug",
+    descriptionHtml: "<p>Solid metal XLR connectors for microphone cables.</p>",
+    images: ["https://cf.cj.com/new.jpg", "https://cf.cj.com/main.jpg"],
+    aspects: { Type: ["Electric"], "Power Source": ["Battery"], Qty: ["1 Pair"] },
+  };
+
+  it("annonce à variantes : lue chez eBay dans l'ordre eBay", async () => {
+    const l = await listingFull(user(), "GRP1");
+    expect(l).toMatchObject({ kind: "group", title: "XLR Connector", images: ["https://cf.cj.com/main.jpg"], price: null });
+    expect(l.variants.map((v) => v.id)).toEqual(["VA", "VB"]);
+    expect(l.variants[0].minPrice).toBeGreaterThan(6);
+  });
+
+  it("annonce à variantes : ordre glissé, photos, titre, caractéristiques, prix — mise à jour sur place", async () => {
+    await updateListingFull(user(), "GRP1", { ...content, variants: [{ id: "VB", price: 55.6, quantity: 3 }, { id: "VA", price: 13.49, quantity: 5 }] });
     const group = calls.find((c) => c.method === "PUT" && c.url.includes("/inventory_item_group/PL-G"))!.body as Record<string, unknown>;
     expect(group).toMatchObject({
-      title: "XLR Connector",
+      title: content.title,
       variantSKUs: ["PL-G-2", "PL-G-1"],
-      imageUrls: ["https://cf.cj.com/20.jpg", "https://cf.cj.com/1.jpg", "https://cf.cj.com/main.jpg"],
+      imageUrls: content.images, // ordre du vendeur
       variesBy: { specifications: [{ name: "Qty", values: ["20 Pair", "1 Pair"] }], aspectsImageVariesBy: ["Qty"] },
     });
+    expect((group.aspects as Record<string, unknown>).Qty).toBeUndefined(); // ce qui varie reste dans les variantes
+    const items = calls.filter((c) => c.method === "PUT" && c.url.includes("/inventory_item/PL-G-"));
+    expect(items.map((c) => (c.body as { product: { imageUrls: string[]; aspects: Record<string, string[]> } }).product.imageUrls[0])).toEqual(["https://cf.cj.com/20.jpg", "https://cf.cj.com/1.jpg"]);
+    expect((items[0].body as { product: { aspects: Record<string, string[]> } }).product.aspects.Qty).toEqual(["20 Pair"]);
     const bulk = calls.find((c) => c.url.includes("bulk_update_price_quantity"))!.body as { requests: { sku: string; offers: { price?: { value: string } }[] }[] };
-    expect(bulk.requests.map((r) => [r.sku, r.offers[0].price?.value])).toEqual([["PL-G-1", "13.49"], ["PL-G-2", "55.60"]]);
-    expect(store.updates.at(-1)).toMatchObject({ supplierVariantId: "V2", price: 13.49, quantity: 8 });
+    expect(bulk.requests.map((r) => [r.sku, r.offers[0].price?.value])).toEqual([["PL-G-2", "55.60"], ["PL-G-1", "13.49"]]);
+    expect(store.updates.at(-1)).toMatchObject({ title: content.title, supplierVariantId: "V2", price: 13.49, quantity: 8 });
     expect(calls.some((c) => c.url.includes("withdraw") || c.url.includes("publish"))).toBe(false); // ni retirée ni republiée
   });
 
-  it("refuse un prix sous la marge minimum (prix minimum indiqué)", async () => {
-    await expect(updateVariants(user(), "GRP1", { variants: [{ id: "VA", price: 6.5, quantity: 3 }] })).rejects.toMatchObject({ code: "MARGIN_TOO_LOW" });
+  it("refuse un prix sous la marge minimum et une marque protégée", async () => {
+    await expect(updateListingFull(user(), "GRP1", { ...content, variants: [{ id: "VA", price: 6.5, quantity: 3 }, { id: "VB", price: 55.6, quantity: 3 }] }))
+      .rejects.toMatchObject({ code: "MARGIN_TOO_LOW" });
+    await expect(updateListingFull(user(), "GRP1", { ...content, title: "Nike XLR Connector Male Female Plug", variants: [{ id: "VA", price: 13.49, quantity: 3 }, { id: "VB", price: 55.6, quantity: 3 }] }))
+      .rejects.toMatchObject({ code: "LISTING_BLOCKED" });
+    expect(calls.some((c) => c.method === "PUT" && c.url.includes("/inventory_item"))).toBe(false);
+  });
+
+  it("annonce simple : photos, titre, description, caractéristiques, prix et quantité", async () => {
+    const l = await listingFull(user(), "LIVE1");
+    expect(l).toMatchObject({ kind: "single", title: "Old title for can opener", images: ["https://i/1.jpg"], price: 29.99 });
+    await updateListingFull(user(), "LIVE1", {
+      title: "Automatic Electric Can Opener Smooth Edge",
+      descriptionHtml: "<p>Opens any standard can without effort.</p>",
+      images: ["https://i/2.jpg", "https://i/1.jpg"],
+      aspects: { Type: ["Electric"], "Power Source": ["Battery"] },
+      price: 31.5,
+      quantity: 4,
+    });
+    const item = calls.find((c) => c.method === "PUT" && c.url.endsWith("/inventory_item/PL-SKU1"))!.body as { product: Record<string, unknown>; availability: { shipToLocationAvailability: { quantity: number } }; condition: string };
+    expect(item.product).toMatchObject({ title: "Automatic Electric Can Opener Smooth Edge", imageUrls: ["https://i/2.jpg", "https://i/1.jpg"] });
+    expect((item.product.aspects as Record<string, string[]>).Type).toEqual(["Electric"]);
+    expect(item.availability.shipToLocationAvailability.quantity).toBe(4);
+    expect(item.condition).toBe("NEW"); // le reste de l'article est gardé
+    const offer = calls.find((c) => c.method === "PUT" && c.url.endsWith("/offer/O9"))!.body as Record<string, unknown>;
+    expect(offer).toMatchObject({ listingDescription: "<p>Opens any standard can without effort.</p>", availableQuantity: 4, pricingSummary: { price: { value: "31.50", currency: "USD" } } });
+    expect(store.updates.at(-1)).toMatchObject({ title: "Automatic Electric Can Opener Smooth Edge", price: 31.5, quantity: 4 });
+  });
+
+  it("range les variantes dans l'ordre eBay", () => {
+    expect(orderBySkus([{ sku: "a" }, { sku: "b" }, { sku: "c" }], ["c", "a"]).map((x) => x.sku)).toEqual(["c", "a", "b"]);
   });
 });

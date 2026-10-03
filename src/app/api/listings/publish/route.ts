@@ -19,6 +19,7 @@ const body = z.object({
   // Annonce à variantes : variantes choisies (prix et quantité de chacune).
   variants: z.array(z.object({ variantId: z.string().min(1).max(64), price: z.number().positive().max(100000), quantity: z.number().int().min(1).max(10) })).min(2).max(20).optional(),
   mainVariantId: z.string().min(1).max(64).optional(),
+  images: z.array(z.string().url().startsWith("https://").max(1000)).min(1).max(12).optional(),
 });
 
 /** Publie l'annonce sur eBay (tout est revérifié côté serveur). */

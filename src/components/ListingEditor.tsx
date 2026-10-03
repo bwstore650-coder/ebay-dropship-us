@@ -7,6 +7,9 @@ import { computeMargin } from "@/lib/margin";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import { cleanTitle, isEuMarket, TITLE_MAX } from "@/lib/listing";
 import type { ListingDraft } from "@/lib/listing-service";
+import AspectFields from "@/components/AspectFields";
+import SortableList, { DragHandle } from "@/components/SortableList";
+import PhotoSorter from "@/components/PhotoSorter";
 import EbaySetupForm, { type SetupState } from "@/components/EbaySetupForm";
 import { AiTitlePicker, AiUsageLine } from "@/components/ai/AiTitlePicker";
 import { useAiGenerate } from "@/components/ai/useAiGenerate";
@@ -37,6 +40,7 @@ export default function ListingEditor({
   const [quantity, setQuantity] = useState(1);
   const [description, setDescription] = useState("");
   const [aspects, setAspects] = useState<Record<string, string[]>>({});
+  const [photos, setPhotos] = useState<string[]>([]);
   const [editHtml, setEditHtml] = useState(false);
   const [accountId, setAccountId] = useState(accounts[0]?.id ?? "");
   const [setup, setSetup] = useState<SetupState | null>(null);
@@ -46,7 +50,6 @@ export default function ListingEditor({
   const [titleIdeas, setTitleIdeas] = useState<string[]>([]);
   // Annonce à variantes : chaque variante (taille, couleur, lot…) avec son prix et sa quantité.
   const [vrows, setVrows] = useState<{ variantId: string; include: boolean; price: string; quantity: number }[]>([]);
-  const [mainVariant, setMainVariant] = useState<string | null>(null);
   const ai = useAiGenerate(null);
   const ta = t.ai;
 
@@ -70,6 +73,7 @@ export default function ListingEditor({
       setQuantity(d.quantity);
       setDescription(d.descriptionHtml);
       setAspects(d.aspects);
+      setPhotos(d.images.slice(0, 12));
       setTitleIdeas(d.copySource === "ai" ? d.titles : []);
       setVrows((d.variants ?? []).map((v) => ({ variantId: v.variantId, include: true, price: v.suggestedPrice.toFixed(2), quantity: v.quantity })));
       ai.setUsage(d.ai.configured ? d.ai : null);
@@ -110,7 +114,7 @@ export default function ListingEditor({
   const missing = draft ? draft.aspectDefs.filter((d) => d.required && !aspects[d.name]?.length && !varying.has(d.name.toLowerCase())).map((d) => d.name) : [];
   const tooLow = useVariants ? variantsTooLow : !!draft && !!margin && margin.marginPct < draft.minMarginPct;
   const needsGpsr = isEuMarket(marketId) && !hasGpsr;
-  const ready = !!draft && !!setup?.existing && !tooLow && missing.length === 0 && !needsGpsr && title.trim().length >= 10 && !!accountId;
+  const ready = !!draft && !!setup?.existing && !tooLow && missing.length === 0 && !needsGpsr && title.trim().length >= 10 && photos.length > 0 && !!accountId;
 
   async function publish() {
     if (!draft) return;
@@ -127,13 +131,14 @@ export default function ListingEditor({
         title,
         descriptionHtml: description,
         aspects,
+        images: photos,
         price: useVariants ? Number(included[0].price.replace(",", ".")) : priceNum,
         quantity: useVariants ? included[0].quantity : quantity,
         keyword: keyword.slice(0, 120),
         ...(useVariants ? {
           variants: included.map((r) => ({ variantId: r.variantId, price: Number(r.price.replace(",", ".")), quantity: r.quantity })),
-          // Variante principale : celle choisie si elle est cochée, sinon la première cochée.
-          mainVariantId: included.some((r) => r.variantId === mainVariant) ? mainVariant : included[0]?.variantId,
+          // L'ordre de la liste est l'ordre sur eBay : la première est la variante principale.
+          mainVariantId: included[0]?.variantId,
         } : {}),
       }),
     });
@@ -165,8 +170,6 @@ export default function ListingEditor({
       </div>
     );
 
-  const brandish = (name: string) => ["brand", "marke", "marque", "marca"].includes(name.toLowerCase());
-  const extraAspectNames = Object.keys(aspects).filter((n) => !draft.aspectDefs.some((d) => d.name === n));
 
   return (
     <div className="space-y-6 card">
@@ -245,62 +248,48 @@ export default function ListingEditor({
             <span className="text-xs text-muted">{draft.variationNames.join(" · ")}</span>
           </div>
           <p className="text-xs text-muted">{fmt(t.variantsHelp, { pct: draft.minMarginPct })}</p>
-          <div className="overflow-x-auto rounded-xl border border-line">
-            <table className="w-full min-w-[620px] text-left text-sm">
-              <thead className="border-b border-line text-xs text-subtle">
-                <tr>
-                  <th className="px-3 py-2 font-medium" />
-                  <th className="px-3 py-2 font-medium">{t.variantCol}</th>
-                  <th className="px-3 py-2 font-medium">{t.variantStock}</th>
-                  <th className="px-3 py-2 font-medium">{fmt(t.price, { currency: draft.currency })}</th>
-                  <th className="px-3 py-2 font-medium">{t.quantity}</th>
-                  <th className="px-3 py-2 font-medium">{t.variantProfit}</th>
-                  <th className="px-3 py-2 font-medium" title={t.variantMainHelp}>{t.variantMain}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {vrows.map((r, i) => {
-                  const v = draft.variants.find((x) => x.variantId === r.variantId)!;
-                  const mg = variantMargin(r.variantId, r.price);
-                  const low = r.include && (!mg || mg.marginPct < draft.minMarginPct);
-                  const set = (patch: Partial<typeof r>) => setVrows((rows) => rows.map((x, k) => (k === i ? { ...x, ...patch } : x)));
-                  const firstIncluded = vrows.find((x) => x.include)?.variantId;
-                  const isMain = r.include && (mainVariant && vrows.some((x) => x.include && x.variantId === mainVariant) ? mainVariant === r.variantId : firstIncluded === r.variantId);
-                  return (
-                    <tr key={r.variantId} className={r.include ? "" : "opacity-50"}>
-                      <td className="px-3 py-2">
-                        <input type="checkbox" checked={r.include} onChange={(e) => set({ include: e.target.checked })} aria-label={v.label} />
-                      </td>
-                      <td className="px-3 py-2">
-                        <span className="flex items-center gap-2">
-                          {v.image && (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img src={v.image} alt="" className="h-8 w-8 shrink-0 rounded bg-white object-contain" />
-                          )}
-                          <span className="text-fg-2">{Object.values(v.options).join(" · ")}</span>
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 tabular-nums text-muted">{v.stock}</td>
-                      <td className="px-3 py-2">
-                        <input inputMode="decimal" value={r.price} onChange={(e) => set({ price: e.target.value })} disabled={!r.include} className="input w-24 py-1 text-sm tabular-nums" aria-label={`${t.variantCol} ${v.label}`} />
-                        <span className="mt-0.5 block text-[11px] text-subtle">{fmt(t.variantMin, { min: money(v.minPrice) })}</span>
-                      </td>
-                      <td className="px-3 py-2">
-                        <input type="number" min={1} max={Math.min(10, v.stock)} value={r.quantity} disabled={!r.include}
-                          onChange={(e) => set({ quantity: Math.max(1, Math.min(10, v.stock, Number(e.target.value) || 1)) })} className="input w-16 py-1 text-sm" aria-label={t.quantity} />
-                      </td>
-                      <td className={`px-3 py-2 text-xs font-medium tabular-nums ${low ? "text-red-300" : "text-emerald-300"}`}>
-                        {mg ? `${money(mg.profit)} · ${mg.marginPct} %` : "—"}
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        <input type="radio" name="mainVariant" checked={isMain} disabled={!r.include} onChange={() => setMainVariant(r.variantId)} aria-label={`${t.variantMain} : ${v.label}`} />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <p className="text-xs text-subtle">{t.variantsOrder}</p>
+          <SortableList
+            items={vrows}
+            getKey={(r) => r.variantId}
+            onChange={setVrows}
+            className="divide-y divide-line overflow-hidden rounded-xl border border-line"
+            itemClassName="bg-surface"
+            handleLabel={(i) => fmt(t.variantMove, { n: i + 1 })}
+            renderItem={(r, i, handle) => {
+              const v = draft.variants.find((x) => x.variantId === r.variantId)!;
+              const mg = variantMargin(r.variantId, r.price);
+              const low = r.include && (!mg || mg.marginPct < draft.minMarginPct);
+              const set = (patch: Partial<typeof r>) => setVrows((rows) => rows.map((x) => (x.variantId === r.variantId ? { ...x, ...patch } : x)));
+              const isFirst = r.include && vrows.find((x) => x.include)?.variantId === r.variantId;
+              return (
+                <div className={`flex flex-wrap items-center gap-x-3 gap-y-2 px-2 py-2 sm:flex-nowrap ${r.include ? "" : "opacity-50"}`}>
+                  <DragHandle {...handle} />
+                  <span className="w-5 shrink-0 text-center text-xs tabular-nums text-subtle">{i + 1}</span>
+                  <input type="checkbox" checked={r.include} onChange={(e) => set({ include: e.target.checked })} aria-label={v.label} />
+                  {v.image && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={v.image} alt="" className="h-10 w-10 shrink-0 rounded bg-white object-contain" draggable={false} />
+                  )}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm text-fg-2">{Object.values(v.options).join(" · ")}</span>
+                    <span className="block text-[11px] text-subtle">{t.variantStock} {v.stock}{isFirst ? <> · <span className="font-semibold text-brand-300">{t.variantMain}</span></> : null}</span>
+                  </span>
+                  <label className="text-[11px] text-subtle">
+                    {fmt(t.price, { currency: draft.currency })}
+                    <input inputMode="decimal" value={r.price} onChange={(e) => set({ price: e.target.value })} disabled={!r.include} className="input mt-0.5 block w-24 py-1 text-sm tabular-nums" aria-label={`${t.variantCol} ${v.label}`} />
+                    <span className="block">{fmt(t.variantMin, { min: money(v.minPrice) })}</span>
+                  </label>
+                  <label className="text-[11px] text-subtle">
+                    {t.quantity}
+                    <input type="number" min={1} max={Math.min(10, v.stock)} value={r.quantity} disabled={!r.include}
+                      onChange={(e) => set({ quantity: Math.max(1, Math.min(10, v.stock, Number(e.target.value) || 1)) })} className="input mt-0.5 block w-16 py-1 text-sm" aria-label={t.quantity} />
+                  </label>
+                  <span className={`w-28 text-right text-xs font-medium tabular-nums ${low ? "text-red-300" : "text-emerald-300"}`}>{mg ? `${money(mg.profit)} · ${mg.marginPct} %` : "—"}</span>
+                </div>
+              );
+            }}
+          />
           {!useVariants && <p className="text-xs text-amber-300">{t.variantsSingle}</p>}
           {variantsTooLow && <p className="text-xs text-red-300">{fmt(t.variantsTooLow, { pct: draft.minMarginPct })}</p>}
         </div>
@@ -338,46 +327,7 @@ export default function ListingEditor({
       </div>}
 
       {/* Caractéristiques */}
-      <div>
-        <h3 className="text-sm font-semibold">{t.aspects}</h3>
-        <div className="mt-2 grid gap-3 sm:grid-cols-2">
-          {[...draft.aspectDefs].sort((a, b) => Number(b.required) - Number(a.required)).map((d) => (
-            <label key={d.name} className="block text-sm">
-              <span className="font-medium">{d.name}</span>
-              {d.required && <span className="ml-1 text-xs text-red-400">({t.required})</span>}
-              {brandish(d.name) ? (
-                <input value={aspects[d.name]?.join(", ") ?? ""} readOnly className={`${field} bg-surface-2 text-muted`} />
-              ) : d.mode === "SELECTION_ONLY" && d.values.length ? (
-                <select
-                  value={aspects[d.name]?.[0] ?? ""}
-                  onChange={(e) => setAspects({ ...aspects, [d.name]: e.target.value ? [e.target.value] : [] })}
-                  className={field}
-                >
-                  <option value="">{t.choose}</option>
-                  {d.values.map((v) => <option key={v} value={v}>{v}</option>)}
-                </select>
-              ) : (
-                <input
-                  value={aspects[d.name]?.join(", ") ?? ""}
-                  onChange={(e) => setAspects({ ...aspects, [d.name]: e.target.value.split(d.multi ? "," : /$^/).map((v) => v.trim()).filter(Boolean) })}
-                  list={d.values.length ? `vals-${d.name}` : undefined}
-                  className={field}
-                />
-              )}
-              {d.mode === "FREE_TEXT" && d.values.length > 0 && (
-                <datalist id={`vals-${d.name}`}>{d.values.slice(0, 50).map((v) => <option key={v} value={v} />)}</datalist>
-              )}
-            </label>
-          ))}
-          {extraAspectNames.map((n) => (
-            <label key={n} className="block text-sm">
-              <span className="font-medium">{n}</span>
-              <input value={aspects[n]?.join(", ") ?? ""} onChange={(e) => setAspects({ ...aspects, [n]: e.target.value.split(",").map((v) => v.trim()).filter(Boolean) })} className={field} />
-            </label>
-          ))}
-        </div>
-        {missing.length > 0 && <p className="mt-2 text-sm text-red-400">{fmt(t.missing, { names: missing.join(", ") })}</p>}
-      </div>
+      <AspectFields t={t} defs={draft.aspectDefs} aspects={aspects} onChange={setAspects} skip={varying} />
 
       {/* Description */}
       <div>
@@ -411,12 +361,10 @@ export default function ListingEditor({
 
       {/* Photos */}
       <div>
-        <h3 className="text-sm font-semibold">{fmt(t.photos, { n: draft.images.length })}</h3>
-        <div className="mt-2 flex gap-2 overflow-x-auto pb-2">
-          {draft.images.map((src) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img key={src} src={src} alt="" loading="lazy" className="h-20 w-20 flex-none rounded-lg border border-line object-cover" />
-          ))}
+        <h3 className="text-sm font-semibold">{fmt(t.photos, { n: photos.length })}</h3>
+        <div className="mt-2">
+          <PhotoSorter images={photos} available={[...draft.images, ...draft.variants.map((v) => v.image).filter((x): x is string => Boolean(x))]} onChange={setPhotos}
+            t={{ main: t.photoMain, remove: t.photoRemove, move: t.photoMove, add: t.photoAdd, hint: t.photoHint }} />
         </div>
       </div>
 
