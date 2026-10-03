@@ -130,6 +130,9 @@ describe("appels AliExpress", () => {
     const p = calls[0].params;
     expect([p.get("method"), p.get("keyWord"), p.get("countryCode"), p.get("pageIndex"), p.get("currency"), p.get("local"), p.get("sortBy")])
       .toEqual(["aliexpress.ds.text.search", "phone holder", "US", "2", "USD", "en_US", "orders,desc"]);
+    expect(p.get("searchExtend")).toBeNull();
+    await textSearch(cfg, "SESS", { keyword: "phone holder", country: "US", shipFrom: "US" });
+    expect(JSON.parse(calls[1].params.get("searchExtend")!)).toEqual([{ searchKey: "ship_from", searchValue: "US" }]);
   });
 
   it("erreur de la passerelle : message lisible", async () => {

@@ -334,7 +334,7 @@ export interface AeSearchItem { productId: string; title: string; image: string 
 /** Recherche par mots-clés (catalogue Dropshipping), livrable dans le pays ; les plus vendus d'abord. */
 export async function textSearch(
   cfg: AeConfig, session: string,
-  q: { keyword: string; country: string; page?: number; pageSize?: number; sortBy?: string },
+  q: { keyword: string; country: string; page?: number; pageSize?: number; sortBy?: string; shipFrom?: string },
 ): Promise<AeSearchItem[]> {
   const r = await call<{ data?: { products?: unknown }; code?: string; msg?: string }>(cfg, "aliexpress.ds.text.search", session, {
     keyWord: q.keyword,
@@ -344,6 +344,8 @@ export async function textSearch(
     pageIndex: q.page ?? 1,
     pageSize: q.pageSize ?? 20,
     sortBy: q.sortBy ?? "orders,desc",
+    // Seulement les produits expédiés depuis un entrepôt de ce pays (filtre vérifié : clé « ship_from »).
+    ...(q.shipFrom ? { searchExtend: [{ searchKey: "ship_from", searchValue: q.shipFrom }] } : {}),
   });
   if (r.code && r.code !== "0" && !r.data) throw new AeError(`AliExpress aliexpress.ds.text.search : ${r.msg ?? r.code}`);
   return list<Record<string, unknown>>(r.data?.products, "selection_search_product", "product")

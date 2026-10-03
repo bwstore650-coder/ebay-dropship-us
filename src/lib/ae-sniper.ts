@@ -79,22 +79,27 @@ export function usableGroups(groups: EbayGroup[]): EbayGroup[] {
 
 type AeSession = { cfg: ae.AeConfig; session: string };
 
-/** Produits AliExpress correspondants (photo d'abord, mots-clés en secours), expédiés depuis le pays si connu. */
+/**
+ * Produits AliExpress correspondants, expédiés depuis le pays : par la photo (les plus ressemblants), puis par
+ * mots-clés parmi les produits en entrepôt du pays (titres proches). Aucun appel eBay.
+ */
 async function matchesFor(s: AeSession, g: EbayGroup, country: string): Promise<string[]> {
+  const ids: string[] = [];
   const b64 = g.image ? await imageBase64(g.image) : null;
   if (b64) {
     try {
       const found = await ae.imageSearch(s.cfg, s.session, { imageBase64: b64, country });
-      const good = found.filter((m) => m.similarity >= MIN_SIMILARITY && (!m.shipFrom || m.shipFrom === country));
-      if (good.length) return good.slice(0, MAX_MATCHES).map((m) => m.productId);
+      ids.push(...found.filter((m) => m.similarity >= MIN_SIMILARITY && m.shipFrom === country).map((m) => m.productId));
     } catch (e) {
       console.error("AliExpress recherche par photo", e);
     }
   }
   const kw = keywordFromTitle(g.title);
-  if (!kw) return [];
-  const items = await ae.textSearch(s.cfg, s.session, { keyword: kw, country, pageSize: 10 });
-  return items.filter((it) => wordOverlap(g.title, it.title) >= MIN_WORD_OVERLAP).slice(0, MAX_MATCHES).map((it) => it.productId);
+  if (kw && ids.length < MAX_MATCHES) {
+    const items = await ae.textSearch(s.cfg, s.session, { keyword: kw, country, pageSize: 10, shipFrom: country }).catch(() => [] as ae.AeSearchItem[]);
+    ids.push(...items.filter((it) => wordOverlap(g.title, it.title) >= MIN_WORD_OVERLAP).map((it) => it.productId));
+  }
+  return [...new Set(ids)].slice(0, MAX_MATCHES);
 }
 
 export interface EbayFirstResult { analysis: Analysis; productId: string | null }

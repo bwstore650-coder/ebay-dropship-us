@@ -121,7 +121,7 @@ function PriceChart({ t, prices, market, minPrice, cost, money }: {
                   <title>{fmt(t.chartBin, { from: money(b.from), to: money(b.to), n: b.count })}</title>
                 </rect>
               )}
-              {b.count > 0 && b.count === top && (
+              {b.count > 0 && b.count === top && !(market !== null && market > 0 && Math.abs(bx + bw / 2 - x(market)) < 34) && (
                 <text x={bx + bw / 2} y={base - hgt - 3} textAnchor="middle" className="fill-muted text-[9px] tabular-nums">{b.count}</text>
               )}
             </g>
