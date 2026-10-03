@@ -20,7 +20,7 @@ import { DEFAULT_MIN_MARGIN_PCT, evaluateProduct, priceForTargetMargin, weighted
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import { marketInsights } from "@/lib/market-insights";
 import * as cj from "@/lib/suppliers/cj";
-import { type CandidateDetails, classify, inCostRange, SCANNER_SEEDS, keywordFromTitle, MAX_VARIANTS, MIN_UNITS_SOLD } from "@/lib/sniper";
+import { type CandidateDetails, classify, inCostRange, meetsMonthlySales, SCANNER_SEEDS, keywordFromTitle, MAX_VARIANTS, MIN_UNITS_SOLD } from "@/lib/sniper";
 import { pickShipping } from "@/lib/suppliers/shipping";
 
 /** Un produit n'est plus proposé au-delà de ce nombre de vendeurs. */
@@ -247,6 +247,7 @@ export interface PoolQuery {
   priceMax?: number | null;
   costMin?: number | null; // prix d'achat fournisseur (sans livraison)
   costMax?: number | null;
+  minMonthlySales?: number | null; // ventes estimées par mois minimum
   themes?: string[];       // thèmes choisis par le vendeur (catégories et thèmes libres)
   exclude?: string[];      // produits déjà vus dans cette recherche ou déjà en vente chez lui
   limit: number;
@@ -280,6 +281,8 @@ export async function pickFromPool(q: PoolQuery): Promise<ProductInsight[]> {
     .filter((r) => (counts.get(r.productId) ?? 0) < MAX_SELLERS_PER_PRODUCT)
     // Prix d'achat dans la fourchette du vendeur (enregistré dans l'analyse).
     .filter((r) => inCostRange((r.details as CandidateDetails | null)?.supplierPrice, q.costMin, q.costMax))
+    // Ventes estimées par mois minimum choisies par le vendeur.
+    .filter((r) => meetsMonthlySales((r.details as CandidateDetails | null)?.market?.monthlySales, q.minMonthlySales))
     // Règles de marque mises à jour depuis l'analyse : jamais de produit de marque ou d'imitation.
     .filter((r) => !findVeroBrand(r.title ?? ""))
     // Les plus rentables restent en tête, mais l'ordre varie d'un vendeur à l'autre à rentabilité proche.

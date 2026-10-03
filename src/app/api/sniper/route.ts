@@ -14,6 +14,7 @@ const body = z.object({
   priceMax: z.number().min(0).max(100000).nullable().optional(),
   costMin: z.number().min(0).max(100000).nullable().optional(), // prix d'achat fournisseur
   costMax: z.number().min(0).max(100000).nullable().optional(),
+  minMonthlySales: z.number().int().min(0).max(100000).nullable().optional(), // ventes estimées par mois minimum
   categories: z.array(z.enum(CATEGORY_IDS as [string, ...string[]])).max(CATEGORY_IDS.length).default([]),
   seeds: z.string().max(10000).default(""), // un mot-clé par ligne
   autoList: z.boolean().default(false),

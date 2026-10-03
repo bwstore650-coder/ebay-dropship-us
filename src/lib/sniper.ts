@@ -140,7 +140,7 @@ export function keywordFromTitle(title: string, maxWords = 5): string {
   return kept.join(" ");
 }
 
-export type Reason = "LOW_MARGIN" | "LOW_PROFIT" | "COST_RANGE" | "NO_DEMAND" | "NO_PRICE" | "NO_SUPPLIER" | "VERO" | "PRICE_RANGE" | "ALREADY_LISTED" | "NO_KEYWORD";
+export type Reason = "LOW_MARGIN" | "LOW_PROFIT" | "LOW_SALES" | "COST_RANGE" | "NO_DEMAND" | "NO_PRICE" | "NO_SUPPLIER" | "VERO" | "PRICE_RANGE" | "ALREADY_LISTED" | "NO_KEYWORD";
 
 export interface Classification {
   status: "PROFITABLE" | "REJECTED";
@@ -156,6 +156,7 @@ export function classify(
   o: {
     unitsSold: number; priceMin?: number | null; priceMax?: number | null; title?: string | null; minUnits?: number; minProfit?: number | null;
     costMin?: number | null; costMax?: number | null;
+    monthlySales?: number | null; minMonthlySales?: number | null;
   },
 ): Classification {
   if (o.title && findVeroBrand(o.title)) return { status: "REJECTED", reason: "VERO" };
@@ -170,7 +171,14 @@ export function classify(
   if (e.verdict === "TROP_FAIBLE") return { status: "REJECTED", reason: "LOW_MARGIN" };
   if (o.minProfit != null && (e.margin?.profit ?? 0) < o.minProfit) return { status: "REJECTED", reason: "LOW_PROFIT" };
   if (o.unitsSold < (o.minUnits ?? MIN_UNITS_SOLD)) return { status: "REJECTED", reason: "NO_DEMAND" };
+  if (!meetsMonthlySales(o.monthlySales, o.minMonthlySales)) return { status: "REJECTED", reason: "LOW_SALES" };
   return { status: "PROFITABLE" };
+}
+
+/** Ventes estimées par mois au moins égales au minimum choisi (inconnues = non vérifiables = refusé). */
+export function meetsMonthlySales(monthly: number | null | undefined, min: number | null | undefined): boolean {
+  if (min == null || min <= 0) return true;
+  return typeof monthly === "number" && monthly >= min;
 }
 
 /** Recherche terminée ? */

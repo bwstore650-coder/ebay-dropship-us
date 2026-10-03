@@ -702,6 +702,9 @@ export const it: Dict = {
     margin: "Margine minimo (%)",
     marginHint: "Mai sotto il minimo del tuo account ({min} %)",
     market: "Sito eBay",
+    minSales: "Vendite stimate minime al mese",
+    minSalesHint: "Tieni solo i prodotti le cui inserzioni eBay più simili vendono almeno queste unità al mese (stima). Lascia vuoto per nessun minimo.",
+    minSalesBadge: "≥ {n} vendite/mese",
     costRange: "Prezzo d'acquisto dal fornitore",
     costRangeHint: "Prezzo che paghi al fornitore per il prodotto (CJdropshipping, AliExpress…), senza spedizione. Lascia vuoto per non limitare.",
     costRangeBadge: "Acquisto {min} – {max}",
@@ -835,6 +838,7 @@ export const it: Dict = {
     reasons: {
       LOW_MARGIN: "Margine troppo basso",
       LOW_PROFIT: "Profitto sotto i 100 $",
+      LOW_SALES: "Troppe poche vendite stimate",
       NO_DEMAND: "Vendite eBay insufficienti",
       NO_PRICE: "Nessuna inserzione eBay simile",
       NO_SUPPLIER: "Non disponibile localmente / consegna troppo lenta",

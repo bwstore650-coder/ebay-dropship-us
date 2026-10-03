@@ -10,6 +10,7 @@ import ListingEditor from "@/components/ListingEditor";
 import SniperProductCard from "@/components/SniperProductCard";
 import { useSavedProducts } from "@/components/useSavedProducts";
 import { Icon } from "@/components/icons";
+import { SHOW_SALES_DATA } from "@/lib/flags";
 import { Notice, PageHeader } from "@/components/ui";
 
 type Mode = "CATALOG" | "KEYWORDS";
@@ -88,6 +89,7 @@ export default function SniperClient({
         priceMax: num("priceMax"),
         costMin: num("costMin"),
         costMax: num("costMax"),
+        minMonthlySales: SHOW_SALES_DATA ? num("minMonthlySales") : null,
         categories: mode === "CATALOG" ? categories : [],
         seeds: String(f.get("seeds") ?? ""),
         autoList,
@@ -105,6 +107,7 @@ export default function SniperClient({
       minMarginPct: Math.max(minMargin, Number(f.get("minMarginPct")) || 0),
       minProfit: highTicket ? 100 : null,
       priceMin: num("priceMin"), priceMax: num("priceMax"), costMin: num("costMin"), costMax: num("costMax"),
+      minMonthlySales: SHOW_SALES_DATA && num("minMonthlySales") ? Math.round(num("minMonthlySales")!) : null,
       categories: mode === "CATALOG" ? categories : [],
       scanned: 0, found: 0, listed: 0, maxScan: 0, exhausted: false, autoList, error: null, pausedUntil: null, createdAt: new Date().toISOString(), candidates: [],
     });
@@ -230,6 +233,14 @@ export default function SniperClient({
               <span className="mt-1.5 block text-xs text-subtle">{t.costRangeHint}</span>
             </fieldset>
 
+            {SHOW_SALES_DATA && (
+              <label className="block text-sm font-medium text-fg-2">
+                {t.minSales}
+                <input name="minMonthlySales" type="number" min={0} max={100000} step={1} placeholder="0" className="input mt-1.5 max-w-[10rem] py-2" />
+                <span className="mt-1.5 block text-xs font-normal text-subtle">{t.minSalesHint}</span>
+              </label>
+            )}
+
             <fieldset>
               <legend className="text-sm font-medium text-fg-2">{t.priceRange}</legend>
               <div className="mt-1.5 flex items-center gap-2">
@@ -347,7 +358,7 @@ export default function SniperClient({
                 </span>
                 <div>
                   <p className="font-semibold text-fg">{t[`status${run.status}` as "statusRUNNING"]}</p>
-                  <p className="text-xs text-subtle">{markets[run.marketId]} · {run.mode === "CATALOG" ? t.modeCatalog : t.modeKeywords}{run.minProfit != null && <> · <span className="font-medium text-amber-300">{t.highTicketBadge}</span></>}</p>
+                  <p className="text-xs text-subtle">{markets[run.marketId]} · {run.mode === "CATALOG" ? t.modeCatalog : t.modeKeywords}{run.minProfit != null && <> · <span className="font-medium text-amber-300">{t.highTicketBadge}</span></>}{run.minMonthlySales != null && <> · <span className="font-medium text-fg-2">{fmt(t.minSalesBadge, { n: run.minMonthlySales })}</span></>}</p>
                   {(run.categories.length > 0 || run.costMin != null || run.costMax != null) && (
                     <p className="mt-0.5 text-xs text-subtle">
                       {run.categories.map((c) => t.categoryNames[c as CategoryId] ?? c).join(", ")}

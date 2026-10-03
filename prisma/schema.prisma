@@ -363,6 +363,7 @@ model SnipeRun {
   priceMax      Float?
   costMin       Float?      // prix d'achat fournisseur minimum (devise du pays)
   costMax       Float?      // prix d'achat fournisseur maximum
+  minMonthlySales Int?      // ventes estimées par mois minimum (option du vendeur)
   categories    Json?       // catégories choisies par le vendeur (identifiants, voir PRODUCT_CATEGORIES)
   autoList      Boolean     @default(false)
   ebayAccountId String?

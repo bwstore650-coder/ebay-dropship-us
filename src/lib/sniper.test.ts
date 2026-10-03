@@ -86,3 +86,20 @@ describe("catégories et prix d'achat", () => {
   });
 });
 
+
+describe("ventes estimées minimum", async () => {
+  const { classify, meetsMonthlySales } = await import("./sniper");
+  it("sans minimum tout passe ; inconnues = refusé quand un minimum est choisi", () => {
+    expect(meetsMonthlySales(null, null)).toBe(true);
+    expect(meetsMonthlySales(3, 0)).toBe(true);
+    expect(meetsMonthlySales(12, 10)).toBe(true);
+    expect(meetsMonthlySales(9, 10)).toBe(false);
+    expect(meetsMonthlySales(null, 10)).toBe(false);
+  });
+  it("un produit rentable sous le minimum est refusé (LOW_SALES)", () => {
+    const e = { verdict: "RENTABLE", marketPrice: 30, best: { supplier: "CJ", productId: "P", variantId: "V", title: "Can opener", price: 8, shipping: 3, stockUs: 10, deliveryDaysMax: 5 }, margin: { profit: 9, marginPct: 30, landedCost: 11, fees: 5 }, minPriceForTarget: 20 } as never;
+    expect(classify(e, { unitsSold: 50, monthlySales: 4, minMonthlySales: 10 })).toEqual({ status: "REJECTED", reason: "LOW_SALES" });
+    expect(classify(e, { unitsSold: 50, monthlySales: 15, minMonthlySales: 10 })).toEqual({ status: "PROFITABLE" });
+    expect(classify(e, { unitsSold: 50 })).toEqual({ status: "PROFITABLE" });
+  });
+});

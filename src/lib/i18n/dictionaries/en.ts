@@ -701,6 +701,9 @@ export const en = {
     margin: "Minimum margin (%)",
     marginHint: "Never below your account minimum ({min} %)",
     market: "eBay marketplace",
+    minSales: "Minimum estimated sales per month",
+    minSalesHint: "Only keep products whose closest eBay listings sell at least this many units a month (estimate). Leave empty for no minimum.",
+    minSalesBadge: "≥ {n} sales/mo",
     costRange: "Supplier purchase price",
     costRangeHint: "Price you pay the supplier for the product (CJdropshipping, AliExpress…), without shipping. Leave empty for no limit.",
     costRangeBadge: "Purchase {min} – {max}",
@@ -834,6 +837,7 @@ export const en = {
     reasons: {
       LOW_MARGIN: "Margin too low",
       LOW_PROFIT: "Profit under $100",
+      LOW_SALES: "Too few estimated sales",
       NO_DEMAND: "Not enough eBay sales",
       NO_PRICE: "No comparable eBay listings",
       NO_SUPPLIER: "Not in stock locally / delivery too slow",
