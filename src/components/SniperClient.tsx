@@ -220,7 +220,7 @@ export default function SniperClient({
                 </select>
               </label>
             </div>
-            <p className="-mt-2 text-xs text-subtle">{fmt(t.marginHint, { min: minMargin })}</p>
+            <p className="-mt-2 text-xs text-subtle">{fmt(t.marginHint, { min: minMargin })} · <Link href="/settings#margin" className="text-brand-300 hover:text-brand-200">{t.marginChange}</Link></p>
 
             {/* Prix d'achat chez le fournisseur */}
             <fieldset>

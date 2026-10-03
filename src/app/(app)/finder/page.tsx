@@ -13,6 +13,8 @@ export default async function FinderPage({ searchParams }: { searchParams: Promi
     <FinderClient
       t={t.finder}
       tl={t.listing}
+      tc={t.sniper.card}
+      minMargin={user.minMarginPct}
       markets={t.markets}
       errors={t.errors}
       marketIds={MARKETPLACE_IDS}

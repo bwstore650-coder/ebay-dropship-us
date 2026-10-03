@@ -7,7 +7,7 @@ import CjConnectForm from "@/components/CjConnectForm";
 import { EU_COUNTRIES } from "@/lib/eu";
 import { aeConfig } from "@/lib/suppliers";
 import { LOCALE_TAGS } from "@/lib/i18n";
-import { saveAutopilot, saveGpsr, saveGrowth, saveMessages, saveNotifications, setAutoOrder } from "./actions";
+import { saveMargin, saveAutopilot, saveGpsr, saveGrowth, saveMessages, saveNotifications, setAutoOrder } from "./actions";
 import { CATEGORY_IDS } from "@/lib/sniper";
 import { AUTOPILOT_MAX_PER_DAY, autopilotCategories } from "@/lib/autopilot";
 import PushToggle from "@/components/PushToggle";
@@ -206,9 +206,18 @@ export default async function Settings({ searchParams }: { searchParams: Promise
         <ExtensionTokens t={t.extension} locale={LOCALE_TAGS[locale]} />
       </section>
 
-      <section className="card">
+      <section id="margin" className="card scroll-mt-24">
         <h2 className="flex items-center gap-2.5 font-semibold text-fg"><SectionIcon name="percent" />{s.marginTitle}</h2>
         <p className="mt-2 text-sm text-muted">{fmt(s.marginHelp, { pct: user.minMarginPct })}</p>
+        {saved === "margin" && <Notice tone="emerald" className="mt-3">{s.saved}</Notice>}
+        <form action={saveMargin} className="mt-4 space-y-3">
+          <label className="block max-w-xs text-sm font-medium text-fg-2">
+            {s.marginLabel}
+            <input name="minMarginPct" type="number" min={10} max={90} step={1} defaultValue={user.minMarginPct} className={input} />
+          </label>
+          <p className="text-xs text-subtle">{s.marginNote}</p>
+          <button className="btn-primary px-4 py-2 text-sm">{s.save}</button>
+        </form>
       </section>
     </div>
   );

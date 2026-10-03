@@ -7,6 +7,8 @@ import type { MarketplaceId } from "@/lib/marketplaces";
 import ListingEditor from "@/components/ListingEditor";
 import { Icon } from "@/components/icons";
 import { PageHeader } from "@/components/ui";
+import { useSavedProducts } from "@/components/useSavedProducts";
+import { cjProductUrl, ebayPreciseSearchUrl, ebaySearchUrl } from "@/lib/listing";
 
 interface Result {
   marketId: MarketplaceId;
@@ -23,12 +25,14 @@ interface Result {
   best: { supplier: "CJ" | "ALIEXPRESS"; productId: string; variantId?: string; title: string; price: number; shipping: number; deliveryDaysMax: number; stockUs: number } | null;
   margin: { landedCost: number; fees: number; profit: number; marginPct: number } | null;
   minPriceForTarget: number | null;
-  insights?: { monthlySales?: number | null };
+  insights?: { monthlySales?: number | null; search?: { q: string; categoryId: string | null; priceMin: number | null; priceMax: number | null } };
 }
 
 export default function FinderClient({
-  t, tl, markets, errors, marketIds, defaultMarket, accounts, hasGpsr, aeConnected, initialKeyword,
+  t, tl, tc, markets, errors, marketIds, defaultMarket, accounts, hasGpsr, aeConnected, initialKeyword, minMargin,
 }: {
+  tc: Dict["sniper"]["card"];
+  minMargin: number;
   aeConnected: boolean;
   initialKeyword?: string;
   t: Dict["finder"];
@@ -44,6 +48,7 @@ export default function FinderClient({
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [editing, setEditing] = useState(false);
+  const savedProducts = useSavedProducts(r?.marketId ?? defaultMarket, (code) => setError(errorMessage(errors, code)));
 
   const formRef = useRef<HTMLFormElement>(null);
   // Lien AliExpress collé dans la recherche du tableau de bord : il va dans le champ dédié.
@@ -144,9 +149,31 @@ export default function FinderClient({
           <div className="space-y-3 px-6 py-5">
             {!r.feesVerified && <p className="rounded-lg bg-amber-500/10 p-2.5 text-xs text-amber-200">{t.feesUnverified}</p>}
             <p className="text-xs text-subtle">{t.sourceNote}</p>
-            {r.verdict === "RENTABLE" && r.best && !editing && (
-              <button type="button" onClick={() => setEditing(true)} className="btn-primary">{tl.create}</button>
-            )}
+            {r.best && !editing && (() => {
+              const best = r.best;
+              const asCandidate = {
+                supplier: best.supplier, productId: best.productId, title: best.title, image: null, keyword: r.keyword, expired: false,
+                marketPrice: r.marketPrice, cost: r.margin?.landedCost ?? null, profit: r.margin?.profit ?? null, marginPct: r.margin?.marginPct ?? null,
+              } as unknown as Parameters<typeof savedProducts.toggle>[0];
+              const saved = savedProducts.isSaved(asCandidate);
+              const supplierUrl = best.supplier === "CJ" ? cjProductUrl(best.productId, best.title) : `https://www.aliexpress.com/item/${encodeURIComponent(best.productId)}.html`;
+              const link = "inline-flex items-center gap-1.5 rounded-lg border border-line bg-surface-2 px-3 py-2 text-sm font-medium text-fg-2 hover:border-brand-500/50 hover:text-fg";
+              return (
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" onClick={() => setEditing(true)} className={r.verdict === "RENTABLE" ? "btn-primary" : "btn-secondary"}>{tl.create}</button>
+                    <button type="button" onClick={() => savedProducts.toggle(asCandidate)} aria-pressed={saved} className={link}>
+                      <Icon name="bookmark" className="h-4 w-4" filled={saved} />{saved ? tc.unsave : tc.save}
+                    </button>
+                    <a href={r.insights?.search ? ebayPreciseSearchUrl(r.marketId, r.insights.search) : ebaySearchUrl(r.marketId, r.keyword)} target="_blank" rel="noopener noreferrer" className={link}>{tc.viewEbay} <span aria-hidden="true">↗</span></a>
+                    <a href={supplierUrl} target="_blank" rel="noopener noreferrer" className={link}>{fmt(t.viewSupplier, { supplier: best.supplier === "CJ" ? "CJ" : "AliExpress" })} <span aria-hidden="true">↗</span></a>
+                  </div>
+                  {r.verdict !== "RENTABLE" && r.minPriceForTarget !== null && (
+                    <p className="text-xs text-amber-300">{fmt(t.lowMarginCreate, { pct: minMargin, price: money(r.minPriceForTarget) })}</p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </div>
       )}

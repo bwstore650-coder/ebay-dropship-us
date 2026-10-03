@@ -8,6 +8,9 @@ import { EU_COUNTRIES } from "@/lib/eu";
 import { isCategoryId } from "@/lib/sniper";
 import { AUTOPILOT_MAX_PER_DAY } from "@/lib/autopilot";
 
+/** Marge minimum la plus basse acceptée (en dessous, les frais et retours mangent tout le profit). */
+const MIN_MARGIN_SETTING = 10;
+
 const schema = z.object({
   euRpCompany: z.string().trim().min(2).max(100),
   euRpAddress: z.string().trim().min(3).max(150),
@@ -55,6 +58,14 @@ export async function saveMessages(formData: FormData) {
   });
   revalidatePath("/settings");
   redirect("/settings?saved=messages#messages");
+}
+
+/** Marge minimum du compte (Chercheur, Sniper, publication, surveillance). */
+export async function saveMargin(formData: FormData) {
+  const user = await requireUser();
+  await db.user.update({ where: { id: user.id }, data: { minMarginPct: Math.round(numberIn(formData.get("minMarginPct"), MIN_MARGIN_SETTING, 90, 30)) } });
+  revalidatePath("/settings");
+  redirect("/settings?saved=margin#margin");
 }
 
 /** Pilote automatique : produits ajoutés chaque jour. */
