@@ -15,6 +15,8 @@ export interface CandidateDetails {
   fees?: number | null;           // frais eBay au prix du marché
   stock?: number | null;          // stock du fournisseur dans le pays
   minPrice?: number | null;       // prix de vente minimum pour la marge visée
+  /** AliExpress « eBay d'abord » : annonces eBay du produit, en attente d'analyse (effacé après l'analyse). */
+  ebayGroup?: { title: string; image: string | null; price: number; prices: number[]; itemIds: string[]; createdAt: (string | null)[]; total: number };
 }
 
 /** Nombre maximum de produits à trouver par recherche. */

@@ -114,7 +114,7 @@ export default function SniperClient({
       priceMin: num("priceMin"), priceMax: num("priceMax"), costMin: num("costMin"), costMax: num("costMax"),
       minMonthlySales: SHOW_SALES_DATA && num("minMonthlySales") ? Math.round(num("minMonthlySales")!) : null,
       categories: mode === "CATALOG" ? categories : [],
-      scanned: 0, found: 0, listed: 0, maxScan: 0, exhausted: false, autoList, error: null, pausedUntil: null, createdAt: new Date().toISOString(), candidates: [],
+      scanned: 0, found: 0, listed: 0, ebayCalls: 0, maxScan: 0, exhausted: false, autoList, error: null, pausedUntil: null, createdAt: new Date().toISOString(), candidates: [],
     });
     alive.current = true;
     loop(data.id);
@@ -387,7 +387,7 @@ export default function SniperClient({
                 </span>
                 <div>
                   <p className="font-semibold text-fg">{t[`status${run.status}` as "statusRUNNING"]}</p>
-                  <p className="text-xs text-subtle">{markets[run.marketId]} · {run.supplier === "ALIEXPRESS" ? t.supplierAe : t.supplierCj} · {run.mode === "CATALOG" ? t.modeCatalog : t.modeKeywords}{run.minProfit != null && <> · <span className="font-medium text-amber-300">{t.highTicketBadge}</span></>}{run.minMonthlySales != null && <> · <span className="font-medium text-fg-2">{fmt(t.minSalesBadge, { n: run.minMonthlySales })}</span></>}</p>
+                  <p className="text-xs text-subtle">{markets[run.marketId]} · {run.supplier === "ALIEXPRESS" ? t.supplierAe : t.supplierCj} · {run.mode === "CATALOG" ? t.modeCatalog : t.modeKeywords}{run.minProfit != null && <> · <span className="font-medium text-amber-300">{t.highTicketBadge}</span></>}{run.minMonthlySales != null && <> · <span className="font-medium text-fg-2">{fmt(t.minSalesBadge, { n: run.minMonthlySales })}</span></>}{run.ebayCalls > 0 && <> · <span title={t.ebayCallsHint}>{fmt(t.ebayCalls, { n: run.ebayCalls })}</span></>}</p>
                   {(run.categories.length > 0 || run.costMin != null || run.costMax != null) && (
                     <p className="mt-0.5 text-xs text-subtle">
                       {run.categories.map((c) => t.categoryNames[c as CategoryId] ?? c).join(", ")}

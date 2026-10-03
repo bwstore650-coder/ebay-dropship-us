@@ -375,6 +375,7 @@ model SnipeRun {
   found         Int         @default(0)
   scanLimit     Int?        // produits à analyser au maximum (sinon calculé depuis target ; augmenté par « Continuer »)
   listed        Int         @default(0)
+  ebayCalls     Int         @default(0) // appels eBay (Browse) dépensés par cette recherche
   error         String?
   lockedUntil   DateTime?   // un seul traitement à la fois
   lastStepAt    DateTime?

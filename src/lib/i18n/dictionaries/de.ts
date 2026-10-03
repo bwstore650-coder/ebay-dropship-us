@@ -743,6 +743,7 @@ export const de: Dict = {
     dashboardCta: "Bewertung abgeben",
   },
   sniper: {
+    ebayCalls: "{n} eBay-Aufrufe", ebayCallsHint: "Von dieser Suche verwendete eBay-API-Aufrufe (Tageskontingent).",
     supplierLabel: "Lieferant", supplierCj: "CJDropshipping", supplierAe: "AliExpress", supplierCjHint: "CJ-Produkte auf Lager in einem Lager im Land.", supplierAeHint: "AliExpress-Produkte, versendet aus einem Lager im Land (schnelle Lieferung).", supplierNotConnected: "Noch nicht verbunden.",
     title: "Produkt-Sniper",
     subtitle: "Findet profitable Produkte für dich: Er durchsucht Produkte in einem lokalen Lager, prüft die echte eBay-Nachfrage und deine Marge nach allen Gebühren und behält nur die Gewinner.",

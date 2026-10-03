@@ -742,6 +742,7 @@ export const en = {
     dashboardCta: "Leave a review",
   },
   sniper: {
+    ebayCalls: "{n} eBay calls", ebayCallsHint: "eBay API calls used by this search (daily quota).",
     supplierLabel: "Supplier", supplierCj: "CJDropshipping", supplierAe: "AliExpress", supplierCjHint: "CJ products in stock in a local warehouse.", supplierAeHint: "AliExpress products shipped from a local warehouse (fast delivery).", supplierNotConnected: "Not connected yet.",
     title: "Product Sniper",
     subtitle: "Finds profitable products for you: it scans products stocked in a local warehouse, checks real eBay demand and your margin after every fee, and keeps only the winners.",

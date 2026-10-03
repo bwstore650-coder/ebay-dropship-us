@@ -3,6 +3,7 @@
  * OAuth « authorization code » pour le compte vendeur du client,
  * jeton « application » (client credentials) pour l'API Browse.
  */
+import { AsyncLocalStorage } from "node:async_hooks";
 import { env } from "@/lib/env";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import { monthlySales } from "@/lib/comparables";
@@ -83,8 +84,22 @@ export async function getAppToken(): Promise<string> {
   return appToken.token;
 }
 
+/** Compteur d'appels eBay Browse (quota du jour) pour une tâche donnée, ex. une étape du Sniper. */
+const browseCounter = new AsyncLocalStorage<{ n: number }>();
+export async function countBrowseCalls<T>(fn: () => Promise<T>): Promise<{ result: T; calls: number }> {
+  const store = { n: 0 };
+  const result = await browseCounter.run(store, fn);
+  return { result, calls: store.n };
+}
+/** Appels comptés jusqu'ici dans la tâche en cours (y compris si elle échoue ensuite). */
+export const browseCallsSoFar = () => browseCounter.getStore()?.n ?? 0;
+
 async function api<T>(token: string, path: string, init: RequestInit = {}, marketId: MarketplaceId = "EBAY_US"): Promise<T> {
   const m = marketplace(marketId);
+  if (path.startsWith("/buy/browse/")) {
+    const c = browseCounter.getStore();
+    if (c) c.n++;
+  }
   const res = await fetch(`${host().api}${path}`, {
     ...init,
     headers: {
@@ -194,6 +209,24 @@ export async function searchActive(q: string, limit = 50, marketId: MarketplaceI
     };
   });
   return { total: data.total, prices: items.map((i) => i.price).filter((p) => p > 0), items };
+}
+
+/** Une page d'annonces actives (jusqu'à 200 en 1 appel), avec la gamme de prix filtrée chez eBay. */
+export async function searchListingsPage(
+  q: string,
+  o: { limit?: number; offset?: number; priceMin?: number | null; priceMax?: number | null },
+  marketId: MarketplaceId = "EBAY_US",
+): Promise<MarketSnapshot> {
+  const m = marketplace(marketId);
+  const params = new URLSearchParams({
+    q,
+    limit: String(Math.min(200, o.limit ?? 200)),
+    offset: String(o.offset ?? 0),
+    filter: marketFilter(m, { min: o.priceMin ?? null, max: o.priceMax ?? null }),
+  });
+  const data = await api<{ total?: number; itemSummaries?: ItemSummary[] }>(await getAppToken(), `/buy/browse/v1/item_summary/search?${params}`, {}, m.id);
+  const items = (data.itemSummaries ?? []).map(toListing);
+  return { total: data.total ?? items.length, prices: items.map((i) => i.price).filter((p) => p > 0), items };
 }
 
 /** Filtre commun : annonces neuves à prix fixe, situées dans le pays, dans sa devise (+ gamme de prix). */

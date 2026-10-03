@@ -11,7 +11,8 @@ import type { Prisma, SnipeCandidate, SnipeRun, User } from "@prisma/client";
 import { db } from "@/lib/db";
 import { decrypt } from "@/lib/crypto";
 import { findProduct } from "@/lib/finder";
-import { isQuotaError } from "@/lib/ebay";
+import { countBrowseCalls, isQuotaError, searchListingsPage } from "@/lib/ebay";
+import { analyzeEbayGroup, groupListings, usableGroups } from "@/lib/ae-sniper";
 import { pauseForQuota, quotaPausedUntil } from "@/lib/ebay-quota";
 import { ListingError, prepareListing, publishListing } from "@/lib/listing-service";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
@@ -269,6 +270,7 @@ async function gather(run: RunRow, src: Session): Promise<Cursor> {
   const custom = Array.isArray(run.seeds) ? (run.seeds as string[]).filter(Boolean) : [];
   const seeds = custom.length ? custom : run.minProfit != null ? HIGH_TICKET_SEEDS : DEFAULT_SEEDS;
   const cur: Cursor = { round: 1, seed: 0, exhausted: false, ...((run.cursor as Partial<Cursor> | null) ?? {}) };
+  if (src.supplier === "ALIEXPRESS") return gatherFromEbay(run, seeds, cur);
   const MAX_ROUNDS = 20;
 
   const items = await catalogPage(src, seeds[cur.seed], cur.round, m.country);
@@ -305,6 +307,44 @@ async function gather(run: RunRow, src: Session): Promise<Cursor> {
         }),
       });
     }
+  }
+  return next;
+}
+
+/** Pages eBay parcourues par thème (200 annonces chacune) avant de passer au thème suivant. */
+const EBAY_MAX_ROUNDS = 5;
+
+/**
+ * AliExpress « eBay d'abord » : 1 appel eBay = jusqu'à 200 annonces du thème, regroupées par produit.
+ * Chaque groupe devient un produit à analyser (fournisseur cherché ensuite, sans appel eBay).
+ */
+async function gatherFromEbay(run: RunRow, seeds: string[], cur: Cursor): Promise<Cursor> {
+  const m = marketplace(run.marketplace);
+  const next: Cursor = cur.seed + 1 < seeds.length ? { ...cur, seed: cur.seed + 1 } : { ...cur, seed: 0, round: cur.round + 1 };
+  if (next.round > EBAY_MAX_ROUNDS) next.exhausted = true;
+  const page = await searchListingsPage(seeds[cur.seed], { limit: 200, offset: (cur.round - 1) * 200, priceMin: run.priceMin, priceMax: run.priceMax }, m.id);
+  const groups = usableGroups(groupListings(page.items));
+  if (!groups.length) return next;
+  const known = await db.snipeCandidate.findMany({ where: { runId: run.id }, select: { keyword: true } });
+  const seen = new Set(known.map((k) => k.keyword.toLowerCase()));
+  const fresh = groups.filter((g) => {
+    const kw = keywordFromTitle(g.title).toLowerCase();
+    if (seen.has(kw)) return false;
+    seen.add(kw);
+    return true;
+  });
+  if (fresh.length) {
+    await db.snipeCandidate.createMany({
+      data: fresh.map((g) => ({
+        runId: run.id,
+        supplier: "ALIEXPRESS" as const,
+        keyword: keywordFromTitle(g.title),
+        title: g.title.slice(0, 300),
+        image: g.image,
+        seed: seeds[cur.seed],
+        details: toJson({ ebayGroup: g }),
+      })),
+    });
   }
   return next;
 }
@@ -346,6 +386,22 @@ async function evaluate(run: RunRow, c: SnipeCandidate, src: Session): Promise<P
         stock: r.best?.stockUs ?? null,
         minPrice: r.minPriceForTarget,
       }),
+    };
+  }
+
+  // AliExpress « eBay d'abord » : fournisseur cherché depuis l'annonce eBay, ventes lues seulement si rentable.
+  const group = (c.details as CandidateDetails | null)?.ebayGroup;
+  if (group && src.supplier === "ALIEXPRESS") {
+    const { analysis: a, productId } = await analyzeEbayGroup(src, m.id, group, {
+      minMarginPct: run.minMarginPct, minProfit: run.minProfit, priceMin: run.priceMin, priceMax: run.priceMax, costMin: run.costMin, costMax: run.costMax,
+      minMonthlySales: run.minMonthlySales,
+    });
+    const keyword = a.keyword || c.keyword;
+    if (productId && keyword && a.unitsSold > 0) await savePool(m.id, productId, keyword, a, c.seed, "ALIEXPRESS").catch((e) => console.error("Pool", e));
+    return {
+      keyword, productId, title: a.title, image: a.image, status: a.status, reason: a.reason, variantId: a.variantId,
+      marketPrice: a.marketPrice, cost: a.cost, profit: a.profit, marginPct: a.marginPct, unitsSold: a.unitsSold, deliveryDaysMax: a.deliveryDaysMax,
+      details: toJson(a.details),
     };
   }
 
@@ -399,6 +455,13 @@ async function autoList(user: UserWithAccounts, run: RunRow, c: { keyword: strin
  * Renvoie false si la recherche était déjà en cours de traitement ailleurs.
  */
 export async function advanceRun(runId: string, deadline: number): Promise<boolean> {
+  // Appels eBay dépensés pendant cette étape : ajoutés au compteur de la recherche.
+  const { result, calls } = await countBrowseCalls(() => advanceRunInner(runId, deadline));
+  if (calls > 0) await db.snipeRun.update({ where: { id: runId }, data: { ebayCalls: { increment: calls } } }).catch((e) => console.error("Compteur eBay", e));
+  return result;
+}
+
+async function advanceRunInner(runId: string, deadline: number): Promise<boolean> {
   const now = Date.now();
   const lock = await db.snipeRun.updateMany({
     where: { id: runId, status: "RUNNING", OR: [{ lockedUntil: null }, { lockedUntil: { lt: new Date(now) } }] },
@@ -557,6 +620,7 @@ export async function runState(userId: string, runId: string) {
     scanned: run.scanned,
     found: run.found,
     listed: run.listed,
+    ebayCalls: run.ebayCalls,
     maxScan: run.mode === "CATALOG" ? run.scanLimit ?? maxScan(run.target) : (run.seeds as string[]).length,
     exhausted: Boolean((run.cursor as Partial<Cursor> | null)?.exhausted),
     autoList: run.autoList,

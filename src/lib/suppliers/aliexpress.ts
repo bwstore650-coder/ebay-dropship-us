@@ -361,6 +361,28 @@ export async function textSearch(
     .filter((it) => /^\d{6,20}$/.test(it.productId));
 }
 
+export interface AeImageMatch { productId: string; title: string; image: string | null; shipFrom: string | null; similarity: number }
+
+/** Recherche par photo (même produit chez AliExpress), livrable dans le pays. Les plus ressemblants d'abord. */
+export async function imageSearch(cfg: AeConfig, session: string, q: { imageBase64: string; country: string }): Promise<AeImageMatch[]> {
+  const r = await call<{ result?: { data?: unknown; ret?: string | boolean } }>(cfg, "aliexpress.ds.image.searchV2", session, {
+    param0: { image_base64: q.imageBase64, ship_to: q.country, currency: "USD", lang: "en", search_type: "same" },
+  });
+  return list<Record<string, unknown>>(r.result?.data, "data", "product")
+    .map((it) => {
+      const img = String(it.product_main_image_url ?? "");
+      return {
+        productId: String(it.product_id ?? ""),
+        title: String(it.product_title ?? ""),
+        image: img ? (img.startsWith("//") ? `https:${img}` : img) : null,
+        shipFrom: it.ship_from ? String(it.ship_from).toUpperCase() : null,
+        similarity: Number(it.similarity_score ?? 0) || 0,
+      };
+    })
+    .filter((it) => /^\d{6,20}$/.test(it.productId))
+    .sort((a, b) => b.similarity - a.similarity);
+}
+
 /** Variantes expédiées depuis un entrepôt du pays, en stock, avec la livraison la moins chère (USD). */
 export async function offersFor(cfg: AeConfig, session: string, productId: string, country: string, maxSkus = 5): Promise<SupplierOffer[]> {
   return offersFromProduct(cfg, session, await getProduct(cfg, session, productId, country), country, maxSkus);

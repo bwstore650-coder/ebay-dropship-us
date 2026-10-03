@@ -118,7 +118,7 @@ const MAX_IMAGE_BYTES = 3_000_000;
 /** Moins d'annonces vraiment comparables que ça : la recherche par mots-clés prend le relais. */
 export const MIN_IMAGE_MATCHES = 3;
 
-async function imageBase64(url: string): Promise<string | null> {
+export async function imageBase64(url: string): Promise<string | null> {
   if (!/^https:\/\//.test(url)) return null;
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(10_000) });
