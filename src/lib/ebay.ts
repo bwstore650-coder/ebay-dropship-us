@@ -586,6 +586,20 @@ export interface InventoryItemGroupInput {
   imageVariesBy?: string;                   // option dont dépend la photo (ex. Color)
 }
 
+/** Groupe d'articles tel qu'enregistré chez eBay (pour le modifier sans rien perdre). */
+export interface InventoryItemGroup {
+  title?: string;
+  description?: string;
+  imageUrls?: string[];
+  aspects?: Record<string, string[]>;
+  variantSKUs?: string[];
+  variesBy?: { specifications?: { name: string; values: string[] }[]; aspectsImageVariesBy?: string[] };
+}
+
+export function getInventoryItemGroup(token: string, key: string, marketId: MarketplaceId = "EBAY_US") {
+  return api<InventoryItemGroup>(token, `/sell/inventory/v1/inventory_item_group/${encodeURIComponent(key)}`, {}, marketId);
+}
+
 /** Groupe d'articles eBay (annonce à variantes) : textes, photos et options communs, et la liste des SKU. */
 export function putInventoryItemGroup(token: string, key: string, g: InventoryItemGroupInput, marketId: MarketplaceId = "EBAY_US") {
   return api<void>(token, `/sell/inventory/v1/inventory_item_group/${encodeURIComponent(key)}`, {

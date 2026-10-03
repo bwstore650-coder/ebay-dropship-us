@@ -585,6 +585,7 @@ export const en = {
   },
   listings: {
     variantsBadge: "{n} variations",
+    variants: { edit: "Edit variations", title: "Edit variations", help: "Change the main variation, prices and quantities. The eBay listing is updated in place: same listing, same views and sales history. Photos are also set to change with the variation.", loading: "Loading…", paused: "out of stock", note: "The main variation's photo opens the listing and its options are shown first.", saved: "eBay listing updated.", save: "Update on eBay", saving: "Updating…", close: "Close" },
     unmanage: "Stop managing",
     createdOnEbay: "Created on eBay",
     title: "My listings",

@@ -586,6 +586,7 @@ export const de: Dict = {
   },
   listings: {
     variantsBadge: "{n} Varianten",
+    variants: { edit: "Varianten bearbeiten", title: "Varianten bearbeiten", help: "Ändere Hauptvariante, Preise und Mengen. Das eBay-Angebot wird direkt aktualisiert: gleiches Angebot, gleiche Aufrufe und Verkaufshistorie. Die Fotos wechseln außerdem mit der Variante.", loading: "Wird geladen…", paused: "nicht vorrätig", note: "Das Foto der Hauptvariante eröffnet das Angebot, ihre Optionen werden zuerst gezeigt.", saved: "eBay-Angebot aktualisiert.", save: "Auf eBay aktualisieren", saving: "Wird aktualisiert…", close: "Schließen" },
     unmanage: "Nicht mehr verwalten",
     createdOnEbay: "Auf eBay erstellt",
     title: "Meine Angebote",

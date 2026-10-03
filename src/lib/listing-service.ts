@@ -741,3 +741,114 @@ export async function updateListingContent(user: UserWithAccounts, listingId: st
   await db.listing.update({ where: { id: listing.id }, data: { title, errorMessage: null } });
   return { title };
 }
+
+/* ---------- Modifier une annonce à variantes déjà en ligne ---------- */
+
+export interface VariantEditorRow {
+  id: string;
+  label: string;
+  options: Record<string, string>;
+  image: string | null;
+  price: number;
+  quantity: number;
+  status: string;
+  minPrice: number | null; // prix minimum pour la marge du vendeur
+  main: boolean;
+}
+
+async function groupListing(user: UserWithAccounts, listingId: string) {
+  const listing = await db.listing.findFirst({ where: { id: listingId, userId: user.id }, include: { variants: { orderBy: { sku: "asc" } } } });
+  if (!listing) throw new ListingError("NOT_FOUND");
+  if (!listing.groupKey || !listing.ebayListingId || !["ACTIVE", "PAUSED"].includes(listing.status)) throw new ListingError("INVALID_INPUT");
+  const account = user.ebayAccounts.find((a) => a.id === listing.ebayAccountId);
+  if (!account) throw new ListingError("EBAY_NOT_CONNECTED");
+  return { listing, account, m: marketplace(listing.marketplace as MarketplaceId) };
+}
+
+/** Variantes d'une annonce en ligne : prix, quantité, photo, et laquelle est la principale. */
+export async function variantEditor(user: UserWithAccounts, listingId: string): Promise<{ currency: string; minMarginPct: number; variants: VariantEditorRow[] }> {
+  const { listing, m } = await groupListing(user, listingId);
+  return {
+    currency: m.currency,
+    minMarginPct: user.minMarginPct,
+    variants: listing.variants.map((v) => ({
+      id: v.id,
+      label: v.label,
+      options: (v.options ?? {}) as Record<string, string>,
+      image: v.image,
+      price: v.price,
+      quantity: v.quantity,
+      status: v.status,
+      minPrice: v.supplierCost != null ? priceForTargetMargin(v.supplierCost, user.minMarginPct, { market: m }) : null,
+      main: v.supplierVariantId === listing.supplierVariantId,
+    })),
+  };
+}
+
+/**
+ * Met à jour l'annonce en ligne : variante principale (photo et options en premier), photo qui change avec la
+ * variante, prix et quantités. Rien n'est retiré ni republié : c'est la même annonce eBay.
+ */
+export async function updateVariants(
+  user: UserWithAccounts,
+  listingId: string,
+  input: { mainVariantId?: string; variants: { id: string; price: number; quantity: number }[] },
+): Promise<{ ok: true }> {
+  const { listing, account, m } = await groupListing(user, listingId);
+  const byId = new Map(input.variants.map((v) => [v.id, v]));
+  const rows = listing.variants.map((v) => {
+    const edit = byId.get(v.id);
+    const price = edit ? Math.round(edit.price * 100) / 100 : v.price;
+    const quantity = edit ? Math.max(1, Math.min(10, Math.floor(edit.quantity) || 1)) : v.quantity;
+    if (v.supplierCost != null) {
+      const margin = computeMargin({ saleTotal: price, supplierCost: v.supplierCost, supplierShipping: 0, market: m });
+      if (margin.marginPct < user.minMarginPct) throw new ListingError("MARGIN_TOO_LOW", `${v.label} : ${priceForTargetMargin(v.supplierCost, user.minMarginPct, { market: m })}`);
+    }
+    return { v, price, quantity, margin: v.supplierCost != null ? computeMargin({ saleTotal: price, supplierCost: v.supplierCost, supplierShipping: 0, market: m }).marginPct : v.lastMarginPct };
+  });
+  const main = rows.find((r) => r.v.id === input.mainVariantId) ?? rows.find((r) => r.v.supplierVariantId === listing.supplierVariantId) ?? rows[0];
+  const ordered = [main, ...rows.filter((r) => r !== main)];
+  const options = ordered.map((r) => (r.v.options ?? {}) as Record<string, string>);
+  const specs = variationSpecs(options);
+  if (!specs) throw new ListingError("INVALID_INPUT");
+  const names = specs.map((s) => s.name);
+
+  try {
+    const token = await userToken(account);
+    const group = await ebay.getInventoryItemGroup(token, listing.groupKey!, m.id);
+    await ebay.putInventoryItemGroup(token, listing.groupKey!, {
+      title: group.title ?? listing.title,
+      description: group.description ?? "",
+      aspects: group.aspects ?? {},
+      imageUrls: groupImages(main.v.image, ordered.map((r) => r.v.image), group.imageUrls ?? []),
+      variantSkus: ordered.map((r) => r.v.sku),
+      specs,
+      imageVariesBy: imageVariesBy(ordered.map((r) => ({ options: (r.v.options ?? {}) as Record<string, string>, image: r.v.image })), names) ?? undefined,
+    }, m.id);
+    // Prix et quantités (une variante en pause reste à 0 chez eBay).
+    const offers = rows.filter((r) => r.v.ebayOfferId).map((r) => ({
+      sku: r.v.sku, offerId: r.v.ebayOfferId!, quantity: r.v.status === "PAUSED" ? 0 : r.quantity, price: { value: r.price, currency: m.currency },
+    }));
+    const results = offers.length ? await ebay.bulkUpdateQuantity(token, offers) : [];
+    const failed = results.find((r) => !r.ok);
+    if (failed) throw new ListingError("EBAY_REJECTED", failed.message ?? failed.sku);
+  } catch (e) {
+    if (e instanceof ListingError) throw e;
+    if (e instanceof EbayReconnectRequired || (e instanceof EbayApiError && e.status === 401)) throw new ListingError("EBAY_RECONNECT");
+    if (e instanceof EbayApiError) throw new ListingError("EBAY_REJECTED", e.readable);
+    throw e;
+  }
+
+  for (const r of rows) await db.listingVariant.update({ where: { id: r.v.id }, data: { price: r.price, quantity: r.quantity, lastMarginPct: r.margin } });
+  const active = rows.filter((r) => r.v.status !== "PAUSED");
+  await db.listing.update({
+    where: { id: listing.id },
+    data: {
+      supplierVariantId: main.v.supplierVariantId,
+      price: Math.min(...rows.map((r) => r.price)),
+      quantity: active.reduce((s, r) => s + r.quantity, 0),
+      errorMessage: null,
+    },
+  });
+  return { ok: true };
+}

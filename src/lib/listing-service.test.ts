@@ -23,7 +23,16 @@ vi.mock("@/lib/db", () => ({
     listingVariant: { update: vi.fn(async (args: Record<string, unknown>) => { store.variantUpdates.push(args); return args; }) },
     listing: {
       findFirst: vi.fn(async ({ where }: { where: { id: string; userId: string } }) =>
-        where.id === "LIVE1" && where.userId === "U1"
+        where.id === "GRP1" && where.userId === "U1"
+          ? {
+              id: "GRP1", userId: "U1", status: "ACTIVE", sku: "PL-G", groupKey: "PL-G", ebayListingId: "LG9", ebayAccountId: "A1", marketplace: "EBAY_US", title: "XLR Connector",
+              supplierVariantId: "V1",
+              variants: [
+                { id: "VA", sku: "PL-G-1", supplierVariantId: "V1", label: "1 Pair", options: { Qty: "1 Pair" }, image: "https://cf.cj.com/1.jpg", price: 12.99, quantity: 3, status: "ACTIVE", supplierCost: 6, lastMarginPct: 30, ebayOfferId: "OG1" },
+                { id: "VB", sku: "PL-G-2", supplierVariantId: "V2", label: "20 Pair", options: { Qty: "20 Pair" }, image: "https://cf.cj.com/20.jpg", price: 55.6, quantity: 3, status: "ACTIVE", supplierCost: 26, lastMarginPct: 30, ebayOfferId: "OG2" },
+              ],
+            }
+          : where.id === "LIVE1" && where.userId === "U1"
           ? { id: "LIVE1", userId: "U1", status: "ACTIVE", sku: "PL-SKU1", ebayOfferId: "O9", ebayAccountId: "A1", marketplace: "EBAY_US", title: "Old title for can opener", searchKeyword: null }
           : null),
       count: vi.fn(async () => store.listedToday),
@@ -48,7 +57,7 @@ vi.mock("@/lib/db", () => ({
 }));
 vi.mock("@/lib/crypto", () => ({ decrypt: (s: string) => s, encrypt: (s: string) => s }));
 
-import { ListingError, listingContent, prepareListing, publishListing, updateListingContent } from "./listing-service";
+import { ListingError, listingContent, prepareListing, publishListing, updateListingContent, updateVariants, variantEditor } from "./listing-service";
 
 type Call = { method: string; url: string; body: unknown };
 let calls: Call[] = [];
@@ -144,6 +153,12 @@ function router(url: string, init?: RequestInit): Response {
     return json({ offerId: multiVariant ? `O-${sku.split("-").pop()}` : "O1" });
   }
   if (path.startsWith("/sell/inventory/v1/inventory_item_group/") && init?.method === "PUT") return new Response(null, { status: 204 });
+  if (path === "/sell/inventory/v1/inventory_item_group/PL-G" && (init?.method ?? "GET") === "GET")
+    return json({ title: "XLR Connector", description: "<p>desc</p>", imageUrls: ["https://cf.cj.com/main.jpg"], aspects: { Brand: ["Unbranded"] }, variantSKUs: ["PL-G-1", "PL-G-2"] });
+  if (path === "/sell/inventory/v1/bulk_update_price_quantity") {
+    const reqs = (JSON.parse(String(init?.body)) as { requests: { sku: string; offers: { offerId: string }[] }[] }).requests;
+    return json({ responses: reqs.map((r) => ({ sku: r.sku, offerId: r.offers[0].offerId, statusCode: 200 })) });
+  }
   if (path === "/sell/inventory/v1/offer/publish_by_inventory_item_group") return json({ listingId: "LG1" });
   if (path === "/sell/inventory/v1/offer/O1/publish") return json({ listingId: "L1" });
   return json({ errors: [{ message: `route inconnue ${url}` }] }, 500);
@@ -472,5 +487,29 @@ describe("annonce à variantes (tailles, lots…)", { timeout: 60_000 }, () => {
     await expect(publishListing(user(), variantInput([{ variantId: "V1", price: 29.99, quantity: 1 }, { variantId: "V4", price: 29.99, quantity: 1 }])))
       .rejects.toMatchObject({ code: "SUPPLIER_UNAVAILABLE" });
     expect(calls.some((c) => c.url.includes("/inventory_item_group/"))).toBe(false);
+  });
+
+});
+
+describe("modifier une annonce à variantes en ligne", () => {
+  it("variante principale, photo qui suit la variante, prix et quantités : mise à jour sur place", async () => {
+    const ed = await variantEditor(user(), "GRP1");
+    expect(ed.variants.map((v) => [v.id, v.main])).toEqual([["VA", true], ["VB", false]]);
+    await updateVariants(user(), "GRP1", { mainVariantId: "VB", variants: [{ id: "VA", price: 13.49, quantity: 5 }, { id: "VB", price: 55.6, quantity: 3 }] });
+    const group = calls.find((c) => c.method === "PUT" && c.url.includes("/inventory_item_group/PL-G"))!.body as Record<string, unknown>;
+    expect(group).toMatchObject({
+      title: "XLR Connector",
+      variantSKUs: ["PL-G-2", "PL-G-1"],
+      imageUrls: ["https://cf.cj.com/20.jpg", "https://cf.cj.com/1.jpg", "https://cf.cj.com/main.jpg"],
+      variesBy: { specifications: [{ name: "Qty", values: ["20 Pair", "1 Pair"] }], aspectsImageVariesBy: ["Qty"] },
+    });
+    const bulk = calls.find((c) => c.url.includes("bulk_update_price_quantity"))!.body as { requests: { sku: string; offers: { price?: { value: string } }[] }[] };
+    expect(bulk.requests.map((r) => [r.sku, r.offers[0].price?.value])).toEqual([["PL-G-1", "13.49"], ["PL-G-2", "55.60"]]);
+    expect(store.updates.at(-1)).toMatchObject({ supplierVariantId: "V2", price: 13.49, quantity: 8 });
+    expect(calls.some((c) => c.url.includes("withdraw") || c.url.includes("publish"))).toBe(false); // ni retirée ni republiée
+  });
+
+  it("refuse un prix sous la marge minimum (prix minimum indiqué)", async () => {
+    await expect(updateVariants(user(), "GRP1", { variants: [{ id: "VA", price: 6.5, quantity: 3 }] })).rejects.toMatchObject({ code: "MARGIN_TOO_LOW" });
   });
 });

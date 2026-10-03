@@ -586,6 +586,7 @@ export const fr: Dict = {
   },
   listings: {
     variantsBadge: "{n} variantes",
+    variants: { edit: "Modifier les variantes", title: "Modifier les variantes", help: "Change la variante principale, les prix et les quantités. L'annonce eBay est mise à jour sur place : même annonce, mêmes vues et même historique de ventes. Les photos sont aussi réglées pour changer avec la variante.", loading: "Chargement…", paused: "en rupture", note: "La photo de la variante principale ouvre l'annonce et ses options s'affichent en premier.", saved: "Annonce eBay mise à jour.", save: "Mettre à jour sur eBay", saving: "Mise à jour…", close: "Fermer" },
     unmanage: "Ne plus gérer",
     createdOnEbay: "Créée sur eBay",
     title: "Mes annonces",

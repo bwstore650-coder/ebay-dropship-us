@@ -586,6 +586,7 @@ export const es: Dict = {
   },
   listings: {
     variantsBadge: "{n} variantes",
+    variants: { edit: "Editar variantes", title: "Editar variantes", help: "Cambia la variante principal, los precios y las cantidades. El anuncio de eBay se actualiza tal cual: mismo anuncio, mismas visitas e historial de ventas. Las fotos también cambian con la variante.", loading: "Cargando…", paused: "agotada", note: "La foto de la variante principal abre el anuncio y sus opciones se muestran primero.", saved: "Anuncio de eBay actualizado.", save: "Actualizar en eBay", saving: "Actualizando…", close: "Cerrar" },
     unmanage: "Dejar de gestionar",
     createdOnEbay: "Creado en eBay",
     title: "Mis anuncios",

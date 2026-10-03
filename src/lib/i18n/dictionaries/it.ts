@@ -586,6 +586,7 @@ export const it: Dict = {
   },
   listings: {
     variantsBadge: "{n} varianti",
+    variants: { edit: "Modifica varianti", title: "Modifica varianti", help: "Cambia variante principale, prezzi e quantità. L'inserzione eBay viene aggiornata così com'è: stessa inserzione, stesse visite e storico vendite. Anche le foto cambiano con la variante.", loading: "Caricamento…", paused: "esaurita", note: "La foto della variante principale apre l'inserzione e le sue opzioni sono mostrate per prime.", saved: "Inserzione eBay aggiornata.", save: "Aggiorna su eBay", saving: "Aggiornamento…", close: "Chiudi" },
     unmanage: "Non gestire più",
     createdOnEbay: "Creata su eBay",
     title: "Le mie inserzioni",
