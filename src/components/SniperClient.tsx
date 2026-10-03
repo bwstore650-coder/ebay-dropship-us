@@ -17,7 +17,7 @@ type Mode = "CATALOG" | "KEYWORDS";
 type Candidate = RunState["candidates"][number];
 
 export default function SniperClient({
-  t, tl, markets, errors, marketIds, defaultMarket, minMargin, cjConnected, accounts, hasGpsr, initial, startHighTicket = false,
+  t, tl, markets, errors, marketIds, defaultMarket, minMargin, cjConnected, aeConnected = false, accounts, hasGpsr, initial, startHighTicket = false,
 }: {
   t: Dict["sniper"];
   tl: Dict["listing"];
@@ -27,12 +27,16 @@ export default function SniperClient({
   defaultMarket: MarketplaceId;
   minMargin: number;
   cjConnected: boolean;
+  aeConnected?: boolean;
   accounts: { id: string; label: string }[];
   hasGpsr: boolean;
   initial: RunState | null;
   startHighTicket?: boolean;
 }) {
   const [mode, setMode] = useState<Mode>("CATALOG");
+  // Fournisseur où chercher : CJ ou AliExpress (entrepôts du pays seulement).
+  const [supplier, setSupplier] = useState<"CJ" | "ALIEXPRESS">(cjConnected || !aeConnected ? "CJ" : "ALIEXPRESS");
+  const supplierReady = supplier === "CJ" ? cjConnected : aeConnected;
   const [run, setRun] = useState<RunState | null>(initial);
   const [showForm, setShowForm] = useState(startHighTicket || !initial || initial.status !== "RUNNING");
   const [starting, setStarting] = useState(false);
@@ -82,6 +86,7 @@ export default function SniperClient({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         mode,
+        supplier,
         marketId: f.get("marketId"),
         target: Number(f.get("target")),
         minMarginPct: Number(f.get("minMarginPct")),
@@ -103,7 +108,7 @@ export default function SniperClient({
     setShowForm(false);
     setTab("good");
     setRun({
-      id: data.id, mode, marketId: String(f.get("marketId")) as MarketplaceId, status: "RUNNING", target: Number(f.get("target")),
+      id: data.id, mode, supplier, marketId: String(f.get("marketId")) as MarketplaceId, status: "RUNNING", target: Number(f.get("target")),
       minMarginPct: Math.max(minMargin, Number(f.get("minMarginPct")) || 0),
       minProfit: highTicket ? 100 : null,
       priceMin: num("priceMin"), priceMax: num("priceMax"), costMin: num("costMin"), costMax: num("costMax"),
@@ -158,7 +163,7 @@ export default function SniperClient({
         actions={!showForm && !running ? <button onClick={() => setShowForm(true)} className="btn-primary px-4 py-2 text-sm"><Icon name="zap" className="h-4 w-4" />{t.newSearch}</button> : null}
       />
 
-      {!cjConnected && (
+      {!cjConnected && !aeConnected && (
         <Notice tone="brand">
           {t.cjRequired} <Link href="/settings" className="font-semibold underline underline-offset-2">{t.cjRequiredLink}</Link>
         </Notice>
@@ -185,6 +190,30 @@ export default function SniperClient({
                   </span>
                 </button>
               ))}
+            </div>
+
+            {/* Fournisseur : CJ ou AliExpress */}
+            <div>
+              <p className="text-sm font-medium text-fg-2">{t.supplierLabel}</p>
+              <div className="mt-1.5 grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label={t.supplierLabel}>
+                {([["CJ", t.supplierCj, t.supplierCjHint, cjConnected], ["ALIEXPRESS", t.supplierAe, t.supplierAeHint, aeConnected]] as const).map(([id, label, hint, ok]) => (
+                  <button
+                    type="button"
+                    key={id}
+                    role="radio"
+                    aria-checked={supplier === id}
+                    onClick={() => setSupplier(id)}
+                    className={`rounded-xl border p-3 text-left transition ${supplier === id ? "border-brand-500/60 bg-brand-500/10" : "border-line bg-surface-2 hover:border-line-strong"}`}
+                  >
+                    <span className="block text-sm font-semibold text-fg">{label}</span>
+                    <span className="mt-0.5 block text-xs text-muted">{hint}</span>
+                    {!ok && <span className="mt-1 block text-xs font-medium text-amber-300">{t.supplierNotConnected}</span>}
+                  </button>
+                ))}
+              </div>
+              {!supplierReady && (
+                <p className="mt-1.5 text-xs text-amber-300">{t.supplierNotConnected} <Link href="/settings" className="font-semibold underline underline-offset-2">{t.cjRequiredLink}</Link></p>
+              )}
             </div>
 
             {/* High ticket : produits chers, au moins 100 de profit par vente */}
@@ -321,7 +350,7 @@ export default function SniperClient({
             </div>
 
             {error && <Notice tone="red">{error}</Notice>}
-            <button disabled={starting || !cjConnected} className="btn-primary w-full sm:w-auto">
+            <button disabled={starting || !supplierReady} className="btn-primary w-full sm:w-auto">
               <Icon name="zap" className="h-4 w-4" />
               {starting ? t.launching : t.launch}
             </button>
@@ -358,7 +387,7 @@ export default function SniperClient({
                 </span>
                 <div>
                   <p className="font-semibold text-fg">{t[`status${run.status}` as "statusRUNNING"]}</p>
-                  <p className="text-xs text-subtle">{markets[run.marketId]} · {run.mode === "CATALOG" ? t.modeCatalog : t.modeKeywords}{run.minProfit != null && <> · <span className="font-medium text-amber-300">{t.highTicketBadge}</span></>}{run.minMonthlySales != null && <> · <span className="font-medium text-fg-2">{fmt(t.minSalesBadge, { n: run.minMonthlySales })}</span></>}</p>
+                  <p className="text-xs text-subtle">{markets[run.marketId]} · {run.supplier === "ALIEXPRESS" ? t.supplierAe : t.supplierCj} · {run.mode === "CATALOG" ? t.modeCatalog : t.modeKeywords}{run.minProfit != null && <> · <span className="font-medium text-amber-300">{t.highTicketBadge}</span></>}{run.minMonthlySales != null && <> · <span className="font-medium text-fg-2">{fmt(t.minSalesBadge, { n: run.minMonthlySales })}</span></>}</p>
                   {(run.categories.length > 0 || run.costMin != null || run.costMax != null) && (
                     <p className="mt-0.5 text-xs text-subtle">
                       {run.categories.map((c) => t.categoryNames[c as CategoryId] ?? c).join(", ")}

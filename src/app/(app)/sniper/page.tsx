@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { fmt } from "@/lib/i18n";
 import { getI18n } from "@/lib/i18n/server";
 import { marketplace, MARKETPLACE_IDS } from "@/lib/marketplaces";
-import { runState } from "@/lib/sniper-service";
+import { canUseSupplier, runState } from "@/lib/sniper-service";
 import SniperClient from "@/components/SniperClient";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,8 @@ export default async function SniperPage({ searchParams }: { searchParams: Promi
       marketIds={MARKETPLACE_IDS}
       defaultMarket={marketplace(user.defaultMarketplace).id}
       minMargin={user.minMarginPct}
-      cjConnected={user.supplierAccounts.some((a) => a.supplier === "CJ")}
+      cjConnected={canUseSupplier(user, "CJ")}
+      aeConnected={canUseSupplier(user, "ALIEXPRESS")}
       accounts={user.ebayAccounts.map((a, i) => ({ id: a.id, label: a.label ?? a.ebayUserId ?? fmt(t.settings.ebayAccountN, { n: i + 1 }) }))}
       hasGpsr={hasGpsr}
       initial={last ? await runState(user.id, last.id) : null}

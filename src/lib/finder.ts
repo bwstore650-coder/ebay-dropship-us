@@ -9,6 +9,7 @@ import { evaluateProduct, weightedMedian, type Evaluation, type SupplierOffer } 
 import { cachedDemand } from "@/lib/ebay-quota";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import * as cj from "@/lib/suppliers/cj";
+import * as ae from "@/lib/suppliers/aliexpress";
 import { getUsdRates, offersToCurrency } from "@/lib/fx";
 import { marketInsights, type MarketInsights } from "@/lib/market-insights";
 
@@ -43,9 +44,19 @@ async function cjOffers(token: string, keyword: string, country: string, maxProd
   return offers;
 }
 
+/** AliExpress : les produits les plus vendus pour ce mot-clé, variantes expédiées depuis le pays seulement. */
+async function aeOffers(cfg: ae.AeConfig, session: string, keyword: string, country: string, maxProducts = 3): Promise<SupplierOffer[]> {
+  const items = await ae.textSearch(cfg, session, { keyword, country, pageSize: maxProducts * 2 });
+  const offers: SupplierOffer[] = [];
+  for (const it of items.slice(0, maxProducts)) {
+    offers.push(...(await ae.offersFor(cfg, session, it.productId, country).catch(() => [] as SupplierOffer[])));
+  }
+  return offers;
+}
+
 export async function findProduct(
   keyword: string,
-  opts: { cjToken?: string; minMarginPct: number; marketId?: MarketplaceId; extraOffers?: SupplierOffer[] },
+  opts: { cjToken?: string; ae?: { cfg: ae.AeConfig; session: string }; minMarginPct: number; marketId?: MarketplaceId; extraOffers?: SupplierOffer[] },
 ): Promise<FinderResult> {
   const m = marketplace(opts.marketId);
   const market = await cachedDemand(keyword, 20, m.id);
@@ -53,6 +64,7 @@ export async function findProduct(
   // Offres fournisseurs en USD → converties dans la devise du pays avant toute comparaison.
   const usdOffers: SupplierOffer[] = [...(opts.extraOffers ?? [])];
   if (opts.cjToken) usdOffers.push(...(await cjOffers(opts.cjToken, keyword, m.country)));
+  if (opts.ae) usdOffers.push(...(await aeOffers(opts.ae.cfg, opts.ae.session, keyword, m.country)));
   const offers = m.currency === "USD" ? usdOffers : offersToCurrency(usdOffers, m.currency, await getUsdRates());
   const evaluation = evaluateProduct(soldPrice !== null ? [soldPrice] : market.prices, offers, opts.minMarginPct, { market: m });
   return {

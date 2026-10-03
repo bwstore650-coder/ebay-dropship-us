@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createOrder, getOrder, list, maxDays, offersFor, parseProduct, parseProductId, sign } from "./aliexpress";
+import { createOrder, getOrder, list, maxDays, offersFor, parseProduct, parseProductId, sign, textSearch } from "./aliexpress";
 
 describe("signature AliExpress", () => {
   it("trie les paramètres et signe en HMAC-SHA256 majuscule", () => {
@@ -113,6 +113,23 @@ describe("appels AliExpress", () => {
       const { sign: s, ...rest } = Object.fromEntries(c.params);
       expect(s).toBe(sign(rest, cfg.appSecret));
     }
+  });
+
+  it("recherche par mots-clés : produits livrables dans le pays, les plus vendus d'abord", async () => {
+    const calls = mockGateway(() => ({
+      aliexpress_ds_text_search_response: {
+        code: "0",
+        data: { products: { selection_search_product: [
+          { itemId: "1005001234567890", title: "Car Phone Holder", itemMainPic: "//ae01.alicdn.com/p.jpg", targetSalePrice: "6.62", orders: "1,204" },
+          { itemId: "", title: "broken" },
+        ] } },
+      },
+    }));
+    const items = await textSearch(cfg, "SESS", { keyword: "phone holder", country: "US", page: 2 });
+    expect(items).toEqual([{ productId: "1005001234567890", title: "Car Phone Holder", image: "https://ae01.alicdn.com/p.jpg", price: 6.62, orders: 1204 }]);
+    const p = calls[0].params;
+    expect([p.get("method"), p.get("keyWord"), p.get("countryCode"), p.get("pageIndex"), p.get("currency"), p.get("local"), p.get("sortBy")])
+      .toEqual(["aliexpress.ds.text.search", "phone holder", "US", "2", "USD", "en_US", "orders,desc"]);
   });
 
   it("erreur de la passerelle : message lisible", async () => {

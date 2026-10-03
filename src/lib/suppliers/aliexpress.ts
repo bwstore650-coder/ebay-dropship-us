@@ -327,10 +327,51 @@ export function parseProductId(input: string): string | null {
   return m ? m[1] : null;
 }
 
+/* ---------- Recherche ---------- */
+
+export interface AeSearchItem { productId: string; title: string; image: string | null; price: number | null; orders: number | null }
+
+/** Recherche par mots-clés (catalogue Dropshipping), livrable dans le pays ; les plus vendus d'abord. */
+export async function textSearch(
+  cfg: AeConfig, session: string,
+  q: { keyword: string; country: string; page?: number; pageSize?: number; sortBy?: string },
+): Promise<AeSearchItem[]> {
+  const r = await call<{ data?: { products?: unknown }; code?: string; msg?: string }>(cfg, "aliexpress.ds.text.search", session, {
+    keyWord: q.keyword,
+    local: "en_US",
+    countryCode: q.country,
+    currency: "USD",
+    pageIndex: q.page ?? 1,
+    pageSize: q.pageSize ?? 20,
+    sortBy: q.sortBy ?? "orders,desc",
+  });
+  if (r.code && r.code !== "0" && !r.data) throw new AeError(`AliExpress aliexpress.ds.text.search : ${r.msg ?? r.code}`);
+  return list<Record<string, unknown>>(r.data?.products, "selection_search_product", "product")
+    .map((it) => {
+      const num = (v: unknown) => (v === undefined || v === null || v === "" ? null : Number(String(v).replace(/[^\d.]/g, "")) || null);
+      const img = String(it.itemMainPic ?? it.item_main_pic ?? "");
+      return {
+        productId: String(it.itemId ?? it.item_id ?? ""),
+        title: String(it.title ?? ""),
+        image: img ? (img.startsWith("//") ? `https:${img}` : img) : null,
+        price: num(it.targetSalePrice ?? it.salePrice ?? it.target_sale_price),
+        orders: num(it.orders),
+      };
+    })
+    .filter((it) => /^\d{6,20}$/.test(it.productId));
+}
+
 /** Variantes expédiées depuis un entrepôt du pays, en stock, avec la livraison la moins chère (USD). */
 export async function offersFor(cfg: AeConfig, session: string, productId: string, country: string, maxSkus = 5): Promise<SupplierOffer[]> {
-  const p = await getProduct(cfg, session, productId, country);
-  const local = p.skus.filter((s) => s.shipsFrom === country && s.stock > 0).sort((a, b) => a.price - b.price).slice(0, maxSkus);
+  return offersFromProduct(cfg, session, await getProduct(cfg, session, productId, country), country, maxSkus);
+}
+
+/** Variantes en stock dans un entrepôt du pays (les moins chères d'abord). */
+export const localSkus = (p: AeProduct, country: string) => p.skus.filter((s) => s.shipsFrom === country && s.stock > 0).sort((a, b) => a.price - b.price);
+
+/** Offres d'un produit déjà chargé (évite un second appel produit). */
+export async function offersFromProduct(cfg: AeConfig, session: string, p: AeProduct, country: string, maxSkus = 5): Promise<SupplierOffer[]> {
+  const local = localSkus(p, country).slice(0, maxSkus);
   const offers: SupplierOffer[] = [];
   for (const s of local) {
     const options = await shipping(cfg, session, { productId: p.productId, skuId: s.skuId, quantity: 1, country, sendFrom: country });

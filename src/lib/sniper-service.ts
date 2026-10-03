@@ -16,6 +16,8 @@ import { pauseForQuota, quotaPausedUntil } from "@/lib/ebay-quota";
 import { ListingError, prepareListing, publishListing } from "@/lib/listing-service";
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import * as cj from "@/lib/suppliers/cj";
+import * as ae from "@/lib/suppliers/aliexpress";
+import { aeConfig, openSession, SupplierError, type Session, type SupplierId } from "@/lib/suppliers";
 import { analyzeCatalogProduct, analyzedSince, minPriceFor, pickFromPool, POOL_FRESH_MS, savePool } from "@/lib/product-pool";
 import {
   type CandidateDetails,
@@ -28,7 +30,7 @@ export type UserWithAccounts = User & {
   supplierAccounts: { id?: string; supplier: string; accessToken: string; refreshToken?: string | null; expiresAt?: Date | null }[];
 };
 
-export type SnipeErrorCode = "PLAN_REQUIRED" | "CJ_REQUIRED" | "SNIPE_RUNNING" | "EBAY_NOT_CONNECTED" | "INVALID_INPUT" | "NOT_FOUND";
+export type SnipeErrorCode = "PLAN_REQUIRED" | "CJ_REQUIRED" | "AE_REQUIRED" | "SNIPE_RUNNING" | "EBAY_NOT_CONNECTED" | "INVALID_INPUT" | "NOT_FOUND";
 export class SnipeError extends Error {
   constructor(readonly code: SnipeErrorCode) {
     super(code);
@@ -37,6 +39,7 @@ export class SnipeError extends Error {
 
 export interface CreateInput {
   mode: "CATALOG" | "KEYWORDS";
+  supplier?: SupplierId;    // où chercher les produits (CJ par défaut)
   marketId: MarketplaceId;
   target: number;
   minMarginPct?: number;
@@ -72,9 +75,28 @@ const cjToken = (user: UserWithAccounts) => {
   return acc ? decrypt(acc.accessToken) : null;
 };
 
+/** Le vendeur peut-il chercher chez ce fournisseur ? (compte connecté, et app AliExpress configurée) */
+export const canUseSupplier = (user: Pick<UserWithAccounts, "supplierAccounts">, supplier: SupplierId) =>
+  supplier === "CJ" ? user.supplierAccounts.some((a) => a.supplier === "CJ") : Boolean(aeConfig()) && user.supplierAccounts.some((a) => a.supplier === "ALIEXPRESS");
+
+/** Connexion au fournisseur de la recherche (jeton AliExpress renouvelé si besoin). null : non connecté. */
+async function sourceFor(user: UserWithAccounts, supplier: SupplierId): Promise<Session | null> {
+  if (supplier === "CJ") {
+    const token = cjToken(user);
+    return token ? { supplier: "CJ", token } : null;
+  }
+  try {
+    return await openSession(user.supplierAccounts, "ALIEXPRESS");
+  } catch (e) {
+    if (e instanceof SupplierError) return null;
+    throw e;
+  }
+}
+
 export async function createRun(user: UserWithAccounts, input: CreateInput) {
   if (user.plan === "NONE") throw new SnipeError("PLAN_REQUIRED");
-  if (!cjToken(user)) throw new SnipeError("CJ_REQUIRED");
+  const supplier: SupplierId = input.products?.length ? "CJ" : input.supplier ?? "CJ"; // liste d'idées de l'extension : produits CJ
+  if (!canUseSupplier(user, supplier)) throw new SnipeError(supplier === "CJ" ? "CJ_REQUIRED" : "AE_REQUIRED");
   const products = input.mode === "CATALOG" && input.products?.length ? input.products.slice(0, MAX_IDEAS_PER_RUN) : null;
   const target = products ? products.length : Math.max(1, Math.min(MAX_TARGET, Math.floor(input.target)));
   if (input.mode === "KEYWORDS" && input.seeds.length === 0) throw new SnipeError("INVALID_INPUT");
@@ -92,6 +114,7 @@ export async function createRun(user: UserWithAccounts, input: CreateInput) {
     data: {
       userId: user.id,
       mode: input.mode,
+      supplier,
       marketplace: marketplace(input.marketId).id,
       target,
       // Jamais sous le seuil de marge du compte.
@@ -132,7 +155,7 @@ async function prefillFromPool(run: SnipeRun): Promise<number> {
   if (run.mode !== "CATALOG" || need <= 0) return 0;
   try {
     const [listed, seen] = await Promise.all([
-      db.listing.findMany({ where: { userId: run.userId, supplier: "CJ", status: { in: ["ACTIVE", "PAUSED", "DRAFT"] } }, select: { supplierProductId: true } }),
+      db.listing.findMany({ where: { userId: run.userId, supplier: run.supplier, status: { in: ["ACTIVE", "PAUSED", "DRAFT"] } }, select: { supplierProductId: true } }),
       db.snipeCandidate.findMany({ where: { runId: run.id }, select: { productId: true } }),
     ]);
     const custom = Array.isArray(run.seeds) ? (run.seeds as string[]).filter(Boolean) : [];
@@ -149,10 +172,11 @@ async function prefillFromPool(run: SnipeRun): Promise<number> {
       themes: custom,
       exclude: [...listed.map((l) => l.supplierProductId), ...seen.map((c) => c.productId).filter((x): x is string => Boolean(x))],
       limit: need,
+      supplier: run.supplier,
     });
     if (!rows.length) return 0;
     if (run.autoList) {
-      await db.snipeCandidate.createMany({ data: rows.map((r) => ({ runId: run.id, supplier: "CJ" as const, productId: r.productId, title: r.title, keyword: r.keyword })) });
+      await db.snipeCandidate.createMany({ data: rows.map((r) => ({ runId: run.id, supplier: run.supplier, productId: r.productId, title: r.title, keyword: r.keyword })) });
       return 0;
     }
     await db.snipeCandidate.createMany({
@@ -160,7 +184,7 @@ async function prefillFromPool(run: SnipeRun): Promise<number> {
         const d = (r.details ?? {}) as CandidateDetails;
         return {
           runId: run.id,
-          supplier: "CJ" as const,
+          supplier: run.supplier,
           productId: r.productId,
           variantId: r.variantId,
           keyword: r.keyword,
@@ -227,43 +251,53 @@ interface Cursor { round: number; seed: number; exhausted: boolean }
 
 interface CjListItem { id?: string; pid?: string; nameEn?: string; productNameEn?: string; productName?: string }
 
-/** Page suivante du catalogue CJ (thème par thème, page par page) → nouveaux produits à analyser. */
-async function gather(run: RunRow, token: string): Promise<Cursor> {
+/** Une page du catalogue du fournisseur pour ce thème → { identifiant, titre }. */
+async function catalogPage(src: Session, seed: string, page: number, country: string): Promise<{ productId: string; title: string }[]> {
+  if (src.supplier === "CJ") {
+    const data = (await cj.searchProducts(src.token, seed, page, 20, country)) as { content?: { productList?: CjListItem[] }[]; list?: CjListItem[] };
+    return (data.content?.[0]?.productList ?? data.list ?? [])
+      .filter((it) => it.id ?? it.pid)
+      .map((it) => ({ productId: String(it.id ?? it.pid), title: it.nameEn ?? it.productNameEn ?? it.productName ?? "" }));
+  }
+  const items = await ae.textSearch(src.cfg, src.session, { keyword: seed, country, page, pageSize: 20 });
+  return items.map((it) => ({ productId: it.productId, title: it.title }));
+}
+
+/** Page suivante du catalogue fournisseur (thème par thème, page par page) → nouveaux produits à analyser. */
+async function gather(run: RunRow, src: Session): Promise<Cursor> {
   const m = marketplace(run.marketplace);
   const custom = Array.isArray(run.seeds) ? (run.seeds as string[]).filter(Boolean) : [];
   const seeds = custom.length ? custom : run.minProfit != null ? HIGH_TICKET_SEEDS : DEFAULT_SEEDS;
   const cur: Cursor = { round: 1, seed: 0, exhausted: false, ...((run.cursor as Partial<Cursor> | null) ?? {}) };
   const MAX_ROUNDS = 20;
 
-  const data = (await cj.searchProducts(token, seeds[cur.seed], cur.round, 20, m.country)) as { content?: { productList?: CjListItem[] }[]; list?: CjListItem[] };
-  const items = (data.content?.[0]?.productList ?? data.list ?? []).filter((it) => it.id ?? it.pid);
+  const items = await catalogPage(src, seeds[cur.seed], cur.round, m.country);
 
   // Thème suivant ; après le dernier thème, page suivante de chacun.
   const next: Cursor = cur.seed + 1 < seeds.length ? { ...cur, seed: cur.seed + 1 } : { ...cur, seed: 0, round: cur.round + 1 };
   if (next.round > MAX_ROUNDS) next.exhausted = true;
 
   if (items.length) {
-    const ids = items.map((it) => String(it.id ?? it.pid));
+    const ids = items.map((it) => it.productId);
     const [known, listed, pooled] = await Promise.all([
       db.snipeCandidate.findMany({ where: { runId: run.id, productId: { in: ids } }, select: { productId: true } }),
-      db.listing.findMany({ where: { userId: run.userId, supplier: "CJ", supplierProductId: { in: ids }, status: { in: ["ACTIVE", "PAUSED", "DRAFT"] } }, select: { supplierProductId: true } }),
+      db.listing.findMany({ where: { userId: run.userId, supplier: run.supplier, supplierProductId: { in: ids }, status: { in: ["ACTIVE", "PAUSED", "DRAFT"] } }, select: { supplierProductId: true } }),
       // Déjà analysés récemment dans la base commune : les rentables ont été proposés d'office, inutile de refaire l'analyse.
       run.autoList
         ? Promise.resolve([] as { productId: string }[])
-        : db.productInsight.findMany({ where: { marketplace: run.marketplace, supplier: "CJ", productId: { in: ids }, analyzedAt: { gt: analyzedSince(POOL_FRESH_MS) } }, select: { productId: true } }),
+        : db.productInsight.findMany({ where: { marketplace: run.marketplace, supplier: run.supplier, productId: { in: ids }, analyzedAt: { gt: analyzedSince(POOL_FRESH_MS) } }, select: { productId: true } }),
     ]);
     const skip = new Set([...known.map((k) => k.productId), ...listed.map((l) => l.supplierProductId), ...pooled.map((p) => p.productId)]);
-    const fresh = items.filter((it) => !skip.has(String(it.id ?? it.pid)));
+    const fresh = items.filter((it, i) => !skip.has(it.productId) && items.findIndex((x) => x.productId === it.productId) === i);
     if (fresh.length) {
       await db.snipeCandidate.createMany({
         data: fresh.map((it) => {
-          const title = it.nameEn ?? it.productNameEn ?? it.productName ?? "";
-          const keyword = keywordFromTitle(title);
+          const keyword = keywordFromTitle(it.title);
           return {
             runId: run.id,
-            supplier: "CJ" as const,
-            productId: String(it.id ?? it.pid),
-            title: title.slice(0, 300) || null,
+            supplier: run.supplier,
+            productId: it.productId,
+            title: it.title.slice(0, 300) || null,
             keyword: keyword || "—",
             seed: seeds[cur.seed],
             ...(keyword ? {} : { status: "REJECTED" as const, reason: "NO_KEYWORD" }),
@@ -280,10 +314,13 @@ type RunRow = SnipeRun;
 const toJson = (d: CandidateDetails) => d as unknown as Prisma.InputJsonValue;
 
 /** Analyse d'un produit ou d'un mot-clé → données à enregistrer sur le candidat. */
-async function evaluate(run: RunRow, c: SnipeCandidate, token: string): Promise<Prisma.SnipeCandidateUpdateInput> {
+async function evaluate(run: RunRow, c: SnipeCandidate, src: Session): Promise<Prisma.SnipeCandidateUpdateInput> {
   const m = marketplace(run.marketplace);
   if (run.mode === "KEYWORDS") {
-    const r = await findProduct(c.keyword, { cjToken: token, minMarginPct: run.minMarginPct, marketId: m.id });
+    const r = await findProduct(c.keyword, {
+      ...(src.supplier === "CJ" ? { cjToken: src.token } : { ae: { cfg: src.cfg, session: src.session } }),
+      minMarginPct: run.minMarginPct, marketId: m.id,
+    });
     const k = classify(r, {
       unitsSold: r.unitsSold, priceMin: run.priceMin, priceMax: run.priceMax, title: r.best?.title, minProfit: run.minProfit, costMin: run.costMin, costMax: run.costMax,
       monthlySales: r.insights?.monthlySales ?? null, minMonthlySales: run.minMonthlySales,
@@ -313,11 +350,11 @@ async function evaluate(run: RunRow, c: SnipeCandidate, token: string): Promise<
   }
 
   // CATALOG : analyse complète, enregistrée aussi dans la base commune (sert aux recherches suivantes).
-  const a = await analyzeCatalogProduct(token, m.id, c.productId!, c.keyword, c.title, {
+  const a = await analyzeCatalogProduct(src, m.id, c.productId!, c.keyword, c.title, {
     minMarginPct: run.minMarginPct, minProfit: run.minProfit, priceMin: run.priceMin, priceMax: run.priceMax, costMin: run.costMin, costMax: run.costMax,
   });
   const keyword = a.keyword || c.keyword;
-  if (keyword) await savePool(m.id, c.productId!, keyword, a, c.seed).catch((e) => console.error("Pool", e));
+  if (keyword) await savePool(m.id, c.productId!, keyword, a, c.seed, run.supplier).catch((e) => console.error("Pool", e));
   // Ventes minimum choisies pour cette recherche : appliquées ici, pas dans la base commune.
   const lowSales = a.status === "PROFITABLE" && !meetsMonthlySales((a.details as CandidateDetails | null)?.market?.monthlySales, run.minMonthlySales);
   return {
@@ -374,9 +411,10 @@ export async function advanceRun(runId: string, deadline: number): Promise<boole
     where: { id: run.userId },
     include: { ebayAccounts: { orderBy: { createdAt: "asc" } }, supplierAccounts: true },
   })) as UserWithAccounts | null;
-  const token = user ? cjToken(user) : null;
-  if (!user || !token || user.plan === "NONE") {
-    await db.snipeRun.update({ where: { id: runId }, data: { status: "FAILED", error: !user || user.plan === "NONE" ? "PLAN_REQUIRED" : "CJ_REQUIRED", lockedUntil: null } });
+  const src = user && user.plan !== "NONE" ? await sourceFor(user, run.supplier).catch(() => null) : null;
+  if (!user || !src || user.plan === "NONE") {
+    const error = !user || user.plan === "NONE" ? "PLAN_REQUIRED" : run.supplier === "CJ" ? "CJ_REQUIRED" : "AE_REQUIRED";
+    await db.snipeRun.update({ where: { id: runId }, data: { status: "FAILED", error, lockedUntil: null } });
     return true;
   }
 
@@ -396,7 +434,7 @@ export async function advanceRun(runId: string, deadline: number): Promise<boole
       if (!c) {
         const cur = run.cursor as Partial<Cursor> | null;
         if (run.mode === "CATALOG" && !cur?.exhausted && run.scanned < (run.scanLimit ?? maxScan(run.target))) {
-          const next = await gather(run, token);
+          const next = await gather(run, src);
           run = await db.snipeRun.update({ where: { id: runId }, data: { cursor: { ...next } } });
           continue;
         }
@@ -405,7 +443,7 @@ export async function advanceRun(runId: string, deadline: number): Promise<boole
 
       let update: Prisma.SnipeCandidateUpdateInput;
       try {
-        update = await evaluate(run, c, token);
+        update = await evaluate(run, c, src);
         errorsInARow = 0;
       } catch (e) {
         if (isQuotaError(e)) {
@@ -504,6 +542,7 @@ export async function runState(userId: string, runId: string) {
   return {
     id: run.id,
     mode: run.mode,
+    supplier: run.supplier,
     marketId: run.marketplace as MarketplaceId,
     status: run.status,
     target: run.target,

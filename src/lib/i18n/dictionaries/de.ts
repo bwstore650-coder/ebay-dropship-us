@@ -743,6 +743,7 @@ export const de: Dict = {
     dashboardCta: "Bewertung abgeben",
   },
   sniper: {
+    supplierLabel: "Lieferant", supplierCj: "CJDropshipping", supplierAe: "AliExpress", supplierCjHint: "CJ-Produkte auf Lager in einem Lager im Land.", supplierAeHint: "AliExpress-Produkte, versendet aus einem Lager im Land (schnelle Lieferung).", supplierNotConnected: "Noch nicht verbunden.",
     title: "Produkt-Sniper",
     subtitle: "Findet profitable Produkte für dich: Er durchsucht Produkte in einem lokalen Lager, prüft die echte eBay-Nachfrage und deine Marge nach allen Gebühren und behält nur die Gewinner.",
     cjRequired: "Der Sniper durchsucht den CJDropshipping-Katalog. Verbinde zuerst dein CJ-Konto.",
@@ -1183,6 +1184,7 @@ export const de: Dict = {
     AE_NOT_CONNECTED: "Verbinde zuerst dein AliExpress-Konto in den Einstellungen.",
     SUPPLIER_RECONNECT: "Die Verbindung zu deinem Lieferanten ist abgelaufen. Verbinde sie in den Einstellungen neu.",
     CJ_REQUIRED: "Verbinde dein CJDropshipping-Konto in den Einstellungen, um den Sniper zu nutzen.",
+    AE_REQUIRED: "Verbinde dein AliExpress-Konto in den Einstellungen, um bei AliExpress zu suchen.",
     SNIPE_RUNNING: "Es läuft bereits eine Suche. Stoppe sie oder warte, bis sie fertig ist.",
     SELLER_INVALID: "Das sieht nicht nach einem eBay-Namen oder Shop-Link aus.",
     GENERIC: "Etwas ist schiefgelaufen.",

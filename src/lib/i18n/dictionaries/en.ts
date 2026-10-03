@@ -742,6 +742,7 @@ export const en = {
     dashboardCta: "Leave a review",
   },
   sniper: {
+    supplierLabel: "Supplier", supplierCj: "CJDropshipping", supplierAe: "AliExpress", supplierCjHint: "CJ products in stock in a local warehouse.", supplierAeHint: "AliExpress products shipped from a local warehouse (fast delivery).", supplierNotConnected: "Not connected yet.",
     title: "Product Sniper",
     subtitle: "Finds profitable products for you: it scans products stocked in a local warehouse, checks real eBay demand and your margin after every fee, and keeps only the winners.",
     cjRequired: "The Sniper scans the CJDropshipping catalog. Connect your CJ account first.",
@@ -1182,6 +1183,7 @@ export const en = {
     AE_NOT_CONNECTED: "Connect your AliExpress account in Settings first.",
     SUPPLIER_RECONNECT: "Your supplier connection has expired. Reconnect it in Settings.",
     CJ_REQUIRED: "Connect your CJDropshipping account in Settings to use the Sniper.",
+    AE_REQUIRED: "Connect your AliExpress account in Settings to search AliExpress.",
     SNIPE_RUNNING: "A search is already running. Stop it or wait until it finishes.",
     SELLER_INVALID: "This does not look like an eBay username or store link.",
     GENERIC: "Something went wrong.",

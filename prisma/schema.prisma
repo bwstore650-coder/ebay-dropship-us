@@ -355,6 +355,7 @@ model SnipeRun {
   userId        String
   user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   mode          SnipeMode
+  supplier      Supplier    @default(CJ) // fournisseur où chercher (CJ ou AliExpress)
   marketplace   String
   target        Int         // nombre de produits rentables à trouver
   minMarginPct  Float

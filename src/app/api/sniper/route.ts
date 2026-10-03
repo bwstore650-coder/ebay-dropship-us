@@ -7,6 +7,7 @@ import { createRun, SnipeError } from "@/lib/sniper-service";
 
 const body = z.object({
   mode: z.enum(["CATALOG", "KEYWORDS"]),
+  supplier: z.enum(["CJ", "ALIEXPRESS"]).default("CJ"),
   marketId: z.string().refine(isMarketplaceId),
   target: z.number().int().min(1).max(MAX_TARGET),
   minMarginPct: z.number().min(0).max(90).optional(),

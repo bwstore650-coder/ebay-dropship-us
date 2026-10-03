@@ -20,6 +20,8 @@ import { DEFAULT_MIN_MARGIN_PCT, evaluateProduct, priceForTargetMargin, weighted
 import { marketplace, type MarketplaceId } from "@/lib/marketplaces";
 import { marketInsights } from "@/lib/market-insights";
 import * as cj from "@/lib/suppliers/cj";
+import * as ae from "@/lib/suppliers/aliexpress";
+import type { Session, SupplierId } from "@/lib/suppliers";
 import { type CandidateDetails, classify, inCostRange, meetsMonthlySales, SCANNER_SEEDS, keywordFromTitle, MAX_VARIANTS, MIN_UNITS_SOLD } from "@/lib/sniper";
 import { pickShipping } from "@/lib/suppliers/shipping";
 
@@ -92,12 +94,55 @@ async function cjOffersFor(token: string, product: cj.CjProduct, country: string
   return offers;
 }
 
+/** Produit fournisseur chargé : titre, photo, variantes en stock dans le pays (la moins chère d'abord) et ses offres. */
+interface LoadedProduct {
+  supplier: SupplierId;
+  productId: string;
+  title: string | null;
+  image: string | null;
+  cheapest: { variantId: string; price: number; stock: number } | null;
+  offers: () => Promise<SupplierOffer[]>;
+}
+
+/** CJ : jeton (texte) ; AliExpress : session ouverte. */
+export type CatalogSource = string | Session;
+
+async function loadProduct(src: CatalogSource, productId: string, country: string, fallbackTitle: string | null): Promise<LoadedProduct> {
+  if (typeof src === "string" || src.supplier === "CJ") {
+    const token = typeof src === "string" ? src : src.token;
+    const product = await cj.getProduct(token, productId);
+    const stocked = product.variants
+      .map((v) => ({ v, stock: v.inventories?.find((i) => i.countryCode === country)?.totalInventory ?? 0 }))
+      .filter((x) => x.stock > 0)
+      .sort((a, b) => Number(a.v.variantSellPrice) - Number(b.v.variantSellPrice));
+    return {
+      supplier: "CJ",
+      productId: product.pid,
+      title: product.productNameEn || fallbackTitle,
+      image: cj.productImages(product)[0] ?? null,
+      cheapest: stocked[0] ? { variantId: stocked[0].v.vid, price: Number(stocked[0].v.variantSellPrice), stock: stocked[0].stock } : null,
+      offers: () => cjOffersFor(token, product, country),
+    };
+  }
+  // AliExpress : seulement les variantes expédiées depuis un entrepôt du pays (livraison rapide).
+  const p = await ae.getProduct(src.cfg, src.session, productId, country);
+  const local = ae.localSkus(p, country);
+  return {
+    supplier: "ALIEXPRESS",
+    productId: p.productId,
+    title: p.title || fallbackTitle,
+    image: p.images[0] ?? null,
+    cheapest: local[0] ? { variantId: local[0].skuId, price: local[0].price, stock: local[0].stock } : null,
+    offers: () => ae.offersFromProduct(src.cfg, src.session, p, country, MAX_VARIANTS),
+  };
+}
+
 /**
- * Analyse complète d'un produit du catalogue CJ : stock local d'abord (1 appel), puis demande eBay,
- * et seulement ensuite les frais de port (les appels les plus chers).
+ * Analyse complète d'un produit du catalogue fournisseur (CJ ou AliExpress) : stock local d'abord (1 appel),
+ * puis demande eBay, et seulement ensuite les frais de port (les appels les plus chers).
  */
 export async function analyzeCatalogProduct(
-  token: string,
+  src: CatalogSource,
   marketId: MarketplaceId,
   productId: string,
   keyword: string,
@@ -106,22 +151,17 @@ export async function analyzeCatalogProduct(
 ): Promise<Analysis> {
   const m = marketplace(marketId);
   const toMarket = async (offers: SupplierOffer[]) => (m.currency === "USD" ? offers : offersToCurrency(offers, m.currency, await getUsdRates()));
-  const product = await cj.getProduct(token, productId);
-  const image = cj.productImages(product)[0] ?? null;
-  const title = product.productNameEn || fallbackTitle;
+  const product = await loadProduct(src, productId, m.country, fallbackTitle);
+  const { image, title } = product;
   const empty = { variantId: null, marketPrice: null, cost: null, profit: null, marginPct: null, unitsSold: 0, deliveryDaysMax: null };
   const base = { title: title?.slice(0, 300) ?? null, image };
   // Sans mot-clé (ex. produit ouvert depuis l'extension) : déduit du titre fournisseur.
   const kw = keyword || keywordFromTitle(title ?? "");
   if (!kw) return { ...base, ...empty, status: "REJECTED", reason: "NO_KEYWORD", details: {} };
-  const stocked = product.variants
-    .map((v) => ({ v, stock: v.inventories?.find((i) => i.countryCode === m.country)?.totalInventory ?? 0 }))
-    .filter((x) => x.stock > 0)
-    .sort((a, b) => Number(a.v.variantSellPrice) - Number(b.v.variantSellPrice));
-  if (!stocked.length) return { ...base, ...empty, status: "REJECTED", reason: "NO_SUPPLIER", details: {}, keyword: kw };
+  if (!product.cheapest) return { ...base, ...empty, status: "REJECTED", reason: "NO_SUPPLIER", details: {}, keyword: kw };
   // Prix fournisseur (sans la livraison) dans la devise du pays, connu même quand le produit est rejeté plus loin.
-  const [cheapest] = await toMarket([{ supplier: "CJ", productId: product.pid, variantId: stocked[0].v.vid, title: title ?? "", price: Number(stocked[0].v.variantSellPrice), shipping: 0, stockUs: stocked[0].stock, deliveryDaysMax: 0 }]);
-  const supplierInfo: CandidateDetails = { supplierPrice: cheapest.price, stock: stocked[0].stock };
+  const [cheapest] = await toMarket([{ supplier: product.supplier, productId: product.productId, variantId: product.cheapest.variantId, title: title ?? "", price: product.cheapest.price, shipping: 0, stockUs: product.cheapest.stock, deliveryDaysMax: 0 }]);
+  const supplierInfo: CandidateDetails = { supplierPrice: cheapest.price, stock: product.cheapest.stock };
   // Prix d'achat hors de la fourchette du vendeur : rejeté avant toute recherche eBay (aucun quota dépensé).
   if (!inCostRange(cheapest.price, o.costMin, o.costMax)) {
     return { ...base, ...empty, status: "REJECTED", reason: "COST_RANGE", details: supplierInfo, keyword: kw };
@@ -144,7 +184,7 @@ export async function analyzeCatalogProduct(
       keyword: kw,
     };
   }
-  const offers = await toMarket(await cjOffersFor(token, product, m.country));
+  const offers = await toMarket(await product.offers());
   const e = evaluateProduct(prices, offers, o.minMarginPct, { market: m });
   const k = classify(e, { unitsSold: market.unitsSold, priceMin: o.priceMin, priceMax: o.priceMax, title, minProfit: o.minProfit, costMin: o.costMin, costMax: o.costMax });
   return {
@@ -171,7 +211,7 @@ export async function analyzeCatalogProduct(
 }
 
 /** Enregistre (ou rafraîchit) l'analyse d'un produit dans la base commune. */
-export async function savePool(marketId: MarketplaceId, productId: string, keyword: string, a: Analysis, seed?: string | null) {
+export async function savePool(marketId: MarketplaceId, productId: string, keyword: string, a: Analysis, seed?: string | null, supplier: SupplierId = "CJ") {
   // Rejeté sur le prix d'achat avant l'analyse eBay : analyse incomplète, on ne remplace pas celle de la base.
   if (a.reason === "COST_RANGE" && a.marketPrice === null) return;
   // Seuls les rejets valables pour tout le monde sont gardés comme rejet ; une marge trop faible pour un vendeur
@@ -194,14 +234,14 @@ export async function savePool(marketId: MarketplaceId, productId: string, keywo
     ...(seed ? { seed } : {}), // une réanalyse sans thème garde la catégorie connue
   };
   await db.productInsight.upsert({
-    where: { marketplace_supplier_productId: { marketplace: marketId, supplier: "CJ", productId } },
-    create: { marketplace: marketId, supplier: "CJ", productId, ...data },
+    where: { marketplace_supplier_productId: { marketplace: marketId, supplier, productId } },
+    create: { marketplace: marketId, supplier, productId, ...data },
     update: data,
   });
 }
 
 /** Nombre de vendeurs différents ayant déjà reçu (Sniper, 14 j) ou mis en vente chacun de ces produits. */
-export async function sellerCounts(productIds: string[], exceptUserId?: string): Promise<Map<string, number>> {
+export async function sellerCounts(productIds: string[], exceptUserId?: string, supplier: SupplierId = "CJ"): Promise<Map<string, number>> {
   const out = new Map<string, Set<string>>();
   if (!productIds.length) return new Map();
   const [offered, listed] = await Promise.all([
@@ -210,7 +250,7 @@ export async function sellerCounts(productIds: string[], exceptUserId?: string):
       select: { productId: true, run: { select: { userId: true } } },
     }),
     db.listing.findMany({
-      where: { supplier: "CJ", supplierProductId: { in: productIds }, status: { in: ["ACTIVE", "PAUSED", "DRAFT"] } },
+      where: { supplier, supplierProductId: { in: productIds }, status: { in: ["ACTIVE", "PAUSED", "DRAFT"] } },
       select: { supplierProductId: true, userId: true },
     }),
   ]);
@@ -251,6 +291,7 @@ export interface PoolQuery {
   themes?: string[];       // thèmes choisis par le vendeur (catégories et thèmes libres)
   exclude?: string[];      // produits déjà vus dans cette recherche ou déjà en vente chez lui
   limit: number;
+  supplier?: SupplierId;   // fournisseur choisi (CJ par défaut)
 }
 
 /** Produits rentables de la base commune pour ce vendeur (les meilleurs, dans un ordre qui lui est propre). */
@@ -259,7 +300,7 @@ export async function pickFromPool(q: PoolQuery): Promise<ProductInsight[]> {
   const rows = await db.productInsight.findMany({
     where: {
       marketplace: q.marketId,
-      supplier: "CJ",
+      supplier: q.supplier ?? "CJ",
       reason: null,
       marginPct: { gte: q.minMarginPct },
       ...(q.minProfit != null ? { profit: { gte: q.minProfit } } : {}),
@@ -276,7 +317,7 @@ export async function pickFromPool(q: PoolQuery): Promise<ProductInsight[]> {
     take: Math.max(q.limit * 4, 40),
   });
   if (!rows.length) return [];
-  const counts = await sellerCounts(rows.map((r) => r.productId), q.userId);
+  const counts = await sellerCounts(rows.map((r) => r.productId), q.userId, q.supplier ?? "CJ");
   return rows
     .filter((r) => (counts.get(r.productId) ?? 0) < MAX_SELLERS_PER_PRODUCT)
     // Prix d'achat dans la fourchette du vendeur (enregistré dans l'analyse).

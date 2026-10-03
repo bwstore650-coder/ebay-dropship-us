@@ -189,6 +189,11 @@ export default function SniperProductCard({ c, t, minMargin, money, reason, onCr
                 {k.viewCj} <span aria-hidden="true">↗</span>
               </a>
             )}
+            {c.supplier === "ALIEXPRESS" && c.productId && /^\d{6,20}$/.test(c.productId) && (
+              <a href={`https://www.aliexpress.com/item/${c.productId}.html`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-line bg-surface-2 px-2.5 py-1 font-medium text-fg-2 hover:border-brand-500/50 hover:text-fg">
+                AliExpress <span aria-hidden="true">↗</span>
+              </a>
+            )}
           </p>
         </div>
       </div>
