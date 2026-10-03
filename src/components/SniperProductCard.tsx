@@ -13,7 +13,31 @@ import ProductCalculator from "@/components/ProductCalculator";
 
 type Candidate = RunState["candidates"][number];
 
-/** Répartition des prix des concurrents (un point par annonce), avec le prix du marché, notre prix minimum et notre coût. */
+/** Graduations « rondes » (1, 2, 2.5, 5 × 10^n) entre min et max. */
+export function niceTicks(min: number, max: number, count = 4): number[] {
+  const span = max - min;
+  if (!(span > 0)) return [min];
+  const raw = span / count;
+  const mag = 10 ** Math.floor(Math.log10(raw));
+  const step = [1, 2, 2.5, 5, 10].map((f) => f * mag).find((st) => st >= raw) ?? 10 * mag;
+  const out: number[] = [];
+  for (let v = Math.ceil(min / step) * step; v <= max + 1e-9; v += step) out.push(Math.round(v * 100) / 100);
+  return out;
+}
+
+/** Classes de prix (histogramme) : bornes et nombre d'annonces dans chacune. */
+export function priceBins(prices: number[], min: number, max: number, n: number): { from: number; to: number; count: number }[] {
+  const w = (max - min) / n || 1;
+  const bins = Array.from({ length: n }, (_, i) => ({ from: min + i * w, to: min + (i + 1) * w, count: 0 }));
+  for (const p of prices) bins[Math.min(n - 1, Math.max(0, Math.floor((p - min) / w)))].count++;
+  return bins;
+}
+
+/**
+ * Prix des concurrents (histogramme) : combien d'annonces à chaque niveau de prix, avec ton coût, ton prix
+ * minimum (zone rentable au-dessus) et le prix du marché. Les classes au-dessus de ton prix minimum sont
+ * en couleur : ce sont les prix auxquels tu peux te placer en gardant ta marge.
+ */
 function PriceChart({ t, prices, market, minPrice, cost, money }: {
   t: Dict["sniper"]["card"];
   prices: number[];
@@ -22,55 +46,115 @@ function PriceChart({ t, prices, market, minPrice, cost, money }: {
   cost: number | null;
   money: (v: number | null) => string;
 }) {
+  const [hover, setHover] = useState<number | null>(null);
+  const valid = prices.filter((p) => p > 0);
   const refs = [market, minPrice, cost].filter((v): v is number => v !== null && v > 0);
-  const all = [...prices, ...refs];
-  if (!prices.length || !all.length) return null;
-  const lo = Math.min(...all);
-  const hi = Math.max(...all);
-  const pad = (hi - lo) * 0.06 || hi * 0.1 || 1;
-  const min = Math.max(0, lo - pad);
-  const max = hi + pad;
-  const W = 320;
-  const H = 96;
-  const AXIS = 72;
-  const x = (v: number) => 8 + ((v - min) / (max - min)) * (W - 16);
-  // Points empilés quand plusieurs annonces ont presque le même prix (graphique en points).
-  const bins = new Map<number, number>();
-  const dots = prices.map((p) => {
-    const b = Math.round(x(p) / 9);
-    const n = bins.get(b) ?? 0;
-    bins.set(b, n + 1);
-    return { p, cx: x(p), cy: AXIS - 7 - Math.min(n, 5) * 9 };
-  });
-  const line = (v: number | null, cls: string, dash: string | undefined, label: string) =>
-    v !== null && v > 0 ? (
-      <line x1={x(v)} x2={x(v)} y1={10} y2={AXIS} className={cls} strokeWidth={2} strokeDasharray={dash}>
-        <title>{`${label} : ${money(v)}`}</title>
-      </line>
-    ) : null;
+  if (!valid.length) return null;
+  const lo = Math.min(...valid, ...refs);
+  const hi = Math.max(...valid, ...refs);
+  const ticks = niceTicks(Math.max(0, lo - (hi - lo) * 0.05), hi + (hi - lo) * 0.05);
+  const min = Math.min(ticks[0], lo);
+  const max = Math.max(ticks[ticks.length - 1], hi) || 1;
+  const N = Math.min(14, Math.max(6, Math.round(Math.sqrt(valid.length) * 2)));
+  const bins = priceBins(valid, min, max === min ? min + 1 : max, N);
+  const top = Math.max(...bins.map((b) => b.count));
+
+  const W = 340, H = 150, L = 8, R = 8, T = 22, B = 22;
+  const plotW = W - L - R, plotH = H - T - B;
+  const x = (v: number) => L + ((v - min) / (max - min || 1)) * plotW;
+  const y = (n: number) => T + plotH - (n / top) * plotH;
+  const base = T + plotH;
+  const above = minPrice !== null ? valid.filter((p) => p >= minPrice).length : null;
+  const pct = above !== null ? Math.round((above / valid.length) * 100) : null;
+  const h = hover !== null ? bins[hover] : null;
 
   return (
-    <figure className="min-w-0">
-      <figcaption className="text-xs font-medium text-muted">{t.chartTitle}</figcaption>
-      <svg viewBox={`0 0 ${W} ${H}`} className="mt-2 w-full" role="img" aria-label={t.chartTitle}>
-        <line x1={8} x2={W - 8} y1={AXIS} y2={AXIS} className="stroke-line-strong" strokeWidth={1} />
-        {line(cost, "stroke-subtle", "2 3", t.chartCost)}
-        {line(minPrice, "stroke-amber-300", "5 4", t.chartMin)}
-        {dots.map((d, i) => (
-          <circle key={i} cx={d.cx} cy={d.cy} r={4} className="fill-brand-400 stroke-surface" strokeWidth={2}>
-            <title>{money(d.p)}</title>
-          </circle>
+    <figure className="min-w-0 rounded-xl border border-line bg-surface-2/40 p-3">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+        <figcaption className="text-xs font-semibold text-fg-2">{t.chartTitle}</figcaption>
+        <span className="text-[11px] text-subtle">{fmt(t.chartCount, { n: valid.length })}</span>
+      </div>
+
+      {/* Les 3 repères, en chiffres */}
+      <dl className="mt-2 grid grid-cols-3 gap-2 text-[11px]">
+        {([
+          [t.chartCost, cost, "bg-subtle"],
+          [t.chartMin, minPrice, "bg-amber-300"],
+          [t.chartMarket, market, "bg-fg"],
+        ] as const).map(([label, v, sw]) => (
+          <div key={label} className="min-w-0 rounded-lg bg-surface px-2 py-1.5">
+            <dt className="flex items-center gap-1.5 truncate text-subtle"><span className={`h-2.5 w-0.5 shrink-0 rounded ${sw}`} />{label}</dt>
+            <dd className="mt-0.5 font-semibold tabular-nums text-fg">{v !== null && v > 0 ? money(v) : "—"}</dd>
+          </div>
         ))}
-        {line(market, "stroke-fg", undefined, t.chartMarket)}
-        <text x={8} y={H - 6} className="fill-subtle text-[10px]">{money(min)}</text>
-        <text x={W - 8} y={H - 6} textAnchor="end" className="fill-subtle text-[10px]">{money(max)}</text>
+      </dl>
+
+      {/* Détail de la classe survolée */}
+      <p className="mt-2 h-4 text-[11px] tabular-nums text-fg-2" aria-live="polite">
+        {h ? fmt(t.chartBin, { from: money(h.from), to: money(h.to), n: h.count }) : t.chartHint}
+      </p>
+
+      <svg viewBox={`0 0 ${W} ${H}`} className="mt-1 w-full" role="img" aria-label={t.chartTitle} onMouseLeave={() => setHover(null)}>
+        {/* Zone rentable : au-dessus de ton prix minimum */}
+        {minPrice !== null && minPrice > 0 && minPrice < max && (
+          <>
+            <rect x={x(minPrice)} y={T} width={L + plotW - x(minPrice)} height={plotH} className="fill-emerald-400/[0.07]" />
+            <text x={L + plotW - 2} y={T + 10} textAnchor="end" className="fill-emerald-300 text-[9px] font-medium">{t.chartZone}</text>
+          </>
+        )}
+        {/* Grille horizontale discrète */}
+        {[0.5, 1].map((f) => (
+          <line key={f} x1={L} x2={L + plotW} y1={T + plotH * (1 - f)} y2={T + plotH * (1 - f)} className="stroke-line" strokeWidth={1} strokeDasharray="2 4" />
+        ))}
+        {/* Histogramme */}
+        {bins.map((b, i) => {
+          const bx = x(b.from) + 1;
+          const bw = Math.max(1, x(b.to) - x(b.from) - 2);
+          const profitable = minPrice === null || b.from + (b.to - b.from) / 2 >= minPrice;
+          const hgt = b.count ? Math.max(3, base - y(b.count)) : 0;
+          return (
+            <g key={i} onMouseEnter={() => setHover(i)} onFocus={() => setHover(i)} tabIndex={b.count ? 0 : -1}>
+              <rect x={x(b.from)} y={T} width={x(b.to) - x(b.from)} height={plotH} fill="transparent" />
+              {b.count > 0 && (
+                <rect x={bx} y={base - hgt} width={bw} height={hgt} rx={3}
+                  className={`${profitable ? "fill-brand-500" : "fill-subtle"} ${hover === i ? "opacity-100" : hover !== null ? "opacity-60" : ""} transition-opacity`}>
+                  <title>{fmt(t.chartBin, { from: money(b.from), to: money(b.to), n: b.count })}</title>
+                </rect>
+              )}
+              {b.count > 0 && b.count === top && (
+                <text x={bx + bw / 2} y={base - hgt - 3} textAnchor="middle" className="fill-muted text-[9px] tabular-nums">{b.count}</text>
+              )}
+            </g>
+          );
+        })}
+        {/* Repères verticaux */}
+        {cost !== null && cost > 0 && <line x1={x(cost)} x2={x(cost)} y1={T} y2={base} className="stroke-subtle" strokeWidth={1.5} strokeDasharray="2 3" />}
+        {minPrice !== null && minPrice > 0 && <line x1={x(minPrice)} x2={x(minPrice)} y1={T} y2={base} className="stroke-amber-300" strokeWidth={2} strokeDasharray="5 3" />}
+        {market !== null && market > 0 && (
+          <>
+            <line x1={x(market)} x2={x(market)} y1={T - 4} y2={base} className="stroke-fg" strokeWidth={2} />
+            <text x={Math.min(Math.max(x(market), L + 30), L + plotW - 30)} y={T - 8} textAnchor="middle" className="fill-fg text-[9px] font-semibold tabular-nums">{money(market)}</text>
+          </>
+        )}
+        {/* Axe des prix */}
+        <line x1={L} x2={L + plotW} y1={base} y2={base} className="stroke-line-strong" strokeWidth={1} />
+        {ticks.map((v) => (
+          <text key={v} x={x(v)} y={H - 6} textAnchor={x(v) < L + 18 ? "start" : x(v) > L + plotW - 18 ? "end" : "middle"} className="fill-subtle text-[9px] tabular-nums">{money(v)}</text>
+        ))}
       </svg>
-      <ul className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
-        <li className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-full bg-brand-400" />{t.chartCompetitors}</li>
-        {market !== null && <li className="flex items-center gap-1.5"><span className="h-3 w-0.5 bg-fg" />{t.chartMarket}</li>}
-        {minPrice !== null && <li className="flex items-center gap-1.5"><span className="h-3 w-0.5 border-l-2 border-dashed border-amber-300" />{t.chartMin}</li>}
-        {cost !== null && <li className="flex items-center gap-1.5"><span className="h-3 w-0.5 border-l-2 border-dotted border-subtle" />{t.chartCost}</li>}
+
+      {/* Légende */}
+      <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-muted">
+        <li className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-brand-500" />{t.chartAboveMin}</li>
+        {minPrice !== null && <li className="flex items-center gap-1.5"><span className="h-2.5 w-2.5 rounded-sm bg-subtle" />{t.chartBelowMin}</li>}
       </ul>
+
+      {/* Conclusion en une phrase */}
+      {pct !== null && (
+        <p className={`mt-2 rounded-lg px-2.5 py-1.5 text-[11px] font-medium ${pct >= 50 ? "bg-emerald-500/10 text-emerald-300" : pct >= 20 ? "bg-amber-500/10 text-amber-300" : "bg-red-500/10 text-red-300"}`}>
+          {fmt(t.chartVerdict, { n: above!, total: valid.length, pct: pct })}
+        </p>
+      )}
     </figure>
   );
 }

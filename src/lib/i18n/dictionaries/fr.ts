@@ -867,6 +867,7 @@ export const fr: Dict = {
       chartMarket: "Prix du marché",
       chartMin: "Ton prix minimum",
       chartCost: "Ton coût",
+      chartCount: "{n} annonces", chartHint: "Survole une barre pour voir le détail.", chartBin: "{from} – {to} : {n} annonce(s)", chartZone: "Zone rentable", chartAboveMin: "Prix au-dessus de ton minimum", chartBelowMin: "Prix sous ton minimum", chartVerdict: "{n} concurrents sur {total} ({pct} %) vendent au-dessus de ton prix minimum.",
       topTitle: "Concurrents qui vendent le plus",
       soldN: "{n} vendus",
       noMarket: "Aucune donnée eBay pour ce produit.",

@@ -866,6 +866,7 @@ export const en = {
       chartMarket: "Market price",
       chartMin: "Your minimum price",
       chartCost: "Your cost",
+      chartCount: "{n} listings", chartHint: "Hover a bar to see the details.", chartBin: "{from} – {to}: {n} listing(s)", chartZone: "Profit zone", chartAboveMin: "Prices above your minimum", chartBelowMin: "Prices below your minimum", chartVerdict: "{n} of {total} competitors ({pct}%) sell above your minimum price.",
       topTitle: "Best-selling competitors",
       soldN: "{n} sold",
       noMarket: "No eBay data for this product.",
