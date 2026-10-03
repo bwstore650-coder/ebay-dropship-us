@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 vi.mock("@/lib/db", () => ({ db: {} }));
 import { parseTrafficReport } from "./ebay";
-import { dayKey, splitDays, sumTraffic } from "./traffic";
+import { dayKey, ebayToday, splitDays, sumTraffic } from "./traffic";
 
 const now = Date.parse("2026-10-02T15:00:00Z");
 
@@ -27,6 +27,11 @@ describe("performance (trafic eBay)", () => {
     ]);
     expect(t).toMatchObject({ impressions: 3597, views: 24, sold: 1, ctr: 0.7, conversion: 4.2, impressionsBySource: { search: 3000, store: 100, other: 497 } });
     expect(sumTraffic([]).ctr).toBeNull();
+  });
+
+  it("jour eBay = heure du Pacifique (jamais une date future pour eBay)", () => {
+    expect(new Date(ebayToday(Date.parse("2026-10-03T03:00:00Z"))).toISOString().slice(0, 10)).toBe("2026-10-02");
+    expect(new Date(ebayToday(Date.parse("2026-10-02T15:00:00Z"))).toISOString().slice(0, 10)).toBe("2026-10-02");
   });
 
   it("période actuelle / précédente, jours sans données remplis à zéro", () => {

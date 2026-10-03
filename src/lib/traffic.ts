@@ -50,12 +50,21 @@ export function sumTraffic(rows: ebay.TrafficRow[]): TrafficTotals {
   };
 }
 
+/**
+ * Jour en cours pour eBay (heure du Pacifique), à minuit UTC : eBay refuse une date de fin « dans le futur »,
+ * et le soir en Europe / la nuit en UTC, la date UTC a déjà un jour d'avance sur celle d'eBay.
+ */
+export function ebayToday(now = Date.now()): number {
+  const d = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(now));
+  return Date.parse(`${d}T00:00:00Z`);
+}
+
 /** « 20261002 » ou « 2026-10-02 » → « 2026-10-02 ». */
 export const dayKey = (v: string) => (/^\d{8}$/.test(v) ? `${v.slice(0, 4)}-${v.slice(4, 6)}-${v.slice(6, 8)}` : v.slice(0, 10));
 
 /** Sépare les jours en période actuelle / précédente et remplit les jours sans données. */
 export function splitDays(rows: ebay.TrafficRow[], days: number, now = Date.now()): { current: ebay.TrafficRow[]; previous: ebay.TrafficRow[]; series: TrafficDay[] } {
-  const today = Date.UTC(new Date(now).getUTCFullYear(), new Date(now).getUTCMonth(), new Date(now).getUTCDate());
+  const today = ebayToday(now);
   const start = today - (days - 1) * DAY;
   const byDay = new Map(rows.map((r) => [dayKey(r.key), r]));
   const current = rows.filter((r) => Date.parse(`${dayKey(r.key)}T00:00:00Z`) >= start);
@@ -76,8 +85,9 @@ export async function trafficOverview(userId: string, account: Account, marketId
   const hit = fresh ? null : await readState<TrafficOverview>(key);
   if (hit) return hit;
   const token = await userToken(account);
-  const to = new Date(now);
-  const from = new Date(now - (2 * days - 1) * DAY);
+  const today = ebayToday(now);
+  const to = new Date(today);
+  const from = new Date(today - (2 * days - 1) * DAY);
   const dayRows = await ebay.getTrafficReport(token, { marketId, from, to, dimension: "DAY" });
   const { current, previous, series } = splitDays(dayRows, days, now);
 
@@ -90,7 +100,7 @@ export async function trafficOverview(userId: string, account: Account, marketId
   let listings: TrafficListing[] = [];
   if (titles.size) {
     const rows = await ebay
-      .getTrafficReport(token, { marketId, from: new Date(now - (days - 1) * DAY), to, dimension: "LISTING", listingIds: [...titles.keys()] })
+      .getTrafficReport(token, { marketId, from: new Date(today - (days - 1) * DAY), to, dimension: "LISTING", listingIds: [...titles.keys()] })
       .catch((e) => {
         console.error("Trafic par annonce", e);
         return [] as ebay.TrafficRow[];
