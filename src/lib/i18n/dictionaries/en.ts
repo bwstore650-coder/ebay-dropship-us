@@ -235,6 +235,12 @@ export const en = {
     noAccount: "Connect an eBay account to see its performance.",
     note: "Data from eBay, updated every 6 hours; eBay can take 24–48 h to count the latest days. eBay does not provide the organic / Promoted split through its API: see Advertising for promoted results.",
   },
+  install: {
+    button: "Install the Sellvela app",
+    ios1: "Tap the Share button (square with an arrow) in Safari.",
+    ios2: "Choose “Add to Home Screen”.",
+    ios3: "Open Sellvela from its icon, then turn on notifications in Settings.",
+  },
   dashboard: {
     title: "Dashboard",
     onboarding: "Getting started",

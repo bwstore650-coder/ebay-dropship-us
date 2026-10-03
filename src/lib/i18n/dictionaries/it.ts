@@ -236,6 +236,12 @@ export const it: Dict = {
     noAccount: "Collega un account eBay per vederne le prestazioni.",
     note: "Dati eBay, aggiornati ogni 6 ore; eBay può impiegare 24–48 ore per contare gli ultimi giorni. eBay non fornisce la divisione organico / promosso tramite API: vedi la pubblicità.",
   },
+  install: {
+    button: "Installa l'app Sellvela",
+    ios1: "Tocca il pulsante Condividi (quadrato con freccia) in Safari.",
+    ios2: "Scegli «Aggiungi alla schermata Home».",
+    ios3: "Apri Sellvela dalla sua icona e attiva le notifiche nelle Impostazioni.",
+  },
   dashboard: {
     title: "Panoramica",
     onboarding: "Primi passi",

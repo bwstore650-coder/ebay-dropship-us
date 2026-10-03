@@ -236,6 +236,12 @@ export const de: Dict = {
     noAccount: "Verbinde ein eBay-Konto, um seine Leistung zu sehen.",
     note: "eBay-Daten, alle 6 Std. aktualisiert; eBay braucht 24–48 Std. für die letzten Tage. eBay liefert die Aufteilung organisch/Anzeigen nicht über die API: siehe Werbung.",
   },
+  install: {
+    button: "Sellvela-App installieren",
+    ios1: "Tippe in Safari auf Teilen (Quadrat mit Pfeil).",
+    ios2: "Wähle „Zum Home-Bildschirm“.",
+    ios3: "Öffne Sellvela über das Symbol und aktiviere Benachrichtigungen in den Einstellungen.",
+  },
   dashboard: {
     title: "Übersicht",
     onboarding: "Erste Schritte",

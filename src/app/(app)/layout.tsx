@@ -8,6 +8,7 @@ import AppSidebar, { type NavSection } from "@/components/AppSidebar";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
 import { Icon } from "@/components/icons";
 import AssistantChat from "@/components/AssistantChat";
+import InstallApp from "@/components/InstallApp";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
@@ -58,6 +59,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const initial = (user.email[0] ?? "?").toUpperCase();
   const footer = (
     <div className="space-y-3">
+      <InstallApp t={t.install} />
       {user.plan === "NONE" ? (
         <Link href="/billing" className="block rounded-xl border border-brand-500/30 bg-gradient-to-br from-brand-500/15 to-fuchsia-500/10 p-3 text-sm">
           <span className="block font-semibold text-fg">{n.noPlan}</span>
