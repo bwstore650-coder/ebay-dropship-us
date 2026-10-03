@@ -499,6 +499,8 @@ export const fr: Dict = {
     variantCol: "Variante",
     variantStock: "Stock",
     variantProfit: "Bénéfice / vente",
+    variantMain: "Principale",
+    variantMainHelp: "La variante principale ouvre l'annonce : sa photo s'affiche en premier et ses options sont proposées d'abord.",
     variantMin: "min. {min}",
     variantsSingle: "Moins de 2 variantes cochées : l'annonce sera publiée avec une seule variante.",
     variantsUnavailable: "{n} autre(s) option(s) non proposée(s) (cliquer pour voir pourquoi)",

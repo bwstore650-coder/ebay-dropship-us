@@ -206,6 +206,37 @@ export function variationSpecs(options: Record<string, string>[]): { name: strin
   return names.map((name) => ({ name, values: [...new Set(options.map((o) => o[name]))] }));
 }
 
+/**
+ * Caractéristique dont dépend la photo (eBay : `aspectsImageVariesBy`, une seule) : quand l'acheteur change ce choix,
+ * la photo change. On garde celle où chaque valeur a une seule photo (ex. « Qty » : 1 paire, 20 paires…),
+ * « Color » en priorité ; sinon celle qui explique le plus de photos différentes. Null : une seule photo, ou aucune.
+ */
+export function imageVariesBy(variants: { options: Record<string, string>; image: string | null | undefined }[], names: string[]): string | null {
+  const withImage = variants.filter((v) => v.image);
+  if (withImage.length < 2 || new Set(withImage.map((v) => v.image)).size < 2) return null;
+  const score = (name: string) => {
+    const byValue = new Map<string, Set<string>>();
+    for (const v of withImage) {
+      const k = v.options[name] ?? "";
+      if (!byValue.has(k)) byValue.set(k, new Set());
+      byValue.get(k)!.add(v.image!);
+    }
+    const consistent = [...byValue.values()].every((imgs) => imgs.size === 1);
+    const distinct = new Set([...byValue.values()].map((imgs) => [...imgs].sort().join("|"))).size;
+    return { consistent, distinct };
+  };
+  const ranked = names
+    .map((name, i) => ({ name, i, ...score(name) }))
+    .filter((x) => x.distinct >= 2)
+    .sort((a, b) => Number(b.consistent) - Number(a.consistent) || Number(/^colou?r$/i.test(b.name)) - Number(/^colou?r$/i.test(a.name)) || b.distinct - a.distinct || a.i - b.i);
+  return ranked[0]?.name ?? null;
+}
+
+/** Photos de l'annonce à variantes : celle de la variante principale d'abord, puis celles des autres variantes, puis celles du produit. */
+export function groupImages(mainImage: string | null | undefined, variantImages: (string | null | undefined)[], productImages: string[], max = 12): string[] {
+  return [...new Set([mainImage, ...variantImages, ...productImages].filter((x): x is string => Boolean(x)))].slice(0, max);
+}
+
 /** Caractéristiques communes à toutes les variantes : sans celles qui varient (eBay refuse les doublons). */
 export function withoutVariationAspects(aspects: Record<string, string[]>, names: string[]): Record<string, string[]> {
   const drop = new Set(names.map((n) => n.toLowerCase()));

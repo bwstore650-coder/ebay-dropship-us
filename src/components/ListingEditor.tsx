@@ -46,6 +46,7 @@ export default function ListingEditor({
   const [titleIdeas, setTitleIdeas] = useState<string[]>([]);
   // Annonce à variantes : chaque variante (taille, couleur, lot…) avec son prix et sa quantité.
   const [vrows, setVrows] = useState<{ variantId: string; include: boolean; price: string; quantity: number }[]>([]);
+  const [mainVariant, setMainVariant] = useState<string | null>(null);
   const ai = useAiGenerate(null);
   const ta = t.ai;
 
@@ -129,7 +130,11 @@ export default function ListingEditor({
         price: useVariants ? Number(included[0].price.replace(",", ".")) : priceNum,
         quantity: useVariants ? included[0].quantity : quantity,
         keyword: keyword.slice(0, 120),
-        ...(useVariants ? { variants: included.map((r) => ({ variantId: r.variantId, price: Number(r.price.replace(",", ".")), quantity: r.quantity })) } : {}),
+        ...(useVariants ? {
+          variants: included.map((r) => ({ variantId: r.variantId, price: Number(r.price.replace(",", ".")), quantity: r.quantity })),
+          // Variante principale : celle choisie si elle est cochée, sinon la première cochée.
+          mainVariantId: included.some((r) => r.variantId === mainVariant) ? mainVariant : included[0]?.variantId,
+        } : {}),
       }),
     });
     const data = await res.json().catch(() => ({}));
@@ -241,7 +246,7 @@ export default function ListingEditor({
           </div>
           <p className="text-xs text-muted">{fmt(t.variantsHelp, { pct: draft.minMarginPct })}</p>
           <div className="overflow-x-auto rounded-xl border border-line">
-            <table className="w-full min-w-[560px] text-left text-sm">
+            <table className="w-full min-w-[620px] text-left text-sm">
               <thead className="border-b border-line text-xs text-subtle">
                 <tr>
                   <th className="px-3 py-2 font-medium" />
@@ -250,6 +255,7 @@ export default function ListingEditor({
                   <th className="px-3 py-2 font-medium">{fmt(t.price, { currency: draft.currency })}</th>
                   <th className="px-3 py-2 font-medium">{t.quantity}</th>
                   <th className="px-3 py-2 font-medium">{t.variantProfit}</th>
+                  <th className="px-3 py-2 font-medium" title={t.variantMainHelp}>{t.variantMain}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-line">
@@ -258,6 +264,8 @@ export default function ListingEditor({
                   const mg = variantMargin(r.variantId, r.price);
                   const low = r.include && (!mg || mg.marginPct < draft.minMarginPct);
                   const set = (patch: Partial<typeof r>) => setVrows((rows) => rows.map((x, k) => (k === i ? { ...x, ...patch } : x)));
+                  const firstIncluded = vrows.find((x) => x.include)?.variantId;
+                  const isMain = r.include && (mainVariant && vrows.some((x) => x.include && x.variantId === mainVariant) ? mainVariant === r.variantId : firstIncluded === r.variantId);
                   return (
                     <tr key={r.variantId} className={r.include ? "" : "opacity-50"}>
                       <td className="px-3 py-2">
@@ -283,6 +291,9 @@ export default function ListingEditor({
                       </td>
                       <td className={`px-3 py-2 text-xs font-medium tabular-nums ${low ? "text-red-300" : "text-emerald-300"}`}>
                         {mg ? `${money(mg.profit)} · ${mg.marginPct} %` : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <input type="radio" name="mainVariant" checked={isMain} disabled={!r.include} onChange={() => setMainVariant(r.variantId)} aria-label={`${t.variantMain} : ${v.label}`} />
                       </td>
                     </tr>
                   );

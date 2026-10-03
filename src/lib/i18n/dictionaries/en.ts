@@ -498,6 +498,8 @@ export const en = {
     variantCol: "Variation",
     variantStock: "Stock",
     variantProfit: "Profit / sale",
+    variantMain: "Main",
+    variantMainHelp: "The main variation opens the listing: its photo is shown first and its options are selected first.",
     variantMin: "min. {min}",
     variantsSingle: "Fewer than 2 variations checked: the listing will be published with a single variation.",
     variantsUnavailable: "{n} other option(s) not offered (click to see why)",

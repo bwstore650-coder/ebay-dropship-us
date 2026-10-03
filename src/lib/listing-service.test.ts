@@ -451,6 +451,20 @@ describe("annonce à variantes (tailles, lots…)", { timeout: 60_000 }, () => {
     expect(store.variantUpdates.map((u) => (u as { data: { ebayOfferId: string } }).data.ebayOfferId)).toEqual(["O-1", "O-2", "O-3"]);
   });
 
+  it("variante principale choisie : en premier (options, photo de l'annonce)", async () => {
+    multiVariant = true;
+    await publishListing(user(), { ...variantInput([
+      { variantId: "V2", price: 29.99, quantity: 3 },
+      { variantId: "V1", price: 29.99, quantity: 3 },
+    ]), mainVariantId: "V1" });
+    const key = store.created.at(-1)!.groupKey as string;
+    const group = calls.find((c) => c.method === "PUT" && c.url.includes(`/inventory_item_group/${key}`))!.body as { variesBy: { specifications: { name: string; values: string[] }[] }; imageUrls: string[] };
+    expect(group.variesBy.specifications[0]).toEqual({ name: "Size", values: ["S", "M"] }); // V1 (S) d'abord
+    expect(group.imageUrls[0]).toBe("https://cf.cj.com/s.jpg"); // photo de la variante principale
+    const rows = (store.created.at(-1)!.variants as { create: Record<string, unknown>[] }).create;
+    expect(rows[0].supplierVariantId).toBe("V1");
+  });
+
   it("refuse une variante sous la marge minimum (prix minimum de cette variante indiqué) et une variante inconnue", async () => {
     multiVariant = true;
     await expect(publishListing(user(), variantInput([{ variantId: "V1", price: 29.99, quantity: 1 }, { variantId: "V3", price: 20, quantity: 1 }])))

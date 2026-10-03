@@ -23,7 +23,7 @@ import { costBand } from "@/lib/comparables";
 import { keywordFromTitle } from "@/lib/sniper";
 import {
   buildAspects, cleanImages, cleanTitle, DEFAULT_QUANTITY, ebayItemUrl, isEuMarket, makeSku, MAX_LISTING_VARIANTS, mostCommon,
-  sanitizeDescription, startOfUtcDay, variantOptions, variationSpecs, veroIn, withoutVariationAspects,
+  groupImages, imageVariesBy, sanitizeDescription, startOfUtcDay, variantOptions, variationSpecs, veroIn, withoutVariationAspects,
 } from "@/lib/listing";
 
 export type ListingErrorCode =
@@ -294,6 +294,7 @@ export interface PublishInput {
   keyword?: string; // recherche eBay du produit (repricing)
   /** Annonce à variantes : les variantes choisies, leur prix et leur quantité (2 au moins). */
   variants?: { variantId: string; price: number; quantity: number }[];
+  mainVariantId?: string; // variante principale (photo et options proposées en premier)
 }
 
 /** Publie l'annonce après avoir revérifié le coût fournisseur, la marge, les marques protégées et les limites. */
@@ -464,6 +465,9 @@ async function publishWithVariants(
     return { q, price, margin, quantity: Math.max(1, Math.min(Math.floor(v.quantity) || 1, 10, q.stock)) };
   });
   if (chosen.length < 2) throw new ListingError("INVALID_INPUT");
+  // Variante principale (choisie par le vendeur) : en premier — sa photo ouvre l'annonce et ses options sont proposées d'abord.
+  const mainIdx = input.mainVariantId ? chosen.findIndex((c) => c.q.variantId === input.mainVariantId) : -1;
+  if (mainIdx > 0) chosen.unshift(...chosen.splice(mainIdx, 1));
   const specs = variationSpecs(chosen.map((c) => c.q.options));
   if (!specs) throw new ListingError("INVALID_INPUT");
   const names = specs.map((x) => x.name);
@@ -522,11 +526,14 @@ async function publishWithVariants(
       const imageUrls = [...new Set([...(c.q.image ? [c.q.image] : []), ...images])].slice(0, 12);
       await ebay.putInventoryItem(token, skuOf(i), { title, description, imageUrls, aspects: { ...common, ...variantAspects }, quantity: c.quantity }, m.id);
     }
+    // Photo qui change avec la variante choisie (ex. « Qty : 20 Pair » → la photo des 20 paires).
+    const varies = imageVariesBy(chosen.map((c) => ({ options: c.q.options, image: c.q.image })), names);
     await ebay.putInventoryItemGroup(token, groupKey, {
-      title, description, imageUrls: images, aspects: common,
+      title, description, aspects: common,
+      imageUrls: groupImages(chosen[0].q.image, chosen.map((c) => c.q.image), images),
       variantSkus: chosen.map((_, i) => skuOf(i)),
       specs,
-      imageVariesBy: names.includes("Color") && chosen.every((c) => c.q.image) ? "Color" : undefined,
+      imageVariesBy: varies ?? undefined,
     }, m.id);
     const offerIds: string[] = [];
     for (const [i, c] of chosen.entries()) {

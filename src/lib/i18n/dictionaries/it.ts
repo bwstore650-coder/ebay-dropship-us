@@ -499,6 +499,8 @@ export const it: Dict = {
     variantCol: "Variante",
     variantStock: "Stock",
     variantProfit: "Profitto / vendita",
+    variantMain: "Principale",
+    variantMainHelp: "La variante principale apre l'inserzione: la sua foto appare per prima e le sue opzioni sono proposte per prime.",
     variantMin: "min. {min}",
     variantsSingle: "Meno di 2 varianti selezionate: l'inserzione sarà pubblicata con una sola variante.",
     variantsUnavailable: "{n} altra/e opzione/i non proposta/e (clicca per il motivo)",

@@ -104,3 +104,23 @@ describe("annonces à variantes : options", () => {
     expect(withoutVariationAspects({ Size: ["M"], Brand: ["Unbranded"], color: ["Red"] }, ["Size", "Color"])).toEqual({ Brand: ["Unbranded"] });
   });
 });
+
+describe("photos des annonces à variantes", async () => {
+  const { imageVariesBy, groupImages } = await import("./listing");
+  const v = (Size: string, Qty: string, image: string | null) => ({ options: { Size, Qty }, image });
+  it("la photo suit la caractéristique dont elle dépend (ici la quantité, pas la taille)", () => {
+    expect(imageVariesBy([v("S", "1 Pair", "a"), v("M", "1 Pair", "a"), v("S", "20 Pair", "b"), v("M", "20 Pair", "b")], ["Size", "Qty"])).toBe("Qty");
+  });
+  it("Color en priorité ; une seule photo ou aucune : rien", () => {
+    expect(imageVariesBy([{ options: { Color: "Red", Size: "S" }, image: "r" }, { options: { Color: "Blue", Size: "M" }, image: "b" }], ["Size", "Color"])).toBe("Color");
+    expect(imageVariesBy([v("S", "1", "a"), v("M", "1", "a")], ["Size", "Qty"])).toBeNull();
+    expect(imageVariesBy([v("S", "1", null), v("M", "1", null)], ["Size", "Qty"])).toBeNull();
+  });
+  it("une seule caractéristique : elle", () => {
+    expect(imageVariesBy([{ options: { Qty: "1 Pair" }, image: "a" }, { options: { Qty: "20 Pair" }, image: "b" }], ["Qty"])).toBe("Qty");
+  });
+  it("photos de l'annonce : variante principale d'abord, puis les autres variantes, puis le produit, sans doublon", () => {
+    expect(groupImages("b", ["a", "b", null, "c"], ["p1", "a", "p2"])).toEqual(["b", "a", "c", "p1", "p2"]);
+    expect(groupImages(null, [], ["p1"])).toEqual(["p1"]);
+  });
+});
