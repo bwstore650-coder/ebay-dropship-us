@@ -16,9 +16,28 @@ export async function GET(req: Request) {
   const user = await currentUser();
   if (!user || !isAdminEmail(user.email, parseAdminEmails(process.env.ADMIN_EMAILS)))
     return NextResponse.json({ error: "FORBIDDEN" }, { status: 403 });
-  const q = new URL(req.url).searchParams.get("q")?.slice(0, 80) || "car phone holder";
+  const sp = new URL(req.url).searchParams;
+  const q = sp.get("q")?.slice(0, 80) || "car phone holder";
   const s = await openSession(user.supplierAccounts, "ALIEXPRESS");
   if (s.supplier !== "ALIEXPRESS") return NextResponse.json({ error: "NO_AE" });
+  // Essai d'un filtre « expédié depuis » : ext = JSON de searchExtend.
+  const ext = sp.get("ext");
+  if (ext) {
+    try {
+      const raw = await ae.call<{ data?: { products?: unknown; totalCount?: unknown } }>(s.cfg, "aliexpress.ds.text.search", s.session, {
+        keyWord: q, local: "en_US", countryCode: "US", currency: "USD", pageIndex: 1, pageSize: 10, sortBy: "orders,desc", searchExtend: ext,
+      });
+      const items = ae.list<Record<string, unknown>>(raw.data?.products, "selection_search_product").map((i) => String(i.itemId));
+      const ships = [];
+      for (const id of items.slice(0, 5)) {
+        const p = await ae.getProduct(s.cfg, s.session, id, "US").catch(() => null);
+        ships.push(p ? p.skus.map((k) => k.shipsFrom).join(",") : "error");
+      }
+      return NextResponse.json({ total: raw.data?.totalCount, items, ships });
+    } catch (e) {
+      return NextResponse.json({ extError: String(e) });
+    }
+  }
   const out: Record<string, unknown> = { q };
   const items = await ae.textSearch(s.cfg, s.session, { keyword: q, country: "US", pageSize: 10 }).catch((e) => { out.textError = String(e); return []; });
   out.text = items.slice(0, 10).map((i) => ({ id: i.productId, title: i.title.slice(0, 60), price: i.price, orders: i.orders }));
